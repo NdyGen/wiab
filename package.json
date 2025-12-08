@@ -1,0 +1,41 @@
+{
+  "name": "com.ndygen.wiab",
+  "version": "1.0.0",
+  "description": "Wasp in a Box - Virtual occupancy sensor for Homey",
+  "main": "app.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint . --ext .ts",
+    "validate": "homey app validate"
+  },
+  "author": {
+    "name": "Andy van Dongen",
+    "email": "andy@dongen.net"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "homey": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/homey": "npm:homey-apps-sdk-v3-types@^0.3.12",
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.5.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NdyGen/wiab.git"
+  },
+  "bugs": {
+    "url": "https://github.com/NdyGen/wiab/issues"
+  },
+  "homepage": "https://github.com/NdyGen/wiab#readme"
+}

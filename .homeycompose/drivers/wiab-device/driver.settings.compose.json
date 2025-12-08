@@ -1,0 +1,58 @@
+[
+  {
+    "type": "group",
+    "label": {
+      "en": "Sensor Configuration",
+      "nl": "Sensor Configuratie"
+    },
+    "children": [
+      {
+        "id": "triggerSensors",
+        "type": "textarea",
+        "label": {
+          "en": "Trigger Sensors",
+          "nl": "Trigger Sensoren"
+        },
+        "hint": {
+          "en": "JSON array of sensor device IDs that will trigger occupancy. Example: [\"device-id-1\", \"device-id-2\"]",
+          "nl": "JSON array van sensor apparaat IDs die aanwezigheid activeren. Voorbeeld: [\"device-id-1\", \"device-id-2\"]"
+        },
+        "value": "[]"
+      },
+      {
+        "id": "resetSensors",
+        "type": "textarea",
+        "label": {
+          "en": "Reset Sensors",
+          "nl": "Reset Sensoren"
+        },
+        "hint": {
+          "en": "JSON array of sensor device IDs that will reset occupancy. Example: [\"device-id-3\", \"device-id-4\"]",
+          "nl": "JSON array van sensor apparaat IDs die aanwezigheid resetten. Voorbeeld: [\"device-id-3\", \"device-id-4\"]"
+        },
+        "value": "[]"
+      }
+    ]
+  },
+  {
+    "type": "group",
+    "label": {
+      "en": "Information",
+      "nl": "Informatie"
+    },
+    "children": [
+      {
+        "id": "info",
+        "type": "label",
+        "label": {
+          "en": "Configuration Help",
+          "nl": "Configuratie Hulp"
+        },
+        "hint": {
+          "en": "Enter sensor device IDs as a valid JSON array. You can find device IDs in the Homey developer tools or by inspecting the device settings. Make sure to use double quotes around each ID.",
+          "nl": "Voer sensor apparaat IDs in als een geldige JSON array. Je kunt apparaat IDs vinden in de Homey ontwikkeltools of door de apparaatinstellingen te inspecteren. Zorg ervoor dat je dubbele aanhalingstekens gebruikt rond elke ID."
+        }
+      }
+    ]
+  }
+]

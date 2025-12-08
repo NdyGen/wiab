@@ -1,0 +1,10 @@
+node_modules/
+*.js
+*.js.map
+!jest.config.js
+app.json
+coverage/
+.DS_Store
+*.log
+.env
+.homeyrc
