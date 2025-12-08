@@ -8,3 +8,7 @@ coverage/
 *.log
 .env
 .homeyrc
+
+
+# Added by Homey CLI
+/.homeybuild/

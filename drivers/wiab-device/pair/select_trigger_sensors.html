@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .intro {
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 20px;
+            color: #c33;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .device-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .device-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .device-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .device-item.selected {
+            background-color: #e3f2fd;
+            border-color: #2196F3;
+        }
+
+        .device-checkbox {
+            margin-right: 12px;
+        }
+
+        .device-info {
+            flex: 1;
+        }
+
+        .device-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .device-zone {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .no-devices {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <h1 data-i18n="pair.select_trigger_sensors.title">Select Motion Sensors</h1>
+    <p class="intro" data-i18n="pair.select_trigger_sensors.intro">Select the motion sensors that will trigger occupancy detection.</p>
+
+    <div id="trigger-error" class="error" style="display: none;"></div>
+    <div id="trigger-loading" class="loading">Loading motion sensors...</div>
+    <input type="text" id="trigger-search" class="search-box" placeholder="Search sensors..." style="display: none;">
+    <div id="trigger-device-list" class="device-list"></div>
+
+    <script type="application/javascript">
+        (function() {
+            'use strict';
+
+            let allDevices = [];
+            let selectedDevices = [];
+
+            function onHomeyReady(Homey) {
+            console.log('Homey ready, fetching motion sensors...');
+
+            // Fetch motion devices from the driver
+            Homey.emit('get_motion_devices')
+                .then(function(devices) {
+                    console.log('Received motion devices:', devices);
+                    allDevices = devices;
+                    renderDevices(devices);
+                    document.getElementById('trigger-loading').style.display = 'none';
+                    document.getElementById('trigger-search').style.display = 'block';
+                })
+                .catch(function(error) {
+                    console.error('Error loading motion sensors:', error);
+                    showError('Failed to load motion sensors: ' + (error.message || error));
+                    document.getElementById('trigger-loading').style.display = 'none';
+                });
+
+            // Listen for continue event (when user clicks Next)
+            Homey.on('continue', function() {
+                console.log('Sending selected devices:', selectedDevices);
+                Homey.emit('select_trigger_sensors', selectedDevices)
+                    .then(function(result) {
+                        console.log('Selection saved:', result);
+                    })
+                    .catch(function(error) {
+                        console.error('Error saving selection:', error);
+                        showError('Failed to save selection: ' + (error.message || error));
+                    });
+            });
+        }
+
+        function renderDevices(devices) {
+            const container = document.getElementById('trigger-device-list');
+            container.innerHTML = '';
+
+            if (devices.length === 0) {
+                container.innerHTML = '<div class="no-devices">No motion sensors found. Please add motion sensors to your Homey first.</div>';
+                return;
+            }
+
+            devices.forEach(function(device) {
+                const item = document.createElement('div');
+                item.className = 'device-item';
+                if (selectedDevices.some(function(d) { return d.id === device.id; })) {
+                    item.classList.add('selected');
+                }
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'device-checkbox';
+                checkbox.checked = selectedDevices.some(function(d) { return d.id === device.id; });
+                checkbox.addEventListener('change', function() {
+                    toggleDevice(device);
+                });
+
+                const info = document.createElement('div');
+                info.className = 'device-info';
+
+                const name = document.createElement('div');
+                name.className = 'device-name';
+                name.textContent = device.name;
+
+                const zone = document.createElement('div');
+                zone.className = 'device-zone';
+                zone.textContent = device.zone || 'No zone';
+
+                info.appendChild(name);
+                info.appendChild(zone);
+
+                item.appendChild(checkbox);
+                item.appendChild(info);
+
+                item.addEventListener('click', function(e) {
+                    if (e.target !== checkbox) {
+                        checkbox.checked = !checkbox.checked;
+                        toggleDevice(device);
+                    }
+                });
+
+                container.appendChild(item);
+            });
+        }
+
+        function toggleDevice(device) {
+            const index = selectedDevices.findIndex(function(d) { return d.id === device.id; });
+            if (index > -1) {
+                selectedDevices.splice(index, 1);
+            } else {
+                selectedDevices.push(device);
+            }
+            renderDevices(allDevices);
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('trigger-error');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+
+        // Search functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('trigger-search');
+            searchInput.addEventListener('input', function() {
+                const query = this.value.toLowerCase();
+                const filtered = allDevices.filter(function(device) {
+                    return device.name.toLowerCase().includes(query) ||
+                           (device.zone && device.zone.toLowerCase().includes(query));
+                });
+                renderDevices(filtered);
+            });
+        });
+
+            // Wait for Homey to be ready, then initialize
+            if (typeof Homey !== 'undefined') {
+                onHomeyReady(Homey);
+            }
+        })();
+    </script>
+</body>
+</html>

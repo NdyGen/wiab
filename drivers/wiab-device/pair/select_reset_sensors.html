@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            margin: 0;
+            overflow-y: auto;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .intro {
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 20px;
+            color: #c33;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .device-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+
+        .device-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .device-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .device-item.selected {
+            background-color: #e3f2fd;
+            border-color: #2196F3;
+        }
+
+        .device-checkbox {
+            margin-right: 12px;
+        }
+
+        .device-info {
+            flex: 1;
+        }
+
+        .device-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .device-zone {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .no-devices {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .skip-note {
+            background: #f0f8ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 20px;
+            color: #0066cc;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1 data-i18n="pair.select_reset_sensors.title">Select Reset Sensors</h1>
+    <p class="intro" data-i18n="pair.select_reset_sensors.intro">Select contact sensors that will reset occupancy when opened (e.g., doors, windows).</p>
+    <div class="skip-note">This step is optional. You can click Next to skip if you don't want to use reset sensors.</div>
+
+    <div id="reset-error" class="error" style="display: none;"></div>
+    <div id="reset-loading" class="loading">Loading contact sensors...</div>
+    <input type="text" id="reset-search" class="search-box" placeholder="Search sensors..." style="display: none;">
+    <div id="reset-device-list" class="device-list"></div>
+
+    <script type="application/javascript">
+        (function() {
+            'use strict';
+
+            let allDevices = [];
+            let selectedDevices = [];
+
+            function onHomeyReady(Homey) {
+                console.log('[DEBUG] onHomeyReady called, Homey object:', Homey);
+                console.log('[DEBUG] Homey ready, fetching contact sensors...');
+
+                // Fetch contact devices from the driver
+                console.log('[DEBUG] About to call Homey.emit("get_contact_devices")');
+                Homey.emit('get_contact_devices')
+                    .then(function(devices) {
+                        console.log('[DEBUG] Promise resolved from get_contact_devices');
+                        console.log('[DEBUG] Received contact devices:', devices);
+                        console.log('[DEBUG] Number of devices:', devices ? devices.length : 'null/undefined');
+                        console.log('[DEBUG] Type of devices:', typeof devices);
+
+                        allDevices = devices;
+                        console.log('[DEBUG] Set allDevices, now calling renderDevices');
+
+                        renderDevices(devices);
+
+                        console.log('[DEBUG] renderDevices completed, hiding loading');
+                        document.getElementById('reset-loading').style.display = 'none';
+                        document.getElementById('reset-search').style.display = 'block';
+                        console.log('[DEBUG] UI updated - loading hidden, search shown');
+                    })
+                    .catch(function(error) {
+                        console.error('[DEBUG] ERROR in promise catch:', error);
+                        console.error('[DEBUG] Error message:', error.message);
+                        console.error('[DEBUG] Error stack:', error.stack);
+                        showError('Failed to load contact sensors: ' + (error.message || error));
+                        document.getElementById('reset-loading').style.display = 'none';
+                    });
+
+                // Listen for continue event (when user clicks Next)
+                Homey.on('continue', function() {
+                    console.log('[DEBUG] Continue event fired');
+                    console.log('[DEBUG] Sending selected devices:', selectedDevices);
+                    Homey.emit('select_reset_sensors', selectedDevices)
+                        .then(function(result) {
+                            console.log('[DEBUG] Selection saved:', result);
+                        })
+                        .catch(function(error) {
+                            console.error('[DEBUG] Error saving selection:', error);
+                            showError('Failed to save selection: ' + (error.message || error));
+                        });
+                });
+            }
+
+        function renderDevices(devices) {
+            console.log('[DEBUG] renderDevices called');
+            console.log('[DEBUG] renderDevices - devices parameter:', devices);
+            console.log('[DEBUG] renderDevices - devices length:', devices ? devices.length : 'null/undefined');
+
+            const container = document.getElementById('reset-device-list');
+            console.log('[DEBUG] renderDevices - container element:', container);
+
+            if (!container) {
+                console.error('[DEBUG] renderDevices - ERROR: container not found!');
+                return;
+            }
+
+            console.log('[DEBUG] renderDevices - clearing container innerHTML');
+            container.innerHTML = '';
+
+            if (!devices || devices.length === 0) {
+                console.log('[DEBUG] renderDevices - no devices, showing no-devices message');
+                container.innerHTML = '<div class="no-devices">No contact sensors found. Click Next to continue without reset sensors.</div>';
+                return;
+            }
+
+            console.log('[DEBUG] renderDevices - about to loop through ' + devices.length + ' devices');
+            devices.forEach(function(device, index) {
+                console.log('[DEBUG] renderDevices - processing device ' + index + ':', device);
+                const item = document.createElement('div');
+                item.className = 'device-item';
+                if (selectedDevices.some(function(d) { return d.id === device.id; })) {
+                    item.classList.add('selected');
+                }
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'device-checkbox';
+                checkbox.checked = selectedDevices.some(function(d) { return d.id === device.id; });
+                checkbox.addEventListener('change', function() {
+                    toggleDevice(device);
+                });
+
+                const info = document.createElement('div');
+                info.className = 'device-info';
+
+                const name = document.createElement('div');
+                name.className = 'device-name';
+                name.textContent = device.name;
+
+                const zone = document.createElement('div');
+                zone.className = 'device-zone';
+                zone.textContent = device.zone || 'No zone';
+
+                info.appendChild(name);
+                info.appendChild(zone);
+
+                item.appendChild(checkbox);
+                item.appendChild(info);
+
+                item.addEventListener('click', function(e) {
+                    if (e.target !== checkbox) {
+                        checkbox.checked = !checkbox.checked;
+                        toggleDevice(device);
+                    }
+                });
+
+                console.log('[DEBUG] renderDevices - appending device item to container');
+                container.appendChild(item);
+            });
+            console.log('[DEBUG] renderDevices - finished rendering all ' + devices.length + ' devices');
+            console.log('[DEBUG] Container children count:', container.children.length);
+            console.log('[DEBUG] Container innerHTML length:', container.innerHTML.length);
+            console.log('[DEBUG] Container computed display style:', window.getComputedStyle(container).display);
+            console.log('[DEBUG] Container offsetHeight:', container.offsetHeight);
+            console.log('[DEBUG] Container offsetWidth:', container.offsetWidth);
+            console.log('[DEBUG] First 500 chars of container HTML:', container.innerHTML.substring(0, 500));
+        }
+
+        function toggleDevice(device) {
+            const index = selectedDevices.findIndex(function(d) { return d.id === device.id; });
+            if (index > -1) {
+                selectedDevices.splice(index, 1);
+            } else {
+                selectedDevices.push(device);
+            }
+            renderDevices(allDevices);
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('reset-error');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+
+        // Search functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('reset-search');
+            searchInput.addEventListener('input', function() {
+                const query = this.value.toLowerCase();
+                const filtered = allDevices.filter(function(device) {
+                    return device.name.toLowerCase().includes(query) ||
+                           (device.zone && device.zone.toLowerCase().includes(query));
+                });
+                renderDevices(filtered);
+            });
+        });
+
+            // Wait for Homey to be ready, then initialize
+            console.log('[DEBUG] Initialization code running');
+            console.log('[DEBUG] typeof Homey:', typeof Homey);
+            console.log('[DEBUG] Homey object:', typeof Homey !== 'undefined' ? Homey : 'undefined');
+
+            if (typeof Homey !== 'undefined') {
+                console.log('[DEBUG] Homey is defined, calling onHomeyReady');
+                onHomeyReady(Homey);
+            } else {
+                console.error('[DEBUG] ERROR: Homey is undefined!');
+            }
+        })();
+    </script>
+</body>
+</html>
