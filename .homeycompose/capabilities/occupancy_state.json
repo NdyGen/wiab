@@ -1,0 +1,38 @@
+{
+  "type": "enum",
+  "title": {
+    "en": "Occupancy State",
+    "nl": "Aanwezigheidsstatus"
+  },
+  "desc": {
+    "en": "Internal tri-state occupancy value (UNKNOWN, OCCUPIED, UNOCCUPIED)",
+    "nl": "Interne tri-state aanwezigheidswaarde (UNKNOWN, OCCUPIED, UNOCCUPIED)"
+  },
+  "values": [
+    {
+      "id": "UNKNOWN",
+      "title": {
+        "en": "Unknown",
+        "nl": "Onbekend"
+      }
+    },
+    {
+      "id": "OCCUPIED",
+      "title": {
+        "en": "Occupied",
+        "nl": "Bezet"
+      }
+    },
+    {
+      "id": "UNOCCUPIED",
+      "title": {
+        "en": "Unoccupied",
+        "nl": "Leeg"
+      }
+    }
+  ],
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "icon": "/assets/occupancy_state.svg"
+}

@@ -198,7 +198,9 @@ export class SensorMonitor {
 
     if (!allResetSensorsOff) {
       // At least one door/window is open - room is not occupied
-      this.callbacks.onReset();
+      // Pass empty string for initial state as it's not a specific sensor triggering
+      // Pass true since at least one door is open (alarm_contact = true means open)
+      this.callbacks.onReset('', true);
       return;
     }
 
@@ -224,13 +226,17 @@ export class SensorMonitor {
       this.logger.log(
         `[INITIAL STATE] Setting occupancy to TRUE (all reset sensors OFF, at least one trigger sensor ON)`
       );
-      this.callbacks.onTriggered();
+      // Pass empty string for initial state as it's not a specific sensor triggering
+      // Pass true since at least one trigger sensor is ON (motion detected)
+      this.callbacks.onTriggered('', true);
     } else {
       // Room is NOT OCCUPIED: no motion detected (even though all doors are closed)
       this.logger.log(
         `[INITIAL STATE] Setting occupancy to FALSE (no trigger sensors active)`
       );
-      this.callbacks.onReset();
+      // Pass empty string for initial state as it's not a specific sensor triggering
+      // Pass false since all doors are closed (reset sensors are OFF)
+      this.callbacks.onReset('', false);
     }
   }
 
@@ -316,29 +322,45 @@ export class SensorMonitor {
           return;
         }
 
-        // Detect rising edge: false -> true transition
-        if (value && !lastValue) {
+        // Handle state changes based on sensor type
+        if (value !== lastValue) {
+          // Door sensors (reset sensors): trigger on BOTH edges (open and close are both events)
           if (isResetSensor) {
-            this.logger.log(
-              `[CAPABILITY] ✅ Reset sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
-              `(${sensor.capability}) changed from ${lastValue} to ${value} - DOOR OPENED - ` +
-              `Calling onReset() callback`
-            );
-            this.callbacks.onReset();
+            if (value && !lastValue) {
+              // Rising edge: door opened
+              this.logger.log(
+                `[CAPABILITY] ✅ Reset sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
+                `(${sensor.capability}) changed from ${lastValue} to ${value} - DOOR OPENED - ` +
+                `Calling onReset() callback with sensorId: ${sensor.deviceId}`
+              );
+              this.callbacks.onReset(sensor.deviceId, value);
+            } else if (!value && lastValue) {
+              // Falling edge: door closed
+              this.logger.log(
+                `[CAPABILITY] ✅ Reset sensor FALLING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
+                `(${sensor.capability}) changed from ${lastValue} to ${value} - DOOR CLOSED - ` +
+                `Calling onReset() callback with sensorId: ${sensor.deviceId}`
+              );
+              this.callbacks.onReset(sensor.deviceId, value);
+            }
           } else {
-            this.logger.log(
-              `[CAPABILITY] ✅ Trigger sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
-              `(${sensor.capability}) changed from ${lastValue} to ${value} - MOTION DETECTED - ` +
-              `Calling onTriggered() callback`
-            );
-            this.callbacks.onTriggered();
+            // PIR sensors (trigger sensors): only trigger on rising edge (motion detected)
+            if (value && !lastValue) {
+              this.logger.log(
+                `[CAPABILITY] ✅ Trigger sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
+                `(${sensor.capability}) changed from ${lastValue} to ${value} - MOTION DETECTED - ` +
+                `Calling onTriggered() callback with sensorId: ${sensor.deviceId}`
+              );
+              this.callbacks.onTriggered(sensor.deviceId, value);
+            } else {
+              // Falling edge: motion cleared - ignore
+              this.logger.log(
+                `[CAPABILITY] ⬇️ Trigger sensor FALLING EDGE: ` +
+                `${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
+                `from ${lastValue} to ${value} - IGNORED (motion clearing is not an event)`
+              );
+            }
           }
-        } else if (value !== lastValue) {
-          this.logger.log(
-            `[CAPABILITY] ⬇️ ${isResetSensor ? 'Reset' : 'Trigger'} sensor FALLING EDGE: ` +
-            `${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
-            `from ${lastValue} to ${value} - IGNORED (we only trigger on rising edges)`
-          );
         } else {
           this.logger.log(
             `[CAPABILITY] No change: ${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +

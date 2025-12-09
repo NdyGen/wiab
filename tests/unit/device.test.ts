@@ -352,11 +352,11 @@ describe('WIABDevice', () => {
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
       const callbacks = sensorMonitorCall[4];
 
-      // Trigger the callback
-      await callbacks.onTriggered();
+      // Trigger the callback with test sensor ID
+      await callbacks.onTriggered('test-sensor-id');
 
       expect(device.log).toHaveBeenCalledWith(
-        'Trigger sensor activated - setting occupancy to true'
+        expect.stringContaining('Trigger sensor activated - checking entry timer state')
       );
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'alarm_occupancy',
@@ -383,11 +383,11 @@ describe('WIABDevice', () => {
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
       const callbacks = sensorMonitorCall[4];
 
-      // Trigger the reset callback
-      await callbacks.onReset();
+      // Trigger the reset callback with test sensor ID
+      await callbacks.onReset('test-sensor-id');
 
       expect(device.log).toHaveBeenCalledWith(
-        'Reset sensor activated - setting occupancy to false'
+        expect.stringContaining('Reset sensor activated - handling based on current occupancy state')
       );
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'alarm_occupancy',
@@ -415,10 +415,10 @@ describe('WIABDevice', () => {
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
       const callbacks = sensorMonitorCall[4];
 
-      await callbacks.onTriggered();
+      await callbacks.onTriggered('test-sensor-id');
 
       expect(device.error).toHaveBeenCalledWith(
-        'Failed to set occupancy alarm:',
+        'Failed to handle trigger:',
         expect.any(Error)
       );
     });
@@ -443,10 +443,10 @@ describe('WIABDevice', () => {
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
       const callbacks = sensorMonitorCall[4];
 
-      await callbacks.onReset();
+      await callbacks.onReset('test-sensor-id');
 
       expect(device.error).toHaveBeenCalledWith(
-        'Failed to clear occupancy alarm:',
+        'Failed to handle reset:',
         expect.any(Error)
       );
     });
@@ -594,14 +594,14 @@ describe('WIABDevice', () => {
       const callbacks = sensorMonitorCall[4];
 
       // Trigger sensor
-      await callbacks.onTriggered();
+      await callbacks.onTriggered('test-sensor-id');
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'alarm_occupancy',
         true
       );
 
       // Reset sensor
-      await callbacks.onReset();
+      await callbacks.onReset('test-sensor-id');
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'alarm_occupancy',
         false

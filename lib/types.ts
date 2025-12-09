@@ -31,12 +31,12 @@ export interface SensorConfig {
  * to sensor events (e.g., updating occupancy state).
  *
  * @interface SensorCallbacks
- * @property {() => void} onTriggered - Called when a trigger sensor activates (e.g., motion detected)
- * @property {() => void} onReset - Called when a reset sensor activates (e.g., door opened)
+ * @property {(sensorId: string, value: boolean) => void} onTriggered - Called when a trigger sensor activates (e.g., motion detected)
+ * @property {(sensorId: string, value: boolean) => void} onReset - Called when a reset sensor activates (e.g., door opened)
  */
 export interface SensorCallbacks {
-  onTriggered: () => void;
-  onReset: () => void;
+  onTriggered: (sensorId: string, value: boolean) => void;
+  onReset: (sensorId: string, value: boolean) => void;
 }
 
 /**

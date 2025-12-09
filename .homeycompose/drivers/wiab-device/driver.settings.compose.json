@@ -26,25 +26,41 @@
   {
     "type": "group",
     "label": {
-      "en": "Entry Timer Settings",
-      "nl": "Ingang Timer Instellingen"
+      "en": "Tri-State Timer Settings",
+      "nl": "Tri-State Timer Instellingen"
     },
     "children": [
       {
-        "id": "entryTimeout",
+        "id": "t_enter",
         "type": "number",
         "label": {
-          "en": "Entry timeout (seconds)",
-          "nl": "Ingang timeout (seconden)"
+          "en": "T_ENTER: Entry/exit detection window (seconds)",
+          "nl": "T_ENTER: Ingang/uitgang detectie venster (seconden)"
         },
         "hint": {
-          "en": "How long to keep occupancy active after opening a door while unoccupied. Motion detected during this period with doors closed will make occupancy permanent.",
-          "nl": "Hoe lang de aanwezigheid actief blijft na het openen van een deur terwijl deze niet bezet is. Beweging gedetecteerd tijdens deze periode met gesloten deuren maakt de aanwezigheid permanent."
+          "en": "Short window after door events to detect entry or exit via motion sensors. Typical: 10-30 seconds.",
+          "nl": "Kort venster na deur gebeurtenissen om binnenkomst of vertrek te detecteren via bewegingssensoren. Typisch: 10-30 seconden."
         },
-        "value": 60,
-        "min": 1,
-        "max": 300,
+        "value": 20,
+        "min": 5,
+        "max": 60,
         "step": 1
+      },
+      {
+        "id": "t_clear",
+        "type": "number",
+        "label": {
+          "en": "T_CLEAR: Auto-vacate timeout with open doors (seconds)",
+          "nl": "T_CLEAR: Automatisch verlaten timeout met open deuren (seconden)"
+        },
+        "hint": {
+          "en": "Longer window to detect room becoming empty when doors are open and no motion detected. Typical: 300-900 seconds (5-15 minutes).",
+          "nl": "Langer venster om te detecteren dat de kamer leeg wordt wanneer deuren open zijn en geen beweging wordt gedetecteerd. Typisch: 300-900 seconden (5-15 minuten)."
+        },
+        "value": 600,
+        "min": 60,
+        "max": 3600,
+        "step": 60
       }
     ]
   }
