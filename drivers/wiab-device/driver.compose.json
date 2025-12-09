@@ -12,11 +12,7 @@
     "cloud"
   ],
   "connectivity": [],
-  "images": {
-    "small": "/drivers/wiab-device/assets/images/small.png",
-    "large": "/drivers/wiab-device/assets/images/large.png",
-    "xlarge": "/drivers/wiab-device/assets/images/xlarge.png"
-  },
+  "icon": "/drivers/wiab-device/assets/icon.svg",
   "pair": [
     {
       "id": "select_trigger_sensors",
