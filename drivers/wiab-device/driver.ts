@@ -1,4 +1,5 @@
 import Homey from 'homey';
+import { HomeyAPI, HomeyAPIDevice, PairingDeviceConfig } from '../../lib/types';
 
 /**
  * Driver class for the WIAB (Wasp in a Box) virtual occupancy sensor.
@@ -24,6 +25,49 @@ class WIABDriver extends Homey.Driver {
    */
   async onInit(): Promise<void> {
     this.log('WIAB driver has been initialized');
+  }
+
+  /**
+   * Fetches devices with a specific capability from HomeyAPI.
+   *
+   * This private helper method eliminates code duplication by providing a
+   * reusable way to fetch and filter devices by capability type.
+   *
+   * @private
+   * @param {string} capability - The capability to filter by (e.g., 'alarm_motion', 'alarm_contact')
+   * @returns {Promise<PairingDeviceConfig[]>} Array of devices with the specified capability
+   * @throws {Error} If HomeyAPI is not available
+   */
+  private async getDevicesWithCapability(capability: string): Promise<PairingDeviceConfig[]> {
+    this.log(`Fetching devices with ${capability} capability`);
+
+    const app = this.homey.app as any;
+    if (!app || !app.homeyApi) {
+      throw new Error('Homey API not available');
+    }
+
+    const homeyApi = app.homeyApi as HomeyAPI;
+    const devices = await homeyApi.devices.getDevices();
+    this.log(`Found ${Object.keys(devices).length} total devices on Homey`);
+
+    const matchingDevices: PairingDeviceConfig[] = [];
+
+    for (const [deviceId, device] of Object.entries<HomeyAPIDevice>(devices)) {
+      const capabilityNames = Object.keys(device.capabilitiesObj || {});
+
+      if (capabilityNames.includes(capability)) {
+        this.log(`Device ${device.name} (${deviceId}) has ${capability} capability`);
+        matchingDevices.push({
+          deviceId: deviceId,
+          name: device.name,
+          zone: device.zoneName || null,
+          capability: capability,
+        });
+      }
+    }
+
+    this.log(`Found ${matchingDevices.length} devices with ${capability} capability`);
+    return matchingDevices;
   }
 
   /**
@@ -53,35 +97,8 @@ class WIABDriver extends Homey.Driver {
      * Returns all devices with alarm_motion capability.
      */
     session.setHandler('get_motion_devices', async () => {
-      this.log('Fetching motion devices for pairing UI');
       try {
-        // Access HomeyAPI from the app instance
-        const app = this.homey.app as any;
-        if (!app || !app.homeyApi) {
-          throw new Error('Homey API not available');
-        }
-
-        const devices = await app.homeyApi.devices.getDevices();
-        this.log(`Found ${Object.keys(devices).length} total devices on Homey`);
-
-        const motionDevices: any[] = [];
-
-        for (const [deviceId, device] of Object.entries<any>(devices)) {
-          const capabilityNames = Object.keys(device.capabilitiesObj || {});
-
-          if (capabilityNames.includes('alarm_motion')) {
-            this.log(`Device ${device.name} (${deviceId}) has alarm_motion capability`);
-            motionDevices.push({
-              deviceId: deviceId,
-              name: device.name,
-              zone: device.zoneName || null,
-              capability: 'alarm_motion',
-            });
-          }
-        }
-
-        this.log(`Found ${motionDevices.length} motion devices total`);
-        return motionDevices;
+        return await this.getDevicesWithCapability('alarm_motion');
       } catch (error) {
         this.error('Error fetching motion devices:', error);
         throw new Error('Failed to fetch motion devices');
@@ -93,35 +110,8 @@ class WIABDriver extends Homey.Driver {
      * Returns all devices with alarm_contact capability.
      */
     session.setHandler('get_contact_devices', async () => {
-      this.log('Fetching contact devices for pairing UI');
       try {
-        // Access HomeyAPI from the app instance
-        const app = this.homey.app as any;
-        if (!app || !app.homeyApi) {
-          throw new Error('Homey API not available');
-        }
-
-        const devices = await app.homeyApi.devices.getDevices();
-        this.log(`Found ${Object.keys(devices).length} total devices on Homey`);
-
-        const contactDevices: any[] = [];
-
-        for (const [deviceId, device] of Object.entries<any>(devices)) {
-          const capabilityNames = Object.keys(device.capabilitiesObj || {});
-
-          if (capabilityNames.includes('alarm_contact')) {
-            this.log(`Device ${device.name} (${deviceId}) has alarm_contact capability`);
-            contactDevices.push({
-              deviceId: deviceId,
-              name: device.name,
-              zone: device.zoneName || null,
-              capability: 'alarm_contact',
-            });
-          }
-        }
-
-        this.log(`Found ${contactDevices.length} contact devices total`);
-        return contactDevices;
+        return await this.getDevicesWithCapability('alarm_contact');
       } catch (error) {
         this.error('Error fetching contact devices:', error);
         throw new Error('Failed to fetch contact devices');
