@@ -22,6 +22,8 @@ import { SensorConfig, SensorCallbacks } from '../../lib/types';
  */
 class WIABDevice extends Homey.Device {
   private sensorMonitor?: SensorMonitor;
+  private entryTimer?: NodeJS.Timeout;
+  private entryTimerStartTime?: number;
 
   /**
    * Initializes the WIAB device.
@@ -81,6 +83,7 @@ class WIABDevice extends Homey.Device {
   async onDeleted(): Promise<void> {
     this.log('WIAB device has been deleted');
 
+    this.stopEntryTimer();
     // Cleanup sensor monitoring
     this.teardownSensorMonitoring();
   }
@@ -146,6 +149,7 @@ class WIABDevice extends Homey.Device {
    * It is safe to call this method multiple times or when no monitor is active.
    */
   private teardownSensorMonitoring(): void {
+    this.stopEntryTimer();
     if (this.sensorMonitor) {
       this.log('Tearing down sensor monitoring');
       this.sensorMonitor.stop();
@@ -154,36 +158,58 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
-   * Handles trigger sensor activation.
+   * Handles trigger sensor activation (motion detected).
    *
-   * Called by the SensorMonitor when any configured trigger sensor activates.
-   * This method sets the alarm_occupancy capability to true, indicating that
-   * occupancy has been detected.
+   * Behavior depends on entry timer state:
+   * - If timer active: Check if doors are closed before making occupancy permanent
+   * - If timer inactive: Activate occupancy normally
    */
   private async handleTriggered(): Promise<void> {
-    this.log('Trigger sensor activated - setting occupancy to true');
+    this.log('Trigger sensor activated - checking entry timer state');
 
     try {
-      await this.setCapabilityValue('alarm_occupancy', true);
+      if (this.isEntryTimerActive()) {
+        // Timer active: check if doors are closed
+        if (this.areAllResetSensorsClosed()) {
+          this.stopEntryTimer();
+          await this.setCapabilityValue('alarm_occupancy', true);
+          this.log('Occupancy made permanent: motion detected with doors closed');
+        } else {
+          this.log('Motion ignored: doors still open during entry timer');
+        }
+      } else {
+        // Normal behavior: activate occupancy
+        await this.setCapabilityValue('alarm_occupancy', true);
+        this.log('Occupancy activated: motion detected');
+      }
     } catch (error) {
-      this.error('Failed to set occupancy alarm:', error);
+      this.error('Failed to handle trigger:', error);
     }
   }
 
   /**
-   * Handles reset sensor activation.
+   * Handles reset sensor activation (door/window opened).
    *
-   * Called by the SensorMonitor when any configured reset sensor activates.
-   * This method sets the alarm_occupancy capability to false, indicating that
-   * occupancy has ended.
+   * Behavior depends on current occupancy state:
+   * - If occupied: Reset occupancy immediately (exit detected)
+   * - If unoccupied: Start entry timer grace period
    */
   private async handleReset(): Promise<void> {
-    this.log('Reset sensor activated - setting occupancy to false');
+    this.log('Reset sensor activated - handling based on current occupancy state');
 
     try {
-      await this.setCapabilityValue('alarm_occupancy', false);
+      const currentOccupancy = this.getCapabilityValue('alarm_occupancy');
+
+      if (currentOccupancy) {
+        // Room occupied: reset immediately (current behavior)
+        await this.setCapabilityValue('alarm_occupancy', false);
+        this.log('Occupancy reset: door opened while occupied');
+      } else {
+        // Room unoccupied: start entry timer
+        this.startEntryTimer();
+      }
     } catch (error) {
-      this.error('Failed to clear occupancy alarm:', error);
+      this.error('Failed to handle reset:', error);
     }
   }
 
@@ -220,6 +246,122 @@ class WIABDevice extends Homey.Device {
     } catch (error) {
       this.error('Failed to parse sensor settings JSON:', error);
       return [];
+    }
+  }
+
+  /**
+   * Starts or restarts the entry timer grace period.
+   *
+   * When a reset sensor triggers while the room is unoccupied, this creates
+   * a temporary occupancy state. If motion is detected during this period
+   * with all doors closed, occupancy becomes permanent.
+   */
+  private startEntryTimer(): void {
+    // Cancel existing timer if running
+    this.stopEntryTimer();
+
+    // Get and validate timeout setting
+    const timeoutSeconds = this.getSetting('entryTimeout') as number || 60;
+    const validatedTimeout = Math.max(1, Math.min(300, timeoutSeconds));
+    const timeoutMs = validatedTimeout * 1000;
+
+    // Set temporary occupancy
+    this.setCapabilityValue('alarm_occupancy', true)
+      .catch(error => this.error('Failed to set temporary occupancy:', error));
+
+    // Start timer
+    this.entryTimer = setTimeout(() => {
+      this.log(`Entry timer expired after ${validatedTimeout}s: deactivating occupancy`);
+      this.setCapabilityValue('alarm_occupancy', false)
+        .catch(error => this.error('Failed to deactivate occupancy on timer expiration:', error));
+      this.entryTimer = undefined;
+      this.entryTimerStartTime = undefined;
+    }, timeoutMs);
+
+    this.entryTimerStartTime = Date.now();
+    this.log(`Entry timer started: ${validatedTimeout}s grace period`);
+  }
+
+  /**
+   * Stops the entry timer if active.
+   *
+   * Called when motion is detected during the grace period (making occupancy permanent),
+   * when settings change, or when the device is deleted.
+   */
+  private stopEntryTimer(): void {
+    if (this.entryTimer) {
+      clearTimeout(this.entryTimer);
+      this.entryTimer = undefined;
+      this.entryTimerStartTime = undefined;
+      this.log('Entry timer stopped');
+    }
+  }
+
+  /**
+   * Checks if the entry timer is currently active.
+   *
+   * @returns {boolean} True if grace period is active, false otherwise
+   */
+  private isEntryTimerActive(): boolean {
+    return this.entryTimer !== undefined;
+  }
+
+  /**
+   * Checks if all reset sensors are in closed state.
+   *
+   * Used during entry timer to determine if motion should make occupancy permanent.
+   * Only motion detected with ALL doors closed will activate permanent occupancy.
+   *
+   * @returns {boolean} True if all reset sensors are closed (false), false if any are open or unavailable
+   */
+  private areAllResetSensorsClosed(): boolean {
+    try {
+      const resetSensorsJson = this.getSetting('resetSensors') as string;
+      const resetSensors = this.validateSensorSettings(resetSensorsJson);
+
+      // No reset sensors configured: treat as "closed"
+      if (resetSensors.length === 0) {
+        return true;
+      }
+
+      // Get HomeyAPI instance from app
+      const app = this.homey.app as any;
+      if (!app || !app.homeyApi) {
+        this.error('Homey API not available for checking reset sensor states');
+        return false;
+      }
+
+      // Check each reset sensor using HomeyAPI device references
+      for (const sensor of resetSensors) {
+        // Get device from cache (same pattern as SensorMonitor)
+        const devices = app.homeyApi.devices;
+        if (!devices || !devices[sensor.deviceId]) {
+          this.error(`Reset sensor device not found: ${sensor.deviceId}`);
+          return false; // Missing device = unsafe to assume closed
+        }
+
+        const device = devices[sensor.deviceId];
+        const capabilitiesObj = device.capabilitiesObj;
+
+        if (!capabilitiesObj || !(sensor.capability in capabilitiesObj)) {
+          this.error(`Device ${sensor.deviceId} does not have capability: ${sensor.capability}`);
+          return false;
+        }
+
+        const value = capabilitiesObj[sensor.capability]?.value;
+
+        if (value === true) {
+          // Sensor is open (true = contact open)
+          this.log(`Reset sensor is open: ${sensor.deviceName || sensor.deviceId}`);
+          return false;
+        }
+      }
+
+      // All sensors are closed
+      return true;
+    } catch (error) {
+      this.error('Failed to check reset sensor states:', error);
+      return false; // Error = unsafe to assume closed
     }
   }
 }

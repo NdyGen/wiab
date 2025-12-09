@@ -22,5 +22,30 @@
       "en": "Contact sensors that deactivate occupancy (JSON array, configured during pairing)",
       "nl": "Contactsensoren die aanwezigheid deactiveren (JSON array, geconfigureerd tijdens koppeling)"
     }
+  },
+  {
+    "type": "group",
+    "label": {
+      "en": "Entry Timer Settings",
+      "nl": "Ingang Timer Instellingen"
+    },
+    "children": [
+      {
+        "id": "entryTimeout",
+        "type": "number",
+        "label": {
+          "en": "Entry timeout (seconds)",
+          "nl": "Ingang timeout (seconden)"
+        },
+        "hint": {
+          "en": "How long to keep occupancy active after opening a door while unoccupied. Motion detected during this period with doors closed will make occupancy permanent.",
+          "nl": "Hoe lang de aanwezigheid actief blijft na het openen van een deur terwijl deze niet bezet is. Beweging gedetecteerd tijdens deze periode met gesloten deuren maakt de aanwezigheid permanent."
+        },
+        "value": 60,
+        "min": 1,
+        "max": 300,
+        "step": 1
+      }
+    ]
   }
 ]
