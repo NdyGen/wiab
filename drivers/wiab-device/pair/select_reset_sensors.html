@@ -35,7 +35,29 @@
         .loading {
             text-align: center;
             padding: 40px;
-            color: #666;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loading::before {
+            content: '';
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #2196F3;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.3;
+                transform: scale(0.8);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1);
+            }
         }
 
         .device-list {
@@ -119,7 +141,7 @@
     <div class="skip-note">This step is optional. You can click Next to skip if you don't want to use reset sensors.</div>
 
     <div id="reset-error" class="error" style="display: none;"></div>
-    <div id="reset-loading" class="loading">Loading contact sensors...</div>
+    <div id="reset-loading" class="loading"></div>
     <input type="text" id="reset-search" class="search-box" placeholder="Search sensors..." style="display: none;">
     <div id="reset-device-list" class="device-list"></div>
 

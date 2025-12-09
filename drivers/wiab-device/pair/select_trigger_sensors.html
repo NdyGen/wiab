@@ -32,7 +32,29 @@
         .loading {
             text-align: center;
             padding: 40px;
-            color: #666;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loading::before {
+            content: '';
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #2196F3;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.3;
+                transform: scale(0.8);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1);
+            }
         }
 
         .device-list {
@@ -100,7 +122,7 @@
     <p class="intro" data-i18n="pair.select_trigger_sensors.intro">Select the motion sensors that will trigger occupancy detection.</p>
 
     <div id="trigger-error" class="error" style="display: none;"></div>
-    <div id="trigger-loading" class="loading">Loading motion sensors...</div>
+    <div id="trigger-loading" class="loading"></div>
     <input type="text" id="trigger-search" class="search-box" placeholder="Search sensors..." style="display: none;">
     <div id="trigger-device-list" class="device-list"></div>
 
