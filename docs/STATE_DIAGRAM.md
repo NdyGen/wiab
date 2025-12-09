@@ -42,7 +42,7 @@ WIAB implements a simple two-state occupancy model that mimics the behavior of a
                            ▼
               ┌────────────────────────┐
               │  Start SensorMonitor   │
-              │   (Begin polling)      │
+              │ (Setup event listeners)│
               └────────────────────────┘
 ```
 
@@ -56,56 +56,52 @@ WIAB implements a simple two-state occupancy model that mimics the behavior of a
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  SensorMonitor Polling                  │
-│              (Every 2 seconds: poll cycle)              │
+│            SensorMonitor Event Listeners                │
+│         (WebSocket $update events from HomeyAPI)        │
 └────────────────────────┬────────────────────────────────┘
                          │
                          ▼
          ┌───────────────────────────────┐
-         │ Check Reset Sensors (Priority)│
-         │   (alarm_contact capability)  │
+         │   Device Capability Update    │
+         │    Event Received ($update)   │
          └───────────┬───────────────────┘
                      │
          ┌───────────┴────────────┐
          │                        │
-    Detect edge            No edge detected
-    FALSE → TRUE                  │
+    Reset Sensor Event     Trigger Sensor Event
+    (alarm_contact)        (alarm_motion/presence)
          │                        │
          ▼                        ▼
 ┌─────────────────┐    ┌──────────────────────┐
-│  Set Occupancy  │    │ Check Trigger Sensors│
-│      OFF        │    │    (alarm_motion,    │
-│ alarm_occupancy │    │   alarm_presence)    │
-│     = FALSE     │    └──────────┬───────────┘
-└─────────────────┘               │
-                      ┌───────────┴────────────┐
-                      │                        │
-                 Detect edge             No edge detected
-                 FALSE → TRUE                  │
-                      │                        │
-                      ▼                        ▼
-              ┌─────────────────┐    ┌─────────────────┐
-              │  Set Occupancy  │    │  No state       │
-              │       ON        │    │    change       │
-              │ alarm_occupancy │    │                 │
-              │     = TRUE      │    └─────────────────┘
-              └─────────────────┘
-                      │
-                      ▼
-              ┌─────────────────┐
-              │  Wait 2 seconds │
-              └────────┬────────┘
-                       │
-                       └──────────────┐
-                                      │
-                                      ▼
-                          ┌───────────────────────┐
-                          │  Next polling cycle   │
-                          └───────────────────────┘
+│  Check if edge  │    │   Check if edge      │
+│  FALSE → TRUE   │    │   FALSE → TRUE       │
+└────────┬────────┘    └──────────┬───────────┘
+         │                        │
+    ┌────┴─────┐            ┌─────┴─────┐
+    │          │            │           │
+   YES        NO           YES         NO
+    │          │            │           │
+    ▼          ▼            ▼           ▼
+┌─────────┐ ┌────┐   ┌──────────┐  ┌────┐
+│Set OFF  │ │Skip│   │Set ON    │  │Skip│
+│alarm_   │ │    │   │alarm_    │  │    │
+│occupancy│ │    │   │occupancy │  │    │
+│= FALSE  │ │    │   │= TRUE    │  │    │
+└─────────┘ └────┘   └──────────┘  └────┘
+     │                     │
+     └──────────┬──────────┘
+                │
+                ▼
+     ┌────────────────────┐
+     │  Wait for next     │
+     │  WebSocket event   │
+     └────────────────────┘
 ```
 
 **Key Points:**
-- Reset sensors have PRIORITY over trigger sensors
+- Event-driven: No polling, instant response to sensor state changes
+- WebSocket updates: HomeyAPI pushes real-time capability changes via `$update` events
+- Reset sensors have PRIORITY over trigger sensors (via callback logic)
 - Only state TRANSITIONS (FALSE → TRUE) trigger actions
 - Continuous TRUE state does NOT repeatedly trigger
 - Edge detection prevents spurious triggers
@@ -150,7 +146,7 @@ These rules apply ONLY during device initialization (`onInit`):
 
 ## Runtime State Transitions
 
-These rules apply during normal operation (polling cycles):
+These rules apply during normal operation (event-driven monitoring):
 
 | Current Occupancy | Sensor Type | Transition Detected | New Occupancy | Action Taken |
 |-------------------|-------------|---------------------|---------------|--------------|
@@ -162,9 +158,10 @@ These rules apply during normal operation (polling cycles):
 | Any | Any sensor | No transition | No change | Static state ignored |
 
 **Priority Rules:**
-1. Reset sensors are checked FIRST in each poll cycle
-2. If a reset sensor transition is detected, trigger sensors are NOT checked
-3. Trigger sensors are only checked if NO reset sensor transition occurred
+1. Reset sensors have priority over trigger sensors (enforced via callback logic)
+2. Both sensor types have dedicated event listeners
+3. Edge detection happens immediately when WebSocket `$update` event fires
+4. No polling delay - instant response to state changes
 
 **Example Scenarios:**
 
@@ -230,14 +227,15 @@ These rules apply during normal operation (polling cycles):
 
 ### Race Conditions
 
-**Mitigation**: Polling eliminates event-based race conditions
+**Mitigation**: Event-driven architecture with edge detection and state tracking
 
-| Issue | Event-Based Problem | Polling Solution |
-|-------|---------------------|------------------|
-| Stale events | Old events arrive late | Always reads current state |
-| Event order | Events arrive out of order | Order doesn't matter |
-| Missed events | Event dropped by system | Next poll cycle catches it |
-| Duplicate events | Same event fires multiple times | Edge detection prevents repeats |
+| Issue | Potential Problem | Solution |
+|-------|-------------------|----------|
+| Stale events | Old events arrive late | HomeyAPI WebSocket provides current state |
+| Event order | Events arrive out of order | Edge detection based on last known value |
+| Missed events | Event dropped by WebSocket | Device state auto-syncs via WebSocket connection |
+| Duplicate events | Same event fires multiple times | Edge detection prevents repeats (lastValues map) |
+| Simultaneous events | Multiple sensors trigger at once | Each sensor has independent listener with edge detection |
 
 ## Implementation Notes
 
@@ -277,44 +275,48 @@ async onInit(): Promise<void> {
 - Motion sensor VALUES reliably indicate current presence
 - Reset sensors only matter when someone is ACTIVELY exiting
 
-#### Runtime Phase (Polling)
+#### Runtime Phase (Event-Driven)
 
 ```typescript
-private poll(): void {
-  // Priority 1: Check reset sensors for TRANSITIONS
-  for (const sensor of this.resetSensors) {
-    const currentValue = this.getSensorValue(sensor);
-    const lastValue = this.lastValues.get(sensor.deviceId) ?? false;
+private setupSensorListener(sensor: SensorConfig, isResetSensor: boolean): void {
+  const device = this.deviceRefs.get(sensor.deviceId);
 
-    this.lastValues.set(sensor.deviceId, currentValue ?? false);
-
-    // Edge detection: FALSE → TRUE only
-    if (currentValue && !lastValue) {
-      this.callbacks.onReset(); // Turn OFF occupancy
-      return; // Exit immediately
+  // Create event handler for capability updates
+  const handler = (capabilityUpdate: any) => {
+    // Only respond to updates for the capability we're monitoring
+    if (capabilityUpdate.capabilityId !== sensor.capability) {
+      return;
     }
-  }
 
-  // Priority 2: Check trigger sensors for TRANSITIONS
-  for (const sensor of this.triggerSensors) {
-    const currentValue = this.getSensorValue(sensor);
-    const lastValue = this.lastValues.get(sensor.deviceId) ?? false;
+    const currentValue = capabilityUpdate.value;
+    const key = this.getSensorKey(sensor);
+    const lastValue = this.lastValues.get(key) ?? false;
 
-    this.lastValues.set(sensor.deviceId, currentValue ?? false);
-
-    // Edge detection: FALSE → TRUE only
-    if (currentValue && !lastValue) {
-      this.callbacks.onTriggered(); // Turn ON occupancy
-      // Don't return - continue checking other triggers
+    // Update stored value
+    if (typeof currentValue === 'boolean') {
+      this.lastValues.set(key, currentValue);
     }
-  }
+
+    // Detect rising edge: FALSE → TRUE transition
+    if (currentValue && !lastValue) {
+      if (isResetSensor) {
+        this.callbacks.onReset(); // Turn OFF occupancy
+      } else {
+        this.callbacks.onTriggered(); // Turn ON occupancy
+      }
+    }
+  };
+
+  // Register the event listener on WebSocket $update events
+  device.on('$update', handler);
 }
 ```
 
 **Why this design?**
-- Prevents repeated triggers from same sensor
-- Prioritizes exits over entries
-- Handles multiple sensors correctly
+- Real-time response: WebSocket events trigger immediately when sensor state changes
+- Prevents repeated triggers: Edge detection based on lastValues map
+- Independent listeners: Each sensor has its own event handler
+- Handles multiple sensors correctly: All listeners active simultaneously
 
 ### Edge Detection Algorithm
 
