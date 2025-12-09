@@ -161,19 +161,6 @@
                         document.getElementById('reset-loading').style.display = 'none';
                     });
 
-                // Listen for continue event (when user clicks Next)
-                Homey.on('continue', function() {
-                    console.log('[DEBUG] Continue event fired');
-                    console.log('[DEBUG] Sending selected devices:', selectedDevices);
-                    Homey.emit('select_reset_sensors', selectedDevices)
-                        .then(function(result) {
-                            console.log('[DEBUG] Selection saved:', result);
-                        })
-                        .catch(function(error) {
-                            console.error('[DEBUG] Error saving selection:', error);
-                            showError('Failed to save selection: ' + (error.message || error));
-                        });
-                });
             }
 
         function renderDevices(devices) {
@@ -203,14 +190,14 @@
                 console.log('[DEBUG] renderDevices - processing device ' + index + ':', device);
                 const item = document.createElement('div');
                 item.className = 'device-item';
-                if (selectedDevices.some(function(d) { return d.id === device.id; })) {
+                if (selectedDevices.some(function(d) { return d.deviceId === device.deviceId; })) {
                     item.classList.add('selected');
                 }
 
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.className = 'device-checkbox';
-                checkbox.checked = selectedDevices.some(function(d) { return d.id === device.id; });
+                checkbox.checked = selectedDevices.some(function(d) { return d.deviceId === device.deviceId; });
                 checkbox.addEventListener('change', function() {
                     toggleDevice(device);
                 });
@@ -252,13 +239,23 @@
         }
 
         function toggleDevice(device) {
-            const index = selectedDevices.findIndex(function(d) { return d.id === device.id; });
+            const index = selectedDevices.findIndex(function(d) { return d.deviceId === device.deviceId; });
             if (index > -1) {
                 selectedDevices.splice(index, 1);
             } else {
                 selectedDevices.push(device);
             }
             renderDevices(allDevices);
+
+            // Send selection immediately to driver (don't wait for continue event)
+            console.log('[DEBUG] Sending updated selection:', selectedDevices);
+            Homey.emit('select_reset_sensors', selectedDevices)
+                .then(function(result) {
+                    console.log('[DEBUG] Selection saved:', result);
+                })
+                .catch(function(error) {
+                    console.error('[DEBUG] Error saving selection:', error);
+                });
         }
 
         function showError(message) {

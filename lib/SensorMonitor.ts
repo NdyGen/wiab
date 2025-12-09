@@ -39,7 +39,7 @@ export class SensorMonitor {
   private lastValues: Map<string, boolean> = new Map();
   private deviceCache: Record<string, any> = {};
   private deviceRefs: Map<string, any> = new Map(); // Live device references from HomeyAPI
-  private deviceListeners: Map<string, () => void> = new Map(); // Event listener cleanup functions
+  private capabilityInstances: Map<string, any> = new Map(); // DeviceCapability instances for cleanup
 
   /**
    * Creates a new SensorMonitor instance
@@ -74,12 +74,12 @@ export class SensorMonitor {
    * @returns {void}
    */
   public async start(): Promise<void> {
-    if (this.deviceListeners.size > 0) {
+    if (this.capabilityInstances.size > 0) {
       this.logger.log('SensorMonitor already running');
       return;
     }
 
-    this.logger.log('Starting SensorMonitor with event-driven monitoring');
+    this.logger.log('Starting SensorMonitor with real-time capability monitoring');
     this.logger.log('Monitoring trigger sensors:', this.triggerSensors.length);
     this.logger.log('Monitoring reset sensors:', this.resetSensors.length);
 
@@ -127,13 +127,11 @@ export class SensorMonitor {
    * @returns {void}
    */
   public stop(): void {
-    if (this.deviceListeners.size > 0) {
-      // Remove all event listeners
-      for (const [deviceId, cleanupFn] of this.deviceListeners.entries()) {
-        this.logger.log(`Removing event listener for device: ${deviceId}`);
-        cleanupFn();
-      }
-      this.deviceListeners.clear();
+    if (this.capabilityInstances.size > 0) {
+      this.logger.log('Stopping SensorMonitor - cleaning up capability instances');
+      // Capability instances will be garbage collected
+      // No explicit cleanup needed as makeCapabilityInstance manages lifecycle
+      this.capabilityInstances.clear();
       this.lastValues.clear();
       this.deviceCache = {};
       this.deviceRefs.clear();
@@ -164,14 +162,15 @@ export class SensorMonitor {
   /**
    * Sets the initial occupancy state based on current sensor values
    *
-   * STRATEGY: Determine if the room is currently occupied by checking
-   * if any trigger sensors (motion detectors) are currently active.
-   * Reset sensors are intentionally IGNORED during initialization.
+   * STRATEGY: Determine if the room is currently occupied by checking BOTH:
+   * 1. ALL reset sensors (doors/windows) are OFF (closed)
+   * 2. At least ONE trigger sensor (motion) is ON (detected)
    *
-   * RATIONALE: The "wasp in a box" concept means we care about presence
-   * (motion detected), not door positions. Reset sensors only matter
-   * when they TRANSITION (door opens as someone exits), not their
-   * static state at initialization.
+   * RATIONALE: The "wasp in a box" concept requires two conditions to be true:
+   * - The "box" must be closed (all doors/windows closed = reset sensors OFF)
+   * - There must be a "wasp" inside (motion detected = trigger sensor ON)
+   *
+   * If ANY door is open OR no motion is detected, the room is considered not occupied.
    *
    * This ensures the WIAB device reflects the actual occupancy state
    * immediately on startup, rather than waiting for the first state change.
@@ -180,45 +179,73 @@ export class SensorMonitor {
    * @returns {void}
    */
   private setInitialOccupancyState(): void {
-    // Check if any trigger sensor is currently active (motion detected)
+    // STEP 1: Check if ALL reset sensors are OFF (doors/windows closed)
+    let allResetSensorsOff = true;
+    for (const sensor of this.resetSensors) {
+      const key = this.getSensorKey(sensor);
+      const value = this.lastValues.get(key) ?? false;
+
+      if (value) {
+        // A door/window is OPEN (reset sensor = true) - cannot be occupied
+        this.logger.log(
+          `[INITIAL STATE] Reset sensor is ON (door/window open): ${sensor.deviceName || sensor.deviceId} ` +
+          `(${sensor.capability}=${value}) - setting occupancy to FALSE`
+        );
+        allResetSensorsOff = false;
+        break;
+      }
+    }
+
+    if (!allResetSensorsOff) {
+      // At least one door/window is open - room is not occupied
+      this.callbacks.onReset();
+      return;
+    }
+
+    // STEP 2: Check if ANY trigger sensor is ON (motion detected)
+    let anyTriggerSensorOn = false;
     for (const sensor of this.triggerSensors) {
       const key = this.getSensorKey(sensor);
       const value = this.lastValues.get(key) ?? false;
 
       if (value) {
-        // Motion detected = room is occupied
+        // Motion detected
         this.logger.log(
           `[INITIAL STATE] Trigger sensor active: ${sensor.deviceName || sensor.deviceId} ` +
-          `(${sensor.capability}=${value}) - setting occupancy to TRUE`
+          `(${sensor.capability}=${value})`
         );
-        this.callbacks.onTriggered();
-        return;
+        anyTriggerSensorOn = true;
+        break;
       }
     }
 
-    // No trigger sensors are active - room is not occupied
-    this.logger.log(
-      `[INITIAL STATE] No trigger sensors active - setting occupancy to FALSE ` +
-      `(${this.triggerSensors.length} trigger sensors checked, ` +
-      `${this.resetSensors.length} reset sensors ignored)`
-    );
-
-    // Explicitly set to false
-    this.callbacks.onReset();
+    if (anyTriggerSensorOn && allResetSensorsOff) {
+      // Room is OCCUPIED: all doors closed AND motion detected
+      this.logger.log(
+        `[INITIAL STATE] Setting occupancy to TRUE (all reset sensors OFF, at least one trigger sensor ON)`
+      );
+      this.callbacks.onTriggered();
+    } else {
+      // Room is NOT OCCUPIED: no motion detected (even though all doors are closed)
+      this.logger.log(
+        `[INITIAL STATE] Setting occupancy to FALSE (no trigger sensors active)`
+      );
+      this.callbacks.onReset();
+    }
   }
 
   /**
-   * Sets up event listeners for all configured sensors
+   * Sets up capability listeners for all configured sensors
    *
-   * This method creates event listeners on device objects that respond to capability
-   * value changes. Each device emits update events when its state changes via WebSocket.
-   * We use these events to detect sensor state changes and trigger callbacks.
+   * This method creates real-time capability listeners using HomeyAPI's makeCapabilityInstance().
+   * Each listener receives immediate callbacks when the capability value changes.
+   * This is the correct event-driven approach for monitoring device capabilities in Homey SDK v3.
    *
    * @private
    * @returns {void}
    */
   private setupEventListeners(): void {
-    this.logger.log('Setting up event listeners for all sensors');
+    this.logger.log('Setting up capability listeners for all sensors');
 
     // Setup listeners for reset sensors (priority)
     for (const sensor of this.resetSensors) {
@@ -230,11 +257,15 @@ export class SensorMonitor {
       this.setupSensorListener(sensor, false);
     }
 
-    this.logger.log(`Event listeners setup complete: ${this.deviceListeners.size} devices monitored`);
+    this.logger.log(`Capability listeners setup complete: ${this.capabilityInstances.size} sensors monitored`);
   }
 
   /**
-   * Sets up an event listener for a specific sensor
+   * Sets up a capability listener for a specific sensor using makeCapabilityInstance()
+   *
+   * This method uses the correct HomeyAPI pattern for monitoring device capabilities.
+   * The makeCapabilityInstance() method creates a DeviceCapability object that receives
+   * real-time value changes via callback, providing true event-driven monitoring.
    *
    * @private
    * @param {SensorConfig} sensor - The sensor configuration
@@ -249,56 +280,82 @@ export class SensorMonitor {
       return;
     }
 
-    // Skip if listener already exists for this device
-    if (this.deviceListeners.has(sensor.deviceId)) {
-      this.logger.log(`Listener already exists for device: ${sensor.deviceName || sensor.deviceId}`);
+    const key = this.getSensorKey(sensor);
+
+    // Skip if listener already exists for this sensor
+    if (this.capabilityInstances.has(key)) {
+      this.logger.log(`Listener already exists for sensor: ${sensor.deviceName || sensor.deviceId} (${sensor.capability})`);
       return;
     }
 
     try {
-      // Create event handler for capability updates
-      const handler = (capabilityUpdate: any) => {
-        // Only respond to updates for the capability we're monitoring
-        if (capabilityUpdate.capabilityId !== sensor.capability) {
+      this.logger.log(
+        `[CAPABILITY] Creating capability instance for ${isResetSensor ? 'reset' : 'trigger'} sensor: ` +
+        `${sensor.deviceName || sensor.deviceId} (${sensor.capability})`
+      );
+
+      // Create real-time capability listener using makeCapabilityInstance()
+      // This returns a DeviceCapability object and invokes the callback with value changes
+      const capabilityInstance = device.makeCapabilityInstance(sensor.capability, (value: any) => {
+        const lastValue = this.lastValues.get(key) ?? false;
+
+        this.logger.log(
+          `[CAPABILITY] ${isResetSensor ? 'Reset' : 'Trigger'} sensor value changed: ` +
+          `${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
+          `from ${lastValue} to ${value}`
+        );
+
+        // Update stored value
+        if (typeof value === 'boolean') {
+          this.lastValues.set(key, value);
+        } else {
+          this.logger.error(
+            `[CAPABILITY] Unexpected value type for ${sensor.deviceName || sensor.deviceId}: ` +
+            `expected boolean, got ${typeof value} (${value})`
+          );
           return;
         }
 
-        const currentValue = capabilityUpdate.value;
-        const key = this.getSensorKey(sensor);
-        const lastValue = this.lastValues.get(key) ?? false;
-
-        // Update stored value
-        if (typeof currentValue === 'boolean') {
-          this.lastValues.set(key, currentValue);
-        }
-
         // Detect rising edge: false -> true transition
-        if (currentValue && !lastValue) {
+        if (value && !lastValue) {
           if (isResetSensor) {
-            this.logger.log(`[EVENT] Reset sensor triggered: ${sensor.deviceName || sensor.deviceId} (${sensor.capability}) changed from ${lastValue} to ${currentValue} (door opened)`);
+            this.logger.log(
+              `[CAPABILITY] ✅ Reset sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
+              `(${sensor.capability}) changed from ${lastValue} to ${value} - DOOR OPENED - ` +
+              `Calling onReset() callback`
+            );
             this.callbacks.onReset();
           } else {
-            this.logger.log(`[EVENT] Trigger sensor activated: ${sensor.deviceName || sensor.deviceId} (${sensor.capability}) changed from ${lastValue} to ${currentValue}`);
+            this.logger.log(
+              `[CAPABILITY] ✅ Trigger sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
+              `(${sensor.capability}) changed from ${lastValue} to ${value} - MOTION DETECTED - ` +
+              `Calling onTriggered() callback`
+            );
             this.callbacks.onTriggered();
           }
-        } else if (currentValue !== lastValue) {
-          // Log other value changes for debugging
-          this.logger.log(`[EVENT] ${isResetSensor ? 'Reset' : 'Trigger'} sensor: ${sensor.deviceName || sensor.deviceId} (${sensor.capability}) changed from ${lastValue} to ${currentValue} (falling edge - ignored)`);
+        } else if (value !== lastValue) {
+          this.logger.log(
+            `[CAPABILITY] ⬇️ ${isResetSensor ? 'Reset' : 'Trigger'} sensor FALLING EDGE: ` +
+            `${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
+            `from ${lastValue} to ${value} - IGNORED (we only trigger on rising edges)`
+          );
+        } else {
+          this.logger.log(
+            `[CAPABILITY] No change: ${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
+            `stayed at ${value} - IGNORED`
+          );
         }
-      };
-
-      // Register the event listener
-      // HomeyAPI device objects emit '$update' events when capabilities change
-      device.on('$update', handler);
-
-      // Store cleanup function
-      this.deviceListeners.set(sensor.deviceId, () => {
-        device.removeListener('$update', handler);
       });
 
-      this.logger.log(`[EVENT] Listener registered for ${isResetSensor ? 'reset' : 'trigger'} sensor: ${sensor.deviceName || sensor.deviceId} (${sensor.capability})`);
+      // Store the capability instance for cleanup
+      this.capabilityInstances.set(key, capabilityInstance);
+
+      this.logger.log(
+        `[CAPABILITY] Listener registered for ${isResetSensor ? 'reset' : 'trigger'} sensor: ` +
+        `${sensor.deviceName || sensor.deviceId} (${sensor.capability})`
+      );
     } catch (error) {
-      this.logger.error(`Failed to setup listener for device ${sensor.deviceId}:`, error);
+      this.logger.error(`Failed to setup capability listener for ${sensor.deviceId}:`, error);
     }
   }
 

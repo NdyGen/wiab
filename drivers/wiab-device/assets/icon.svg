@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="500" height="500" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
+  <rect width="500" height="500" fill="#FF6600"/>
+  <path d="M250 150 L300 250 L250 220 L200 250 Z" fill="#FFF" stroke="#333" stroke-width="3"/>
+  <rect x="150" y="200" width="200" height="150" fill="none" stroke="#FFF" stroke-width="8" rx="10"/>
+  <text x="250" y="400" font-family="Arial, sans-serif" font-size="40" fill="#FFF" text-anchor="middle" font-weight="bold">WIAB</text>
+</svg>
