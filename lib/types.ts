@@ -179,6 +179,30 @@ export interface HomeyAPIDevices {
 }
 
 /**
+ * Homey zone object from HomeyAPI.
+ *
+ * @interface HomeyAPIZone
+ * @property {string} id - The unique identifier of the zone
+ * @property {string} name - The user-assigned name of the zone
+ * @property {string} [parent] - Optional parent zone ID for nested zones
+ */
+export interface HomeyAPIZone {
+  id: string;
+  name: string;
+  parent?: string;
+}
+
+/**
+ * HomeyAPI zones interface for accessing zones.
+ *
+ * @interface HomeyAPIZones
+ * @property {(params: { id: string }) => Promise<HomeyAPIZone>} getZone - Retrieves a zone by ID
+ */
+export interface HomeyAPIZones {
+  getZone: (params: { id: string }) => Promise<HomeyAPIZone>;
+}
+
+/**
  * HomeyAPI interface for accessing Homey system resources.
  *
  * This is the main API object provided by HomeyAPI for accessing
@@ -186,7 +210,9 @@ export interface HomeyAPIDevices {
  *
  * @interface HomeyAPI
  * @property {HomeyAPIDevices} devices - Interface for accessing Homey devices
+ * @property {HomeyAPIZones} zones - Interface for accessing Homey zones
  */
 export interface HomeyAPI {
   devices: HomeyAPIDevices;
+  zones: HomeyAPIZones;
 }

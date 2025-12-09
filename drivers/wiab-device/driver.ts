@@ -57,10 +57,25 @@ class WIABDriver extends Homey.Driver {
 
       if (capabilityNames.includes(capability)) {
         this.log(`Device ${device.name} (${deviceId}) has ${capability} capability`);
+
+        // Fetch zone name if device has a zone assigned
+        let zoneName: string | null = null;
+        try {
+          const deviceObj = device as any;
+          if (deviceObj.zone) {
+            const zone = await homeyApi.zones.getZone({ id: deviceObj.zone });
+            zoneName = zone.name;
+            this.log(`Device ${device.name} is in zone: ${zoneName}`);
+          }
+        } catch (error) {
+          // Zone information is optional, continue without it
+          this.log(`Could not retrieve zone for device ${device.name}:`, error);
+        }
+
         matchingDevices.push({
           deviceId: deviceId,
           name: device.name,
-          zone: device.zoneName || null,
+          zone: zoneName,
           capability: capability,
         });
       }
