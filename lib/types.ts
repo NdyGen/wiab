@@ -74,3 +74,24 @@ export interface DeviceInfo {
   driverName: string;
   capabilities: string[];
 }
+
+/**
+ * Response format for device API endpoints.
+ *
+ * Used by the settings page API to provide information about devices
+ * that can be configured as sensors in the WIAB app.
+ *
+ * @interface DeviceResponse
+ * @property {string} id - The unique identifier of the device
+ * @property {string} name - The user-assigned name of the device
+ * @property {string} class - The device class (e.g., 'sensor', 'light')
+ * @property {string} capability - The specific capability being exposed (e.g., 'alarm_motion', 'alarm_contact')
+ * @property {string} [zoneName] - Optional name of the zone where the device is located
+ */
+export interface DeviceResponse {
+  id: string;
+  name: string;
+  class: string;
+  capability: string;
+  zoneName?: string;
+}

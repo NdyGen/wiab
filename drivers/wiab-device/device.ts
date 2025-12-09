@@ -117,15 +117,22 @@ class WIABDevice extends Homey.Device {
         onReset: () => this.handleReset(),
       };
 
-      // Create and start sensor monitor
+      // Get HomeyAPI instance from app
+      const app = this.homey.app as any;
+      if (!app || !app.homeyApi) {
+        throw new Error('Homey API not available');
+      }
+
+      // Create and start sensor monitor with HomeyAPI for device access and Homey SDK for logging
       this.sensorMonitor = new SensorMonitor(
-        this.homey,
+        app.homeyApi,   // HomeyAPI for device access
+        this.homey,     // Homey SDK for logging
         triggerSensors,
         resetSensors,
         callbacks
       );
 
-      this.sensorMonitor.start();
+      await this.sensorMonitor.start();
     } catch (error) {
       this.error('Failed to setup sensor monitoring:', error);
       // Don't throw - allow device to function in degraded mode
@@ -217,4 +224,4 @@ class WIABDevice extends Homey.Device {
   }
 }
 
-export default WIABDevice;
+module.exports = WIABDevice;

@@ -31,29 +31,34 @@ import { SensorConfig, SensorCallbacks } from './types';
  * ```
  */
 export class SensorMonitor {
-  private homey: any;
+  private homeyApi: any;
+  private logger: any;
   private triggerSensors: SensorConfig[];
   private resetSensors: SensorConfig[];
   private callbacks: SensorCallbacks;
-  private pollInterval: NodeJS.Timeout | null = null;
   private lastValues: Map<string, boolean> = new Map();
-  private readonly POLL_INTERVAL_MS = 2000;
+  private deviceCache: Record<string, any> = {};
+  private deviceRefs: Map<string, any> = new Map(); // Live device references from HomeyAPI
+  private deviceListeners: Map<string, () => void> = new Map(); // Event listener cleanup functions
 
   /**
    * Creates a new SensorMonitor instance
    *
-   * @param homey - The Homey instance for device access and logging
+   * @param homeyApi - The HomeyAPI instance for device access
+   * @param logger - The Homey SDK instance for logging
    * @param {SensorConfig[]} triggerSensors - Sensors that activate occupancy when triggered
    * @param {SensorConfig[]} resetSensors - Sensors that deactivate occupancy when triggered (priority over trigger sensors)
    * @param {SensorCallbacks} callbacks - Callback functions for sensor state changes
    */
   constructor(
-    homey: any,
+    homeyApi: any,
+    logger: any,
     triggerSensors: SensorConfig[],
     resetSensors: SensorConfig[],
     callbacks: SensorCallbacks
   ) {
-    this.homey = homey;
+    this.homeyApi = homeyApi;
+    this.logger = logger;
     this.triggerSensors = triggerSensors;
     this.resetSensors = resetSensors;
     this.callbacks = callbacks;
@@ -68,43 +73,71 @@ export class SensorMonitor {
    * @public
    * @returns {void}
    */
-  public start(): void {
-    if (this.pollInterval) {
-      this.homey.log('SensorMonitor already running');
+  public async start(): Promise<void> {
+    if (this.deviceListeners.size > 0) {
+      this.logger.log('SensorMonitor already running');
       return;
     }
 
-    this.homey.log('Starting SensorMonitor with polling interval:', this.POLL_INTERVAL_MS, 'ms');
-    this.homey.log('Monitoring trigger sensors:', this.triggerSensors.length);
-    this.homey.log('Monitoring reset sensors:', this.resetSensors.length);
+    this.logger.log('Starting SensorMonitor with event-driven monitoring');
+    this.logger.log('Monitoring trigger sensors:', this.triggerSensors.length);
+    this.logger.log('Monitoring reset sensors:', this.resetSensors.length);
+
+    // Populate device cache using getDevices() which returns complete device objects
+    try {
+      this.logger.log('Loading device cache from HomeyAPI...');
+      const allDevices = await this.homeyApi.devices.getDevices();
+      this.deviceCache = allDevices;
+      this.logger.log(`Device cache loaded with ${Object.keys(this.deviceCache).length} devices`);
+
+      // Store live references to devices we'll be monitoring
+      // These device objects auto-update via WebSocket, so we can reuse them
+      const allSensors = [...this.resetSensors, ...this.triggerSensors];
+      for (const sensor of allSensors) {
+        const device = allDevices[sensor.deviceId];
+        if (device) {
+          this.deviceRefs.set(sensor.deviceId, device);
+          this.logger.log(`Stored live reference for device: ${sensor.deviceName || sensor.deviceId}`);
+        } else {
+          this.logger.error(`Device not found in cache: ${sensor.deviceId}`);
+        }
+      }
+    } catch (error) {
+      this.logger.error('Failed to load device cache:', error);
+      // Continue anyway - will attempt per-device lookup as fallback
+    }
 
     // Initialize last values for all sensors
-    this.initializeLastValues();
+    await this.initializeLastValues();
 
-    // Start polling
-    this.pollInterval = setInterval(() => {
-      this.poll();
-    }, this.POLL_INTERVAL_MS);
+    // Set initial occupancy state based on current sensor values
+    this.setInitialOccupancyState();
 
-    // Perform initial poll immediately
-    this.poll();
+    // Setup event listeners for device updates
+    this.setupEventListeners();
   }
 
   /**
    * Stops the sensor monitoring process
    *
-   * Cleans up the polling interval and releases resources. Should be called
+   * Cleans up event listeners and releases resources. Should be called
    * when the monitor is no longer needed or during app shutdown.
    *
    * @public
    * @returns {void}
    */
   public stop(): void {
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval);
-      this.pollInterval = null;
+    if (this.deviceListeners.size > 0) {
+      // Remove all event listeners
+      for (const [deviceId, cleanupFn] of this.deviceListeners.entries()) {
+        this.logger.log(`Removing event listener for device: ${deviceId}`);
+        cleanupFn();
+      }
+      this.deviceListeners.clear();
       this.lastValues.clear();
-      this.homey.log('SensorMonitor stopped');
+      this.deviceCache = {};
+      this.deviceRefs.clear();
+      this.logger.log('SensorMonitor stopped');
     }
   }
 
@@ -117,69 +150,153 @@ export class SensorMonitor {
    * @private
    * @returns {void}
    */
-  private initializeLastValues(): void {
+  private async initializeLastValues(): Promise<void> {
     const allSensors = [...this.resetSensors, ...this.triggerSensors];
 
     for (const sensor of allSensors) {
       const key = this.getSensorKey(sensor);
-      const value = this.getSensorValue(sensor);
+      const value = await this.getSensorValue(sensor);
       this.lastValues.set(key, value ?? false);
+      this.logger.log(`[INIT] ${sensor.deviceName || sensor.deviceId} (${sensor.capability}): ${value}`);
     }
   }
 
   /**
-   * Polls all configured sensors and triggers callbacks on state changes
+   * Sets the initial occupancy state based on current sensor values
    *
-   * This method implements the core monitoring logic:
-   * 1. Check reset sensors first (priority) - if any trigger, call onReset and return
-   * 2. Check trigger sensors - if any trigger, call onTriggered
+   * This method determines if occupancy should be active when monitoring starts:
+   * - If any reset sensor is triggered (true), occupancy should be false (reset takes priority)
+   * - Otherwise, if any trigger sensor is triggered (true), occupancy should be true
+   * - Otherwise, occupancy remains false (default state)
    *
-   * State changes are detected by comparing current values with stored last values.
-   * Only transitions from false to true trigger callbacks (edge detection).
+   * This ensures the WIAB device reflects the actual state immediately on startup,
+   * rather than waiting for the first state change.
    *
    * @private
    * @returns {void}
    */
-  private poll(): void {
+  private setInitialOccupancyState(): void {
+    // Priority 1: Check if any reset sensor is active (door open)
+    // For alarm_contact sensors: false = open (alarm), true = closed (no alarm)
+    for (const sensor of this.resetSensors) {
+      const key = this.getSensorKey(sensor);
+      const value = this.lastValues.get(key) ?? false;
+
+      if (!value) {
+        this.logger.log(`[INITIAL STATE] Reset sensor active (door open) - setting occupancy to FALSE`);
+        this.callbacks.onReset();
+        return; // Reset sensors have priority
+      }
+    }
+
+    // Priority 2: Check if any trigger sensor is active
+    for (const sensor of this.triggerSensors) {
+      const key = this.getSensorKey(sensor);
+      const value = this.lastValues.get(key) ?? false;
+
+      if (value) {
+        this.logger.log(`[INITIAL STATE] Trigger sensor active - setting occupancy to TRUE`);
+        this.callbacks.onTriggered();
+        return; // Only need one trigger to activate
+      }
+    }
+
+    // No sensors active - occupancy remains in default state (false)
+    this.logger.log(`[INITIAL STATE] No sensors active - occupancy remains FALSE`);
+  }
+
+  /**
+   * Sets up event listeners for all configured sensors
+   *
+   * This method creates event listeners on device objects that respond to capability
+   * value changes. Each device emits update events when its state changes via WebSocket.
+   * We use these events to detect sensor state changes and trigger callbacks.
+   *
+   * @private
+   * @returns {void}
+   */
+  private setupEventListeners(): void {
+    this.logger.log('Setting up event listeners for all sensors');
+
+    // Setup listeners for reset sensors (priority)
+    for (const sensor of this.resetSensors) {
+      this.setupSensorListener(sensor, true);
+    }
+
+    // Setup listeners for trigger sensors
+    for (const sensor of this.triggerSensors) {
+      this.setupSensorListener(sensor, false);
+    }
+
+    this.logger.log(`Event listeners setup complete: ${this.deviceListeners.size} devices monitored`);
+  }
+
+  /**
+   * Sets up an event listener for a specific sensor
+   *
+   * @private
+   * @param {SensorConfig} sensor - The sensor configuration
+   * @param {boolean} isResetSensor - Whether this is a reset sensor (true) or trigger sensor (false)
+   * @returns {void}
+   */
+  private setupSensorListener(sensor: SensorConfig, isResetSensor: boolean): void {
+    const device = this.deviceRefs.get(sensor.deviceId);
+
+    if (!device) {
+      this.logger.error(`Cannot setup listener - device reference not found: ${sensor.deviceId}`);
+      return;
+    }
+
+    // Skip if listener already exists for this device
+    if (this.deviceListeners.has(sensor.deviceId)) {
+      this.logger.log(`Listener already exists for device: ${sensor.deviceName || sensor.deviceId}`);
+      return;
+    }
+
     try {
-      // Priority 1: Check reset sensors (these take precedence)
-      for (const sensor of this.resetSensors) {
+      // Create event handler for capability updates
+      const handler = (capabilityUpdate: any) => {
+        // Only respond to updates for the capability we're monitoring
+        if (capabilityUpdate.capabilityId !== sensor.capability) {
+          return;
+        }
+
+        const currentValue = capabilityUpdate.value;
         const key = this.getSensorKey(sensor);
-        const currentValue = this.getSensorValue(sensor);
         const lastValue = this.lastValues.get(key) ?? false;
 
-        if (currentValue !== null) {
+        // Update stored value
+        if (typeof currentValue === 'boolean') {
           this.lastValues.set(key, currentValue);
+        }
 
-          // Detect rising edge: false -> true transition
-          if (currentValue && !lastValue) {
-            this.homey.log(`Reset sensor triggered: ${sensor.deviceName || sensor.deviceId} (${sensor.capability})`);
+        // Detect rising edge: false -> true transition
+        if (currentValue && !lastValue) {
+          if (isResetSensor) {
+            this.logger.log(`[EVENT] Reset sensor triggered: ${sensor.deviceName || sensor.deviceId} (${sensor.capability}) changed from ${lastValue} to ${currentValue} (door opened)`);
             this.callbacks.onReset();
-            return; // Reset sensors have priority, so we return immediately
-          }
-        }
-      }
-
-      // Priority 2: Check trigger sensors (only if no reset sensor triggered)
-      for (const sensor of this.triggerSensors) {
-        const key = this.getSensorKey(sensor);
-        const currentValue = this.getSensorValue(sensor);
-        const lastValue = this.lastValues.get(key) ?? false;
-
-        if (currentValue !== null) {
-          this.lastValues.set(key, currentValue);
-
-          // Detect rising edge: false -> true transition
-          if (currentValue && !lastValue) {
-            this.homey.log(`Trigger sensor activated: ${sensor.deviceName || sensor.deviceId} (${sensor.capability})`);
+          } else {
+            this.logger.log(`[EVENT] Trigger sensor activated: ${sensor.deviceName || sensor.deviceId} (${sensor.capability}) changed from ${lastValue} to ${currentValue}`);
             this.callbacks.onTriggered();
-            // Continue checking other trigger sensors
           }
+        } else if (currentValue !== lastValue) {
+          // Log other value changes for debugging
+          this.logger.log(`[EVENT] ${isResetSensor ? 'Reset' : 'Trigger'} sensor: ${sensor.deviceName || sensor.deviceId} (${sensor.capability}) changed from ${lastValue} to ${currentValue} (falling edge - ignored)`);
         }
-      }
+      };
+
+      // Register the event listener
+      // HomeyAPI device objects emit '$update' events when capabilities change
+      device.on('$update', handler);
+
+      // Store cleanup function
+      this.deviceListeners.set(sensor.deviceId, () => {
+        device.removeListener('$update', handler);
+      });
+
+      this.logger.log(`[EVENT] Listener registered for ${isResetSensor ? 'reset' : 'trigger'} sensor: ${sensor.deviceName || sensor.deviceId} (${sensor.capability})`);
     } catch (error) {
-      this.homey.error('Error during sensor polling:', error);
-      // Don't crash the monitor - log the error and continue
+      this.logger.error(`Failed to setup listener for device ${sensor.deviceId}:`, error);
     }
   }
 
@@ -193,57 +310,45 @@ export class SensorMonitor {
    * @param {SensorConfig} sensor - The sensor configuration
    * @returns {boolean | null} The capability value (true/false) or null if unavailable
    */
-  private getSensorValue(sensor: SensorConfig): boolean | null {
+  private async getSensorValue(sensor: SensorConfig): Promise<boolean | null> {
     try {
-      const device = this.getDevice(sensor.deviceId);
+      // Use stored device reference (auto-updated via WebSocket)
+      // This avoids re-fetching and gives us the live-updating object
+      const device = this.deviceRefs.get(sensor.deviceId);
 
       if (!device) {
         // Don't spam logs - this warning is only shown when first encountering the issue
         if (!this.lastValues.has(this.getSensorKey(sensor))) {
-          this.homey.error(`Device not found: ${sensor.deviceId}`);
+          this.logger.error(`Device reference not found: ${sensor.deviceId}`);
         }
         return null;
       }
 
-      if (!device.hasCapability(sensor.capability)) {
-        this.homey.error(`Device ${sensor.deviceId} does not have capability: ${sensor.capability}`);
+      // HomeyAPI devices use capabilitiesObj for capability access
+      const capabilitiesObj = device.capabilitiesObj;
+
+      // Debug: Log device structure on first access
+      if (!this.lastValues.has(this.getSensorKey(sensor))) {
+        this.logger.log(`[DEBUG] Device ${sensor.deviceId} structure:`, {
+          hasCapabilitiesObj: !!capabilitiesObj,
+          capabilityKeys: capabilitiesObj ? Object.keys(capabilitiesObj) : [],
+          hasCapability: device.hasCapability ? 'yes' : 'no',
+          hasGetCapabilityValue: device.getCapabilityValue ? 'yes' : 'no'
+        });
+      }
+
+      if (!capabilitiesObj || !(sensor.capability in capabilitiesObj)) {
+        this.logger.error(`Device ${sensor.deviceId} does not have capability: ${sensor.capability}`);
         return null;
       }
 
-      const value = device.getCapabilityValue(sensor.capability);
+      // Get the capability value from the capabilitiesObj
+      // This value is auto-updated by HomeyAPI via WebSocket
+      const capabilityObj = capabilitiesObj[sensor.capability];
+      const value = capabilityObj?.value;
       return typeof value === 'boolean' ? value : false;
     } catch (error) {
-      this.homey.error(`Error reading sensor ${sensor.deviceId}:`, error);
-      return null;
-    }
-  }
-
-  /**
-   * Finds a device by its unique identifier
-   *
-   * Searches across all drivers in the Homey system to locate the device.
-   * This is necessary because devices can be managed by different drivers.
-   *
-   * @private
-   * @param {string} deviceId - The unique device identifier
-   * @returns {any | null} The device instance or null if not found
-   */
-  private getDevice(deviceId: string): any | null {
-    try {
-      const drivers = this.homey.drivers.getDrivers();
-
-      for (const driver of Object.values(drivers)) {
-        const devices = (driver as any).getDevices();
-        const device = devices.find((d: any) => d.getData().id === deviceId);
-
-        if (device) {
-          return device;
-        }
-      }
-
-      return null;
-    } catch (error) {
-      this.homey.error(`Error finding device ${deviceId}:`, error);
+      this.logger.error(`Error reading sensor ${sensor.deviceId}:`, error);
       return null;
     }
   }
