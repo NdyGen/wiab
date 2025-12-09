@@ -57,6 +57,51 @@ The app follows a clean, layered architecture with clear separation of concerns:
 - Resources are properly created and destroyed
 - Prevents memory leaks and orphaned listeners
 
+## State Machine Architecture
+
+WIAB uses a simple two-state occupancy model. See `docs/STATE_DIAGRAM.md` for complete state diagrams.
+
+**Key Principles:**
+1. **Initialization**: Occupancy determined by current trigger sensor values only
+2. **Runtime**: Occupancy changes based on sensor transitions (FALSE → TRUE)
+3. **Reset sensors**: Only affect state during runtime transitions, ignored at initialization
+
+**Rationale:**
+- Door position doesn't indicate occupancy
+- Only the ACT of opening a door indicates exit
+- Motion sensors indicate current presence reliably
+
+**State Transitions:**
+- **Trigger sensors** (motion/presence): FALSE → TRUE activates occupancy
+- **Reset sensors** (door/window contacts): FALSE → TRUE deactivates occupancy
+- **Priority**: Reset sensors are always checked before trigger sensors
+- **Edge detection**: Only state changes trigger actions, not static states
+
+**Initialization Behavior:**
+```typescript
+// At device initialization (onInit):
+// - Read CURRENT VALUES of trigger sensors
+// - If ANY trigger sensor is TRUE → Set occupancy ON
+// - If ALL trigger sensors are FALSE → Set occupancy OFF
+// - Reset sensors are COMPLETELY IGNORED during initialization
+```
+
+**Runtime Behavior:**
+```typescript
+// During polling (every 2 seconds):
+// 1. Check reset sensors for FALSE → TRUE transitions (priority)
+// 2. If reset transition detected → Set occupancy OFF and exit
+// 3. Check trigger sensors for FALSE → TRUE transitions
+// 4. If trigger transition detected → Set occupancy ON
+// 5. All other states (TRUE → FALSE, static states) are ignored
+```
+
+**Why This Design?**
+- Door/window position is ambiguous (open door ≠ room empty)
+- The ACT of opening a door is unambiguous (someone just exited)
+- Motion sensors reliably indicate current presence
+- Edge detection prevents repeated triggers from same sensor
+
 ## Technology Stack
 
 ### Core Technologies

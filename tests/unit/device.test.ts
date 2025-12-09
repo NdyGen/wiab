@@ -12,7 +12,7 @@
  * - Error handling in all scenarios
  */
 
-import WIABDevice from '../../drivers/wiab-device/device';
+const WIABDevice = require('../../drivers/wiab-device/device');
 import { SensorMonitor } from '../../lib/SensorMonitor';
 import { createMockHomey, createMockDevice } from '../setup';
 
@@ -20,7 +20,7 @@ import { createMockHomey, createMockDevice } from '../setup';
 jest.mock('../../lib/SensorMonitor');
 
 describe('WIABDevice', () => {
-  let device: WIABDevice;
+  let device: InstanceType<typeof WIABDevice>;
   let mockHomey: any;
   let mockSensorMonitor: jest.Mocked<SensorMonitor>;
 
@@ -348,8 +348,9 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       // Get the callbacks passed to SensorMonitor
+      // Constructor signature: (homeyApi, logger, triggerSensors, resetSensors, callbacks)
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
-      const callbacks = sensorMonitorCall[3];
+      const callbacks = sensorMonitorCall[4];
 
       // Trigger the callback
       await callbacks.onTriggered();
@@ -380,7 +381,7 @@ describe('WIABDevice', () => {
 
       // Get the callbacks
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
-      const callbacks = sensorMonitorCall[3];
+      const callbacks = sensorMonitorCall[4];
 
       // Trigger the reset callback
       await callbacks.onReset();
@@ -412,7 +413,7 @@ describe('WIABDevice', () => {
 
       // Get and trigger callback
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
-      const callbacks = sensorMonitorCall[3];
+      const callbacks = sensorMonitorCall[4];
 
       await callbacks.onTriggered();
 
@@ -440,7 +441,7 @@ describe('WIABDevice', () => {
 
       // Get and trigger callback
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
-      const callbacks = sensorMonitorCall[3];
+      const callbacks = sensorMonitorCall[4];
 
       await callbacks.onReset();
 
@@ -590,7 +591,7 @@ describe('WIABDevice', () => {
 
       // Get callbacks
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
-      const callbacks = sensorMonitorCall[3];
+      const callbacks = sensorMonitorCall[4];
 
       // Trigger sensor
       await callbacks.onTriggered();

@@ -164,45 +164,47 @@ export class SensorMonitor {
   /**
    * Sets the initial occupancy state based on current sensor values
    *
-   * This method determines if occupancy should be active when monitoring starts:
-   * - If any reset sensor is triggered (true), occupancy should be false (reset takes priority)
-   * - Otherwise, if any trigger sensor is triggered (true), occupancy should be true
-   * - Otherwise, occupancy remains false (default state)
+   * STRATEGY: Determine if the room is currently occupied by checking
+   * if any trigger sensors (motion detectors) are currently active.
+   * Reset sensors are intentionally IGNORED during initialization.
    *
-   * This ensures the WIAB device reflects the actual state immediately on startup,
-   * rather than waiting for the first state change.
+   * RATIONALE: The "wasp in a box" concept means we care about presence
+   * (motion detected), not door positions. Reset sensors only matter
+   * when they TRANSITION (door opens as someone exits), not their
+   * static state at initialization.
+   *
+   * This ensures the WIAB device reflects the actual occupancy state
+   * immediately on startup, rather than waiting for the first state change.
    *
    * @private
    * @returns {void}
    */
   private setInitialOccupancyState(): void {
-    // Priority 1: Check if any reset sensor is active (door open)
-    // For alarm_contact sensors: false = open (alarm), true = closed (no alarm)
-    for (const sensor of this.resetSensors) {
-      const key = this.getSensorKey(sensor);
-      const value = this.lastValues.get(key) ?? false;
-
-      if (!value) {
-        this.logger.log(`[INITIAL STATE] Reset sensor active (door open) - setting occupancy to FALSE`);
-        this.callbacks.onReset();
-        return; // Reset sensors have priority
-      }
-    }
-
-    // Priority 2: Check if any trigger sensor is active
+    // Check if any trigger sensor is currently active (motion detected)
     for (const sensor of this.triggerSensors) {
       const key = this.getSensorKey(sensor);
       const value = this.lastValues.get(key) ?? false;
 
       if (value) {
-        this.logger.log(`[INITIAL STATE] Trigger sensor active - setting occupancy to TRUE`);
+        // Motion detected = room is occupied
+        this.logger.log(
+          `[INITIAL STATE] Trigger sensor active: ${sensor.deviceName || sensor.deviceId} ` +
+          `(${sensor.capability}=${value}) - setting occupancy to TRUE`
+        );
         this.callbacks.onTriggered();
-        return; // Only need one trigger to activate
+        return;
       }
     }
 
-    // No sensors active - occupancy remains in default state (false)
-    this.logger.log(`[INITIAL STATE] No sensors active - occupancy remains FALSE`);
+    // No trigger sensors are active - room is not occupied
+    this.logger.log(
+      `[INITIAL STATE] No trigger sensors active - setting occupancy to FALSE ` +
+      `(${this.triggerSensors.length} trigger sensors checked, ` +
+      `${this.resetSensors.length} reset sensors ignored)`
+    );
+
+    // Explicitly set to false
+    this.callbacks.onReset();
   }
 
   /**

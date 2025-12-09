@@ -49,6 +49,35 @@ export function createMockHomey() {
 }
 
 /**
+ * Creates a mock HomeyAPI instance for device access
+ *
+ * The HomeyAPI mock provides access to devices through getDevices() which
+ * returns device objects that auto-update via WebSocket in real implementations.
+ *
+ * @returns A mock HomeyAPI instance suitable for testing
+ */
+export function createMockHomeyApi() {
+  const deviceMap: Record<string, any> = {};
+
+  return {
+    devices: {
+      getDevices: jest.fn(async () => ({ ...deviceMap })),
+      getDevice: jest.fn(async (id: string) => deviceMap[id]),
+      _addDevice: (id: string, device: any) => {
+        // Devices from createMockDevice already have capabilitiesObj and event emitter functionality
+        deviceMap[id] = device;
+      },
+      _removeDevice: (id: string) => {
+        delete deviceMap[id];
+      },
+      _clear: () => {
+        Object.keys(deviceMap).forEach(key => delete deviceMap[key]);
+      },
+    },
+  };
+}
+
+/**
  * Creates a mock Homey device with configurable capabilities and values
  *
  * Devices can be configured with:
@@ -75,7 +104,19 @@ export function createMockDevice(config: {
     settings = {},
   } = config;
 
-  const device = {
+  // Create capabilitiesObj structure for HomeyAPI compatibility
+  const capabilitiesObj: any = {};
+  capabilities.forEach((cap: string) => {
+    capabilitiesObj[cap] = {
+      value: capabilityValues[cap],
+      id: cap,
+    };
+  });
+
+  // Create event listener management
+  const listeners: Map<string, Function[]> = new Map();
+
+  const device: any = {
     getData: jest.fn(() => ({ id })),
     getName: jest.fn(() => name),
     getCapabilities: jest.fn(() => [...capabilities]),
@@ -109,8 +150,36 @@ export function createMockDevice(config: {
     error: jest.fn(),
     _setCapabilityValue: (capability: string, value: any) => {
       capabilityValues[capability] = value;
+      // Also update capabilitiesObj when value changes
+      if (capabilitiesObj[capability]) {
+        capabilitiesObj[capability].value = value;
+      }
     },
     _getCapabilityValues: () => ({ ...capabilityValues }),
+    // HomeyAPI compatibility
+    capabilitiesObj,
+    // Event emitter functionality
+    on: (event: string, handler: Function) => {
+      if (!listeners.has(event)) {
+        listeners.set(event, []);
+      }
+      listeners.get(event)!.push(handler);
+    },
+    removeListener: (event: string, handler: Function) => {
+      if (listeners.has(event)) {
+        const handlers = listeners.get(event)!;
+        const index = handlers.indexOf(handler);
+        if (index !== -1) {
+          handlers.splice(index, 1);
+        }
+      }
+    },
+    _emit: (event: string, data: any) => {
+      if (listeners.has(event)) {
+        listeners.get(event)!.forEach((handler) => handler(data));
+      }
+    },
+    _listeners: listeners,
   };
 
   return device;

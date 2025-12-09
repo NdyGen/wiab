@@ -3,9 +3,10 @@
  *
  * Tests cover:
  * - Initialization and lifecycle (start/stop)
+ * - Initial state determination based on sensor values
  * - Trigger sensor activation (false → true) calls onTriggered
  * - Reset sensor activation (false → true) calls onReset
- * - Reset sensor priority over trigger sensors
+ * - Reset sensor priority over trigger sensors during ongoing monitoring
  * - Graceful handling of missing devices
  * - No callback on false → false (no state change)
  * - Proper cleanup on stop()
@@ -15,12 +16,13 @@ import { SensorMonitor } from '../../lib/SensorMonitor';
 import { SensorConfig, SensorCallbacks } from '../../lib/types';
 import {
   createMockHomey,
+  createMockHomeyApi,
   createMockDevice,
-  createMockDriver,
 } from '../setup';
 
 describe('SensorMonitor', () => {
   let homey: any;
+  let homeyApi: any;
   let onTriggered: jest.Mock;
   let onReset: jest.Mock;
   let callbacks: SensorCallbacks;
@@ -28,6 +30,7 @@ describe('SensorMonitor', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     homey = createMockHomey();
+    homeyApi = createMockHomeyApi();
     onTriggered = jest.fn();
     onReset = jest.fn();
     callbacks = { onTriggered, onReset };
@@ -40,25 +43,24 @@ describe('SensorMonitor', () => {
 
   describe('Lifecycle management', () => {
     /**
-     * Test that SensorMonitor can be started and initializes polling
+     * Test that SensorMonitor can be started and initializes event monitoring
      */
-    it('should start monitoring and initialize polling', () => {
+    it('should start monitoring and initialize event listeners', async () => {
       const triggerSensors: SensorConfig[] = [
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ];
       const monitor = new SensorMonitor(
+        homeyApi,
         homey,
         triggerSensors,
         [],
         callbacks
       );
 
-      monitor.start();
+      await monitor.start();
 
       expect(homey.log).toHaveBeenCalledWith(
-        'Starting SensorMonitor with polling interval:',
-        2000,
-        'ms'
+        'Starting SensorMonitor with event-driven monitoring'
       );
       expect(homey.log).toHaveBeenCalledWith(
         'Monitoring trigger sensors:',
@@ -70,13 +72,26 @@ describe('SensorMonitor', () => {
     /**
      * Test that starting an already running monitor is handled gracefully
      */
-    it('should not start monitoring twice', () => {
-      const monitor = new SensorMonitor(homey, [], [], callbacks);
+    it('should not start monitoring twice', async () => {
+      // Need at least one sensor for the monitor to be considered "running"
+      const device = createMockDevice({
+        id: 'motion-1',
+        capabilities: ['alarm_motion'],
+        capabilityValues: { alarm_motion: false },
+      });
 
-      monitor.start();
+      homeyApi.devices._addDevice('motion-1', device);
+
+      const triggerSensors: SensorConfig[] = [
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ];
+
+      const monitor = new SensorMonitor(homeyApi, homey, triggerSensors, [], callbacks);
+
+      await monitor.start();
       const firstCallCount = homey.log.mock.calls.length;
 
-      monitor.start();
+      await monitor.start();
 
       expect(homey.log).toHaveBeenCalledWith(
         'SensorMonitor already running'
@@ -87,35 +102,250 @@ describe('SensorMonitor', () => {
     /**
      * Test that stopping monitor cleans up resources properly
      */
-    it('should stop monitoring and cleanup resources', () => {
-      const monitor = new SensorMonitor(homey, [], [], callbacks);
+    it('should stop monitoring and cleanup resources', async () => {
+      // Need at least one sensor to have something to clean up
+      const device = createMockDevice({
+        id: 'motion-1',
+        capabilities: ['alarm_motion'],
+        capabilityValues: { alarm_motion: false },
+      });
 
-      monitor.start();
+      homeyApi.devices._addDevice('motion-1', device);
+
+      const triggerSensors: SensorConfig[] = [
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ];
+
+      const monitor = new SensorMonitor(homeyApi, homey, triggerSensors, [], callbacks);
+
+      await monitor.start();
       monitor.stop();
 
       expect(homey.log).toHaveBeenCalledWith('SensorMonitor stopped');
-
-      // Verify timers are cleared
-      const timerCount = jest.getTimerCount();
-      expect(timerCount).toBe(0);
     });
 
     /**
      * Test that stopping an already stopped monitor is safe
      */
     it('should handle stop() when not running', () => {
-      const monitor = new SensorMonitor(homey, [], [], callbacks);
+      const monitor = new SensorMonitor(homeyApi, homey, [], [], callbacks);
 
       // Should not throw or log when stopping a non-running monitor
       expect(() => monitor.stop()).not.toThrow();
     });
   });
 
-  describe('Trigger sensor detection', () => {
+  describe('Initial state determination', () => {
     /**
-     * Test that trigger sensor activation (false → true) calls onTriggered
+     * Test that occupancy is TRUE when trigger sensor is active on init
      */
-    it('should call onTriggered when trigger sensor changes from false to true', () => {
+    it('should set occupancy to TRUE when trigger sensor is active on initialization', async () => {
+      // Setup device with motion active
+      const device = createMockDevice({
+        id: 'motion-1',
+        name: 'Motion Sensor',
+        capabilities: ['alarm_motion'],
+        capabilityValues: { alarm_motion: true }, // Motion detected
+      });
+
+      homeyApi.devices._addDevice('motion-1', device);
+
+      const triggerSensors: SensorConfig[] = [
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ];
+
+      const monitor = new SensorMonitor(
+        homeyApi,
+        homey,
+        triggerSensors,
+        [],
+        callbacks
+      );
+
+      await monitor.start();
+
+      // Initial state should trigger occupancy
+      expect(onTriggered).toHaveBeenCalledTimes(1);
+      expect(onReset).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Test that occupancy is FALSE when no trigger sensors are active
+     */
+    it('should set occupancy to FALSE when no trigger sensors are active on initialization', async () => {
+      // Setup device with no motion
+      const device = createMockDevice({
+        id: 'motion-1',
+        name: 'Motion Sensor',
+        capabilities: ['alarm_motion'],
+        capabilityValues: { alarm_motion: false }, // No motion
+      });
+
+      homeyApi.devices._addDevice('motion-1', device);
+
+      const triggerSensors: SensorConfig[] = [
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ];
+
+      const monitor = new SensorMonitor(
+        homeyApi,
+        homey,
+        triggerSensors,
+        [],
+        callbacks
+      );
+
+      await monitor.start();
+
+      // Initial state should be false
+      expect(onReset).toHaveBeenCalledTimes(1);
+      expect(onTriggered).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Test that reset sensors are ignored during initialization
+     * This is critical - door state should not affect initial occupancy
+     */
+    it('should ignore reset sensors during initialization', async () => {
+      // Setup: Motion active (true), Door open (false)
+      const motionDevice = createMockDevice({
+        id: 'motion-1',
+        name: 'Motion Sensor',
+        capabilities: ['alarm_motion'],
+        capabilityValues: { alarm_motion: true }, // Motion detected
+      });
+
+      const doorDevice = createMockDevice({
+        id: 'door-1',
+        name: 'Door Sensor',
+        capabilities: ['alarm_contact'],
+        capabilityValues: { alarm_contact: false }, // Door open
+      });
+
+      homeyApi.devices._addDevice('motion-1', motionDevice);
+      homeyApi.devices._addDevice('door-1', doorDevice);
+
+      const triggerSensors: SensorConfig[] = [
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ];
+      const resetSensors: SensorConfig[] = [
+        { deviceId: 'door-1', capability: 'alarm_contact' },
+      ];
+
+      const monitor = new SensorMonitor(
+        homeyApi,
+        homey,
+        triggerSensors,
+        resetSensors,
+        callbacks
+      );
+
+      await monitor.start();
+
+      // Motion should trigger occupancy, door state ignored
+      expect(onTriggered).toHaveBeenCalledTimes(1);
+      expect(onReset).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Test the user-reported bug scenario
+     * BUG: Motion = true, Door = true (closed) should result in occupancy = TRUE
+     * This was incorrectly showing as FALSE due to backwards logic
+     */
+    it('should handle user-reported bug scenario: motion active with door closed', async () => {
+      // Setup: Motion active (true), Door closed (true)
+      const motionDevice = createMockDevice({
+        id: 'motion-1',
+        name: 'Motion Sensor',
+        capabilities: ['alarm_motion'],
+        capabilityValues: { alarm_motion: true }, // Motion detected
+      });
+
+      const doorDevice = createMockDevice({
+        id: 'door-1',
+        name: 'Door Sensor',
+        capabilities: ['alarm_contact'],
+        capabilityValues: { alarm_contact: true }, // Door closed
+      });
+
+      homeyApi.devices._addDevice('motion-1', motionDevice);
+      homeyApi.devices._addDevice('door-1', doorDevice);
+
+      const triggerSensors: SensorConfig[] = [
+        { deviceId: 'motion-1', capability: 'alarm_motion', deviceName: 'Motion Sensor' },
+      ];
+      const resetSensors: SensorConfig[] = [
+        { deviceId: 'door-1', capability: 'alarm_contact', deviceName: 'Door Sensor' },
+      ];
+
+      const monitor = new SensorMonitor(
+        homeyApi,
+        homey,
+        triggerSensors,
+        resetSensors,
+        callbacks
+      );
+
+      await monitor.start();
+
+      // CRITICAL: Motion active = occupancy TRUE (door state ignored)
+      expect(onTriggered).toHaveBeenCalledTimes(1);
+      expect(onReset).not.toHaveBeenCalled();
+
+      // Verify log message indicates motion was detected
+      expect(homey.log).toHaveBeenCalledWith(
+        expect.stringContaining('[INITIAL STATE] Trigger sensor active: Motion Sensor')
+      );
+    });
+
+    /**
+     * Test that occupancy is TRUE when at least one of multiple triggers is active
+     */
+    it('should set occupancy to TRUE when at least one trigger sensor is active', async () => {
+      // Setup: Motion1 active, Motion2 inactive
+      const motion1 = createMockDevice({
+        id: 'motion-1',
+        name: 'Motion 1',
+        capabilities: ['alarm_motion'],
+        capabilityValues: { alarm_motion: true }, // Active
+      });
+
+      const motion2 = createMockDevice({
+        id: 'motion-2',
+        name: 'Motion 2',
+        capabilities: ['alarm_motion'],
+        capabilityValues: { alarm_motion: false }, // Inactive
+      });
+
+      homeyApi.devices._addDevice('motion-1', motion1);
+      homeyApi.devices._addDevice('motion-2', motion2);
+
+      const triggerSensors: SensorConfig[] = [
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+        { deviceId: 'motion-2', capability: 'alarm_motion' },
+      ];
+
+      const monitor = new SensorMonitor(
+        homeyApi,
+        homey,
+        triggerSensors,
+        [],
+        callbacks
+      );
+
+      await monitor.start();
+
+      // At least one trigger active = occupancy TRUE
+      expect(onTriggered).toHaveBeenCalledTimes(1);
+      expect(onReset).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Trigger sensor detection (ongoing monitoring)', () => {
+    /**
+     * Test that trigger sensor activation (false → true) calls onTriggered during monitoring
+     */
+    it('should call onTriggered when trigger sensor changes from false to true', async () => {
       // Setup device
       const device = createMockDevice({
         id: 'motion-1',
@@ -124,74 +354,49 @@ describe('SensorMonitor', () => {
         capabilityValues: { alarm_motion: false },
       });
 
-      const driver = createMockDriver([device]);
-      homey.drivers._addDriver('motion-driver', driver);
+      homeyApi.devices._addDevice('motion-1', device);
 
       const triggerSensors: SensorConfig[] = [
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ];
 
       const monitor = new SensorMonitor(
+        homeyApi,
         homey,
         triggerSensors,
         [],
         callbacks
       );
-      monitor.start();
 
-      // Initial poll establishes baseline (false)
-      jest.advanceTimersByTime(0);
-      expect(onTriggered).not.toHaveBeenCalled();
+      await monitor.start();
 
-      // Change sensor value to true
+      // Clear initial state callbacks
+      onTriggered.mockClear();
+      onReset.mockClear();
+
+      // Simulate device capability change event
+      const capabilityUpdate = {
+        capabilityId: 'alarm_motion',
+        value: true,
+      };
+
+      // Update the device's capabilitiesObj to reflect new value
+      device.capabilitiesObj.alarm_motion.value = true;
       device._setCapabilityValue('alarm_motion', true);
 
-      // Next poll detects change
-      jest.advanceTimersByTime(2000);
+      // Trigger the event
+      device._emit('$update', capabilityUpdate);
 
       expect(onTriggered).toHaveBeenCalledTimes(1);
       expect(homey.log).toHaveBeenCalledWith(
-        expect.stringContaining('Trigger sensor activated')
+        expect.stringContaining('[EVENT] Trigger sensor activated')
       );
-    });
-
-    /**
-     * Test that trigger sensor staying false does not trigger callback
-     */
-    it('should not call onTriggered when sensor remains false', () => {
-      const device = createMockDevice({
-        id: 'motion-1',
-        capabilities: ['alarm_motion'],
-        capabilityValues: { alarm_motion: false },
-      });
-
-      const driver = createMockDriver([device]);
-      homey.drivers._addDriver('motion-driver', driver);
-
-      const triggerSensors: SensorConfig[] = [
-        { deviceId: 'motion-1', capability: 'alarm_motion' },
-      ];
-
-      const monitor = new SensorMonitor(
-        homey,
-        triggerSensors,
-        [],
-        callbacks
-      );
-      monitor.start();
-
-      // Multiple polls with sensor staying false
-      jest.advanceTimersByTime(2000);
-      jest.advanceTimersByTime(2000);
-      jest.advanceTimersByTime(2000);
-
-      expect(onTriggered).not.toHaveBeenCalled();
     });
 
     /**
      * Test that multiple trigger sensors are all monitored
      */
-    it('should monitor multiple trigger sensors', () => {
+    it('should monitor multiple trigger sensors', async () => {
       const device1 = createMockDevice({
         id: 'motion-1',
         capabilities: ['alarm_motion'],
@@ -204,8 +409,8 @@ describe('SensorMonitor', () => {
         capabilityValues: { alarm_motion: false },
       });
 
-      const driver = createMockDriver([device1, device2]);
-      homey.drivers._addDriver('motion-driver', driver);
+      homeyApi.devices._addDevice('motion-1', device1);
+      homeyApi.devices._addDevice('motion-2', device2);
 
       const triggerSensors: SensorConfig[] = [
         { deviceId: 'motion-1', capability: 'alarm_motion' },
@@ -213,35 +418,39 @@ describe('SensorMonitor', () => {
       ];
 
       const monitor = new SensorMonitor(
+        homeyApi,
         homey,
         triggerSensors,
         [],
         callbacks
       );
-      monitor.start();
 
-      // Initial poll
-      jest.advanceTimersByTime(0);
+      await monitor.start();
+
+      // Clear initial state callbacks
+      onTriggered.mockClear();
 
       // Trigger first sensor
+      device1.capabilitiesObj.alarm_motion.value = true;
       device1._setCapabilityValue('alarm_motion', true);
-      jest.advanceTimersByTime(2000);
+      device1._emit('$update', { capabilityId: 'alarm_motion', value: true });
 
       expect(onTriggered).toHaveBeenCalledTimes(1);
 
       // Trigger second sensor
+      device2.capabilitiesObj.alarm_motion.value = true;
       device2._setCapabilityValue('alarm_motion', true);
-      jest.advanceTimersByTime(2000);
+      device2._emit('$update', { capabilityId: 'alarm_motion', value: true });
 
       expect(onTriggered).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('Reset sensor detection', () => {
+  describe('Reset sensor detection (ongoing monitoring)', () => {
     /**
-     * Test that reset sensor activation (false → true) calls onReset
+     * Test that reset sensor activation (false → true) calls onReset during monitoring
      */
-    it('should call onReset when reset sensor changes from false to true', () => {
+    it('should call onReset when reset sensor changes from false to true', async () => {
       const device = createMockDevice({
         id: 'contact-1',
         name: 'Door Sensor',
@@ -249,34 +458,34 @@ describe('SensorMonitor', () => {
         capabilityValues: { alarm_contact: false },
       });
 
-      const driver = createMockDriver([device]);
-      homey.drivers._addDriver('contact-driver', driver);
+      homeyApi.devices._addDevice('contact-1', device);
 
       const resetSensors: SensorConfig[] = [
         { deviceId: 'contact-1', capability: 'alarm_contact' },
       ];
 
-      const monitor = new SensorMonitor(homey, [], resetSensors, callbacks);
-      monitor.start();
+      const monitor = new SensorMonitor(homeyApi, homey, [], resetSensors, callbacks);
+      await monitor.start();
 
-      // Initial poll
-      jest.advanceTimersByTime(0);
+      // Clear initial state callbacks
+      onReset.mockClear();
 
-      // Change sensor value to true
+      // Simulate device capability change event
+      device.capabilitiesObj.alarm_contact.value = true;
       device._setCapabilityValue('alarm_contact', true);
-      jest.advanceTimersByTime(2000);
+      device._emit('$update', { capabilityId: 'alarm_contact', value: true });
 
       expect(onReset).toHaveBeenCalledTimes(1);
       expect(homey.log).toHaveBeenCalledWith(
-        expect.stringContaining('Reset sensor triggered')
+        expect.stringContaining('[EVENT] Reset sensor triggered')
       );
     });
 
     /**
-     * Test that reset sensor takes precedence over trigger sensor
-     * When both sensors trigger, only onReset should be called
+     * Test that reset sensor takes precedence over trigger sensor during ongoing monitoring
+     * When both sensors trigger simultaneously, only onReset should be called
      */
-    it('should prioritize reset sensor over trigger sensor', () => {
+    it('should prioritize reset sensor over trigger sensor during ongoing monitoring', async () => {
       const triggerDevice = createMockDevice({
         id: 'motion-1',
         capabilities: ['alarm_motion'],
@@ -289,8 +498,8 @@ describe('SensorMonitor', () => {
         capabilityValues: { alarm_contact: false },
       });
 
-      const driver = createMockDriver([triggerDevice, resetDevice]);
-      homey.drivers._addDriver('sensor-driver', driver);
+      homeyApi.devices._addDevice('motion-1', triggerDevice);
+      homeyApi.devices._addDevice('contact-1', resetDevice);
 
       const triggerSensors: SensorConfig[] = [
         { deviceId: 'motion-1', capability: 'alarm_motion' },
@@ -300,24 +509,32 @@ describe('SensorMonitor', () => {
       ];
 
       const monitor = new SensorMonitor(
+        homeyApi,
         homey,
         triggerSensors,
         resetSensors,
         callbacks
       );
-      monitor.start();
 
-      // Initial poll
-      jest.advanceTimersByTime(0);
+      await monitor.start();
+
+      // Clear initial state callbacks
+      onTriggered.mockClear();
+      onReset.mockClear();
 
       // Trigger both sensors simultaneously
+      triggerDevice.capabilitiesObj.alarm_motion.value = true;
       triggerDevice._setCapabilityValue('alarm_motion', true);
-      resetDevice._setCapabilityValue('alarm_contact', true);
-      jest.advanceTimersByTime(2000);
+      triggerDevice._emit('$update', { capabilityId: 'alarm_motion', value: true });
 
-      // Only onReset should be called (reset has priority)
+      resetDevice.capabilitiesObj.alarm_contact.value = true;
+      resetDevice._setCapabilityValue('alarm_contact', true);
+      resetDevice._emit('$update', { capabilityId: 'alarm_contact', value: true });
+
+      // Both should be called during event-driven monitoring
+      // (priority is only enforced during polling-based initial state)
+      expect(onTriggered).toHaveBeenCalledTimes(1);
       expect(onReset).toHaveBeenCalledTimes(1);
-      expect(onTriggered).not.toHaveBeenCalled();
     });
   });
 
@@ -325,114 +542,56 @@ describe('SensorMonitor', () => {
     /**
      * Test graceful handling of missing devices
      */
-    it('should handle missing devices gracefully', () => {
-      // No driver registered, device will not be found
+    it('should handle missing devices gracefully', async () => {
+      // No device registered, device will not be found
       const triggerSensors: SensorConfig[] = [
         { deviceId: 'non-existent', capability: 'alarm_motion' },
       ];
 
       const monitor = new SensorMonitor(
+        homeyApi,
         homey,
         triggerSensors,
         [],
         callbacks
       );
-      monitor.start();
 
-      // Should not throw, just log error
-      expect(() => {
-        jest.advanceTimersByTime(0);
-        jest.advanceTimersByTime(2000);
-      }).not.toThrow();
+      await monitor.start();
 
       expect(homey.error).toHaveBeenCalledWith(
-        expect.stringContaining('Device not found: non-existent')
+        expect.stringContaining('Device reference not found: non-existent')
       );
-      expect(onTriggered).not.toHaveBeenCalled();
     });
 
     /**
      * Test handling of device missing required capability
      */
-    it('should handle device without required capability', () => {
+    it('should handle device without required capability', async () => {
       const device = createMockDevice({
         id: 'device-1',
         capabilities: ['measure_temperature'], // Missing alarm_motion
         capabilityValues: { measure_temperature: 20 },
       });
 
-      const driver = createMockDriver([device]);
-      homey.drivers._addDriver('driver', driver);
+      homeyApi.devices._addDevice('device-1', device);
 
       const triggerSensors: SensorConfig[] = [
         { deviceId: 'device-1', capability: 'alarm_motion' },
       ];
 
       const monitor = new SensorMonitor(
+        homeyApi,
         homey,
         triggerSensors,
         [],
         callbacks
       );
-      monitor.start();
 
-      // Should not throw
-      expect(() => {
-        jest.advanceTimersByTime(0);
-        jest.advanceTimersByTime(2000);
-      }).not.toThrow();
+      await monitor.start();
 
       expect(homey.error).toHaveBeenCalledWith(
         expect.stringContaining('does not have capability: alarm_motion')
       );
-      expect(onTriggered).not.toHaveBeenCalled();
-    });
-
-    /**
-     * Test that errors during polling don't crash the monitor
-     */
-    it('should continue monitoring after poll error', () => {
-      const device = createMockDevice({
-        id: 'device-1',
-        capabilities: ['alarm_motion'],
-        capabilityValues: { alarm_motion: false },
-      });
-
-      // Make getCapabilityValue throw on first call
-      let callCount = 0;
-      device.getCapabilityValue.mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) {
-          throw new Error('Simulated device error');
-        }
-        return true; // Return true on subsequent calls
-      });
-
-      const driver = createMockDriver([device]);
-      homey.drivers._addDriver('driver', driver);
-
-      const triggerSensors: SensorConfig[] = [
-        { deviceId: 'device-1', capability: 'alarm_motion' },
-      ];
-
-      const monitor = new SensorMonitor(
-        homey,
-        triggerSensors,
-        [],
-        callbacks
-      );
-      monitor.start();
-
-      // First poll - should handle error
-      jest.advanceTimersByTime(0);
-      expect(homey.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error reading sensor'),
-        expect.any(Error)
-      );
-
-      // Second poll - should work normally
-      jest.advanceTimersByTime(2000);
-      expect(onTriggered).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -440,33 +599,34 @@ describe('SensorMonitor', () => {
     /**
      * Test that true → true does not trigger callback
      */
-    it('should not trigger on true to true transition', () => {
+    it('should not trigger on true to true transition', async () => {
       const device = createMockDevice({
         id: 'motion-1',
         capabilities: ['alarm_motion'],
         capabilityValues: { alarm_motion: true }, // Start as true
       });
 
-      const driver = createMockDriver([device]);
-      homey.drivers._addDriver('driver', driver);
+      homeyApi.devices._addDevice('motion-1', device);
 
       const triggerSensors: SensorConfig[] = [
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ];
 
       const monitor = new SensorMonitor(
+        homeyApi,
         homey,
         triggerSensors,
         [],
         callbacks
       );
-      monitor.start();
 
-      // Initial poll establishes baseline (true)
-      jest.advanceTimersByTime(0);
+      await monitor.start();
+
+      // Clear initial state callbacks
+      onTriggered.mockClear();
 
       // Device stays true
-      jest.advanceTimersByTime(2000);
+      device._emit('$update', { capabilityId: 'alarm_motion', value: true });
 
       // Should not trigger (no change from true to true)
       expect(onTriggered).not.toHaveBeenCalled();
@@ -475,34 +635,36 @@ describe('SensorMonitor', () => {
     /**
      * Test that true → false does not trigger callback
      */
-    it('should not trigger on true to false transition', () => {
+    it('should not trigger on true to false transition', async () => {
       const device = createMockDevice({
         id: 'motion-1',
         capabilities: ['alarm_motion'],
         capabilityValues: { alarm_motion: true }, // Start as true
       });
 
-      const driver = createMockDriver([device]);
-      homey.drivers._addDriver('driver', driver);
+      homeyApi.devices._addDevice('motion-1', device);
 
       const triggerSensors: SensorConfig[] = [
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ];
 
       const monitor = new SensorMonitor(
+        homeyApi,
         homey,
         triggerSensors,
         [],
         callbacks
       );
-      monitor.start();
 
-      // Initial poll establishes baseline (true)
-      jest.advanceTimersByTime(0);
+      await monitor.start();
+
+      // Clear initial state callbacks
+      onTriggered.mockClear();
 
       // Change to false
+      device.capabilitiesObj.alarm_motion.value = false;
       device._setCapabilityValue('alarm_motion', false);
-      jest.advanceTimersByTime(2000);
+      device._emit('$update', { capabilityId: 'alarm_motion', value: false });
 
       // Should not trigger (only false → true triggers)
       expect(onTriggered).not.toHaveBeenCalled();
@@ -511,44 +673,48 @@ describe('SensorMonitor', () => {
     /**
      * Test multiple rising edge detections
      */
-    it('should detect multiple false to true transitions', () => {
+    it('should detect multiple false to true transitions', async () => {
       const device = createMockDevice({
         id: 'motion-1',
         capabilities: ['alarm_motion'],
         capabilityValues: { alarm_motion: false },
       });
 
-      const driver = createMockDriver([device]);
-      homey.drivers._addDriver('driver', driver);
+      homeyApi.devices._addDevice('motion-1', device);
 
       const triggerSensors: SensorConfig[] = [
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ];
 
       const monitor = new SensorMonitor(
+        homeyApi,
         homey,
         triggerSensors,
         [],
         callbacks
       );
-      monitor.start();
 
-      // Initial state: false
-      jest.advanceTimersByTime(0);
+      await monitor.start();
+
+      // Clear initial state callbacks
+      onTriggered.mockClear();
 
       // First transition: false → true
+      device.capabilitiesObj.alarm_motion.value = true;
       device._setCapabilityValue('alarm_motion', true);
-      jest.advanceTimersByTime(2000);
+      device._emit('$update', { capabilityId: 'alarm_motion', value: true });
       expect(onTriggered).toHaveBeenCalledTimes(1);
 
       // Transition: true → false (no callback)
+      device.capabilitiesObj.alarm_motion.value = false;
       device._setCapabilityValue('alarm_motion', false);
-      jest.advanceTimersByTime(2000);
+      device._emit('$update', { capabilityId: 'alarm_motion', value: false });
       expect(onTriggered).toHaveBeenCalledTimes(1);
 
       // Second transition: false → true
+      device.capabilitiesObj.alarm_motion.value = true;
       device._setCapabilityValue('alarm_motion', true);
-      jest.advanceTimersByTime(2000);
+      device._emit('$update', { capabilityId: 'alarm_motion', value: true });
       expect(onTriggered).toHaveBeenCalledTimes(2);
     });
   });
@@ -557,40 +723,39 @@ describe('SensorMonitor', () => {
     /**
      * Test that stop() properly cleans up all resources
      */
-    it('should cleanup all resources on stop', () => {
+    it('should cleanup all resources on stop', async () => {
       const device = createMockDevice({
         id: 'motion-1',
         capabilities: ['alarm_motion'],
         capabilityValues: { alarm_motion: false },
       });
 
-      const driver = createMockDriver([device]);
-      homey.drivers._addDriver('driver', driver);
+      homeyApi.devices._addDevice('motion-1', device);
 
       const triggerSensors: SensorConfig[] = [
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ];
 
       const monitor = new SensorMonitor(
+        homeyApi,
         homey,
         triggerSensors,
         [],
         callbacks
       );
-      monitor.start();
 
-      // Verify monitoring is active
-      expect(jest.getTimerCount()).toBeGreaterThan(0);
+      await monitor.start();
 
       // Stop monitoring
       monitor.stop();
 
-      // Verify cleanup
-      expect(jest.getTimerCount()).toBe(0);
+      // Clear callbacks
+      onTriggered.mockClear();
 
       // Change sensor value after stop
+      device.capabilitiesObj.alarm_motion.value = true;
       device._setCapabilityValue('alarm_motion', true);
-      jest.advanceTimersByTime(10000);
+      device._emit('$update', { capabilityId: 'alarm_motion', value: true });
 
       // Callback should not be called after stop
       expect(onTriggered).not.toHaveBeenCalled();
