@@ -95,3 +95,98 @@ export interface DeviceResponse {
   capability: string;
   zoneName?: string;
 }
+
+/**
+ * Homey logger interface for logging and error reporting.
+ *
+ * This interface defines the logging methods available on the Homey SDK.
+ * Used throughout the app for consistent logging.
+ *
+ * @interface HomeyLogger
+ * @property {(...args: unknown[]) => void} log - Logs informational messages
+ * @property {(...args: unknown[]) => void} error - Logs error messages
+ */
+export interface HomeyLogger {
+  log: (...args: unknown[]) => void;
+  error: (...args: unknown[]) => void;
+}
+
+/**
+ * Device configuration returned during pairing flow.
+ *
+ * This format is used when presenting devices to the user during the
+ * pairing wizard, allowing them to select which sensors to configure.
+ *
+ * @interface PairingDeviceConfig
+ * @property {string} deviceId - The unique identifier of the device
+ * @property {string} name - The user-assigned name of the device
+ * @property {string | null} zone - The zone name where the device is located, or null if no zone
+ * @property {string} capability - The capability exposed (e.g., 'alarm_motion', 'alarm_contact')
+ */
+export interface PairingDeviceConfig {
+  deviceId: string;
+  name: string;
+  zone: string | null;
+  capability: string;
+}
+
+/**
+ * Capability update event received from HomeyAPI WebSocket.
+ *
+ * This event is emitted when a device capability value changes.
+ * The SensorMonitor listens for these events to detect sensor state changes.
+ *
+ * @interface CapabilityUpdate
+ * @property {string} capabilityId - The capability that changed (e.g., 'alarm_motion')
+ * @property {unknown} value - The new value of the capability
+ */
+export interface CapabilityUpdate {
+  capabilityId: string;
+  value: unknown;
+}
+
+/**
+ * Homey device object from HomeyAPI.
+ *
+ * Represents a device accessible through the HomeyAPI with WebSocket-based
+ * updates. Device objects auto-update via WebSocket when their state changes.
+ *
+ * @interface HomeyAPIDevice
+ * @property {string} name - The user-assigned name of the device
+ * @property {string} [zoneName] - Optional zone name where the device is located
+ * @property {Record<string, { value: unknown }>} capabilitiesObj - Object mapping capability IDs to their current values
+ * @property {(event: string, handler: (update: CapabilityUpdate) => void) => void} on - Registers an event listener for device updates
+ * @property {(event: string, handler: (update: CapabilityUpdate) => void) => void} removeListener - Removes an event listener
+ */
+export interface HomeyAPIDevice {
+  name: string;
+  zoneName?: string;
+  capabilitiesObj: Record<string, { value: unknown }>;
+  on: (event: string, handler: (update: CapabilityUpdate) => void) => void;
+  removeListener: (event: string, handler: (update: CapabilityUpdate) => void) => void;
+}
+
+/**
+ * HomeyAPI devices interface for accessing all devices.
+ *
+ * Provides methods to retrieve devices from the Homey system.
+ *
+ * @interface HomeyAPIDevices
+ * @property {() => Promise<Record<string, HomeyAPIDevice>>} getDevices - Retrieves all devices indexed by device ID
+ */
+export interface HomeyAPIDevices {
+  getDevices: () => Promise<Record<string, HomeyAPIDevice>>;
+}
+
+/**
+ * HomeyAPI interface for accessing Homey system resources.
+ *
+ * This is the main API object provided by HomeyAPI for accessing
+ * devices and other Homey resources with WebSocket-based updates.
+ *
+ * @interface HomeyAPI
+ * @property {HomeyAPIDevices} devices - Interface for accessing Homey devices
+ */
+export interface HomeyAPI {
+  devices: HomeyAPIDevices;
+}
