@@ -1,5 +1,15 @@
 # Pull Request
 
+<!--
+⚠️ IMPORTANT: PR Title Format
+Your PR title MUST follow conventional commit format (it becomes the squash merge commit):
+✅ feat: add sensor timeout configuration
+✅ fix: resolve occupancy state race condition
+✅ docs(readme): update installation steps
+❌ Added sensor timeout (wrong format)
+❌ Fix bug (too vague)
+-->
+
 ## Description
 <!-- Provide a brief description of the changes in this PR -->
 

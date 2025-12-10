@@ -270,9 +270,60 @@ git commit -m "chore: update dependencies to latest versions"
 - **Never reference AI tools** in commit messages (no mentions of Claude, AI assistants, or code generation)
 - Keep subject line under 72 characters
 - Use imperative mood ("add" not "added")
-- Capitalize first letter of subject
+- Start subject with lowercase letter
 - No period at end of subject
 - Include issue number if applicable: `fix: sensor crash (#123)`
+
+## Pull Request Titles
+
+**IMPORTANT**: Since we use squash merges, your PR title becomes the commit message on `develop` or `main`. PR titles **must** follow conventional commit format and will be automatically validated.
+
+### Format
+
+```
+<type>(<scope>): <subject>
+```
+
+- **type**: Same as commit types (feat, fix, docs, refactor, test, chore, etc.)
+- **scope**: Optional, e.g., `sensors`, `occupancy`, `pairing`, `docs`
+- **subject**: Short description in imperative mood, starting with lowercase
+
+### Validation Rules
+
+✅ **Valid PR Titles:**
+```
+feat: add sensor timeout configuration
+fix: resolve occupancy state race condition
+docs: update installation instructions
+refactor(sensors): extract validation logic
+test: add edge cases for door sensor events
+chore(deps): update homey sdk to 3.1.0
+```
+
+❌ **Invalid PR Titles:**
+```
+feat: Added sensor timeout          # Past tense
+fix: Resolve occupancy state        # Capitalized subject
+Update README                        # Missing type prefix
+Feature/sensor timeout               # Not conventional format
+```
+
+### Why This Matters
+
+When your PR is squash-merged:
+1. All commits are combined into one
+2. The PR title becomes the commit message on the target branch
+3. This commit appears in `git log`, release notes, and changelogs
+4. Consistent format enables automated changelog generation
+
+### Automated Validation
+
+A GitHub Action automatically checks your PR title when:
+- PR is opened
+- PR title is edited
+- New commits are pushed
+
+If validation fails, you'll see a clear error message explaining what needs to be fixed.
 
 ## Pull Request Process
 
