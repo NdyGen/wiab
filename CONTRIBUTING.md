@@ -333,7 +333,6 @@ git commit -m "chore: update dependencies to latest versions"
 
 - Open an issue on GitHub
 - Contact: andy@dongen.net
-- Check the [CLAUDE.md](CLAUDE.md) for development guidelines
 
 ## License
 
