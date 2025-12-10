@@ -10,6 +10,7 @@
  * to find devices that support specific capabilities.
  */
 
+import Homey from 'homey';
 import { DeviceInfo } from './types';
 
 /**
@@ -25,14 +26,14 @@ import { DeviceInfo } from './types';
  * ```
  */
 export class DeviceRegistry {
-  private homey: any;
+  private homey: Homey;
 
   /**
    * Creates a new DeviceRegistry instance
    *
    * @param homey - The Homey instance for device access
    */
-  constructor(homey: any) {
+  constructor(homey: Homey) {
     this.homey = homey;
   }
 
@@ -62,7 +63,8 @@ export class DeviceRegistry {
 
       for (const [driverName, driver] of Object.entries(drivers)) {
         try {
-          const devices = (driver as any).getDevices();
+          const driverWithDevices = driver as Homey.Driver & { getDevices(): Homey.Device[] };
+          const devices = driverWithDevices.getDevices();
 
           for (const device of devices) {
             try {
@@ -162,8 +164,9 @@ export class DeviceRegistry {
 
       for (const [driverName, driver] of Object.entries(drivers)) {
         try {
-          const devices = (driver as any).getDevices();
-          const device = devices.find((d: any) => d.getData().id === deviceId);
+          const driverWithDevices = driver as Homey.Driver & { getDevices(): Homey.Device[] };
+          const devices = driverWithDevices.getDevices();
+          const device = devices.find((d: Homey.Device) => d.getData().id === deviceId);
 
           if (device) {
             return {
@@ -208,7 +211,8 @@ export class DeviceRegistry {
 
       for (const [driverName, driver] of Object.entries(drivers)) {
         try {
-          const devices = (driver as any).getDevices();
+          const driverWithDevices = driver as Homey.Driver & { getDevices(): Homey.Device[] };
+          const devices = driverWithDevices.getDevices();
 
           for (const device of devices) {
             try {

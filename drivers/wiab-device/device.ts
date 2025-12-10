@@ -13,6 +13,17 @@ import {
 import { classifySensors } from '../../lib/SensorClassifier';
 
 /**
+ * Interface for WIABApp with HomeyAPI
+ */
+interface WIABApp extends Homey.App {
+  homeyApi?: {
+    devices: {
+      getDevice(opts: { id: string }): Promise<{ capabilitiesObj?: Record<string, { value: boolean }> }>;
+    };
+  };
+}
+
+/**
  * WIAB (Wasp in a Box) virtual occupancy sensor device.
  *
  * This device implements a tri-state occupancy model (UNKNOWN, OCCUPIED, UNOCCUPIED)
@@ -185,7 +196,7 @@ class WIABDevice extends Homey.Device {
       };
 
       // Get HomeyAPI instance from app
-      const app = this.homey.app as any;
+      const app = this.homey.app as WIABApp;
       if (!app || !app.homeyApi) {
         throw new Error('Homey API not available');
       }
@@ -546,7 +557,7 @@ class WIABDevice extends Homey.Device {
    */
   private async getDoorSensorValue(doorId: string): Promise<boolean | null> {
     try {
-      const app = this.homey.app as any;
+      const app = this.homey.app as WIABApp;
       if (!app || !app.homeyApi) {
         this.error('Homey API not available');
         return null;

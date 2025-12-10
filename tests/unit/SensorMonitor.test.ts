@@ -21,8 +21,8 @@ import {
 } from '../setup';
 
 describe('SensorMonitor', () => {
-  let homey: any;
-  let homeyApi: any;
+  let homey: ReturnType<typeof createMockHomey>;
+  let homeyApi: ReturnType<typeof createMockHomeyApi>;
   let onTriggered: jest.Mock;
   let onReset: jest.Mock;
   let callbacks: SensorCallbacks;

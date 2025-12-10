@@ -105,7 +105,8 @@ class WIABApp extends Homey.App {
                 let zoneName: string | undefined;
                 try {
                   // Type assertion needed as getZone may not be in all device types
-                  const zone = await (device as any).getZone();
+                  const deviceWithZone = device as unknown as { getZone?: () => Promise<{ name?: string }> };
+                  const zone = await deviceWithZone.getZone?.();
                   zoneName = zone?.name;
                 } catch (error) {
                   // Zone information is optional, continue without it

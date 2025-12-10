@@ -21,7 +21,7 @@ jest.mock('../../lib/SensorMonitor');
 
 describe('WIABDevice', () => {
   let device: InstanceType<typeof WIABDevice>;
-  let mockHomey: any;
+  let mockHomey: ReturnType<typeof createMockHomey>;
   let mockSensorMonitor: jest.Mocked<SensorMonitor>;
 
   beforeEach(() => {
@@ -35,7 +35,7 @@ describe('WIABDevice', () => {
     mockSensorMonitor = {
       start: jest.fn(),
       stop: jest.fn(),
-    } as any;
+    } as jest.Mocked<SensorMonitor>;
 
     // Make SensorMonitor constructor return our mock
     (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mockImplementation(
@@ -44,7 +44,7 @@ describe('WIABDevice', () => {
 
     // Create device instance with mocked homey
     device = new WIABDevice();
-    (device as any).homey = mockHomey;
+    (device as unknown as { homey: ReturnType<typeof createMockHomey> }).homey = mockHomey;
 
     // Mock device methods
     device.log = jest.fn();
