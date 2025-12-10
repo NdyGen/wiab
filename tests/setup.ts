@@ -21,11 +21,11 @@ export function createMockHomey() {
   const mockDrivers: Map<string, any> = new Map();
 
   return {
-    log: jest.fn((...args: any[]) => {
+    log: jest.fn((..._args: any[]) => {
       // Uncomment for debugging tests:
       // console.log('[MOCK HOMEY]', ...args);
     }),
-    error: jest.fn((...args: any[]) => {
+    error: jest.fn((..._args: any[]) => {
       // Uncomment for debugging tests:
       // console.error('[MOCK HOMEY ERROR]', ...args);
     }),
@@ -114,7 +114,7 @@ export function createMockDevice(config: {
   });
 
   // Create event listener management
-  const listeners: Map<string, Function[]> = new Map();
+  const listeners: Map<string, ((...args: any[]) => void)[]> = new Map();
 
   const device: any = {
     getData: jest.fn(() => ({ id })),
@@ -159,13 +159,13 @@ export function createMockDevice(config: {
     // HomeyAPI compatibility
     capabilitiesObj,
     // Event emitter functionality
-    on: (event: string, handler: Function) => {
+    on: (event: string, handler: (...args: any[]) => void) => {
       if (!listeners.has(event)) {
         listeners.set(event, []);
       }
       listeners.get(event)!.push(handler);
     },
-    removeListener: (event: string, handler: Function) => {
+    removeListener: (event: string, handler: (...args: any[]) => void) => {
       if (listeners.has(event)) {
         const handlers = listeners.get(event)!;
         const index = handlers.indexOf(handler);

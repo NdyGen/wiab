@@ -12,7 +12,6 @@
  */
 
 import { DeviceRegistry } from '../../lib/DeviceRegistry';
-import { DeviceInfo } from '../../lib/types';
 import {
   createMockHomey,
   createMockDevice,

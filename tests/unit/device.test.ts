@@ -12,9 +12,9 @@
  * - Error handling in all scenarios
  */
 
-const WIABDevice = require('../../drivers/wiab-device/device');
+import WIABDevice from '../../drivers/wiab-device/device';
 import { SensorMonitor } from '../../lib/SensorMonitor';
-import { createMockHomey, createMockDevice } from '../setup';
+import { createMockHomey } from '../setup';
 
 // Mock SensorMonitor to control its behavior in tests
 jest.mock('../../lib/SensorMonitor');

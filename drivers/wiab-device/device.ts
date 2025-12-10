@@ -10,7 +10,7 @@ import {
   areAllDoorsClosed,
   isAnyDoorOpen,
 } from '../../lib/OccupancyState';
-import { classifySensors, ClassifiedSensor } from '../../lib/SensorClassifier';
+import { classifySensors } from '../../lib/SensorClassifier';
 
 /**
  * WIAB (Wasp in a Box) virtual occupancy sensor device.
@@ -179,7 +179,7 @@ class WIABDevice extends Homey.Device {
       // Define callbacks for sensor events
       const callbacks: SensorCallbacks = {
         // PIR sensors trigger motion events
-        onTriggered: (sensorId: string, value: boolean) => this.handlePirMotion(sensorId),
+        onTriggered: (sensorId: string, _value: boolean) => this.handlePirMotion(sensorId),
         // Door sensors trigger door events (both open and close)
         onReset: (sensorId: string, value: boolean) => this.handleDoorEvent(sensorId, value),
       };
