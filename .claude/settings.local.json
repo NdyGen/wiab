@@ -38,7 +38,10 @@
       "Bash(gh pr view:*)",
       "Bash(gh run view:*)",
       "Bash(npm run lint:*)",
-      "Bash(gh pr create:*)"
+      "Bash(gh pr create:*)",
+      "Bash(xargs -I {} bash -c 'echo {} | sed \"\"\"\"s|.*runs/||;s|/.*||\"\"\"\"')",
+      "Bash(xargs gh run view:*)",
+      "Bash(npm test:*)"
     ],
     "deny": [],
     "ask": []

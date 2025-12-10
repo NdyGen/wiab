@@ -18,7 +18,7 @@
  * @returns A mock Homey instance suitable for testing
  */
 export function createMockHomey() {
-  const mockDrivers: Map<string, unknown> = new Map();
+  const mockDrivers: Map<string, MockDriver> = new Map();
 
   return {
     log: jest.fn((..._args: unknown[]) => {
@@ -31,14 +31,14 @@ export function createMockHomey() {
     }),
     drivers: {
       getDrivers: jest.fn(() => {
-        const driversObj: Record<string, unknown> = {};
+        const driversObj: Record<string, MockDriver> = {};
         mockDrivers.forEach((driver, name) => {
           driversObj[name] = driver;
         });
         return driversObj;
       }),
       getDriver: jest.fn((name: string) => mockDrivers.get(name)),
-      _addDriver: (name: string, driver: unknown) => {
+      _addDriver: (name: string, driver: MockDriver) => {
         mockDrivers.set(name, driver);
       },
       _clear: () => {
@@ -58,6 +58,7 @@ export function createMockHomey() {
  */
 export function createMockHomeyApi() {
   const deviceMap: Record<string, unknown> = {};
+  const zoneMap: Record<string, { id: string; name: string }> = {};
 
   return {
     devices: {
@@ -72,6 +73,17 @@ export function createMockHomeyApi() {
       },
       _clear: () => {
         Object.keys(deviceMap).forEach(key => delete deviceMap[key]);
+      },
+    },
+    zones: {
+      getZone: jest.fn(async (params: { id: string }) => {
+        return zoneMap[params.id] || { id: params.id, name: `Zone ${params.id}` };
+      }),
+      _addZone: (id: string, name: string) => {
+        zoneMap[id] = { id, name };
+      },
+      _clear: () => {
+        Object.keys(zoneMap).forEach(key => delete zoneMap[key]);
       },
     },
   };
@@ -116,7 +128,7 @@ export function createMockDevice(config: {
   // Create event listener management
   const listeners: Map<string, ((...args: unknown[]) => void)[]> = new Map();
 
-  const device: Record<string, unknown> = {
+  const device: MockDevice = {
     getData: jest.fn(() => ({ id })),
     getName: jest.fn(() => name),
     getCapabilities: jest.fn(() => [...capabilities]),
@@ -194,13 +206,33 @@ export function createMockDevice(config: {
  * @param devices - Array of mock devices managed by this driver
  * @returns A mock driver instance
  */
-export function createMockDriver(devices: unknown[] = []) {
+/**
+ * Mock device with minimal interface matching HomeyDevice
+ */
+interface MockDevice {
+  getData(): { id: string };
+  getName(): string;
+  getCapabilities(): string[];
+  hasCapability(capability: string): boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Mock driver interface compatible with HomeyDriver
+ */
+interface MockDriver {
+  getDevices?(): MockDevice[];
+  getDevice?(deviceData: { id: string }): MockDevice | undefined;
+  [key: string]: unknown;
+}
+
+export function createMockDriver(devices: MockDevice[] = []) {
   return {
     getDevices: jest.fn(() => [...devices]),
     getDevice: jest.fn((deviceData: { id: string }) => {
       return devices.find((d) => d.getData().id === deviceData.id);
     }),
-    _addDevice: (device: unknown) => {
+    _addDevice: (device: MockDevice) => {
       devices.push(device);
     },
     _removeDevice: (deviceId: string) => {

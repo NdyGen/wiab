@@ -633,4 +633,5 @@ class WIABDevice extends Homey.Device {
   }
 }
 
+export default WIABDevice;
 module.exports = WIABDevice;
