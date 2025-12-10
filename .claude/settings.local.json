@@ -37,7 +37,8 @@
       "SlashCommand(/git:start-feature:*)",
       "Bash(gh pr view:*)",
       "Bash(gh run view:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "Bash(gh pr create:*)"
     ],
     "deny": [],
     "ask": []

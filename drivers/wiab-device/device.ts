@@ -1,6 +1,6 @@
 import Homey from 'homey';
 import { SensorMonitor } from '../../lib/SensorMonitor';
-import { SensorConfig, SensorCallbacks } from '../../lib/types';
+import { SensorConfig, SensorCallbacks, HomeyAPI } from '../../lib/types';
 import {
   OccupancyState,
   StableOccupancyState,
@@ -13,12 +13,21 @@ import {
 import { classifySensors } from '../../lib/SensorClassifier';
 
 /**
+ * Extended HomeyAPIDevice with runtime methods
+ */
+interface ExtendedHomeyAPIDevice {
+  capabilitiesObj: Record<string, { value: unknown }>;
+}
+
+/**
  * Interface for WIABApp with HomeyAPI
+ * Note: The HomeyAPI devices property is indexed directly, not via getDevices()
  */
 interface WIABApp extends Homey.App {
   homeyApi?: {
-    devices: {
-      getDevice(opts: { id: string }): Promise<{ capabilitiesObj?: Record<string, { value: boolean }> }>;
+    devices: Record<string, ExtendedHomeyAPIDevice>;
+    zones: {
+      getZone(params: { id: string }): Promise<{ name: string }>;
     };
   };
 }
@@ -204,7 +213,7 @@ class WIABDevice extends Homey.Device {
       // Create and start sensor monitor
       // Note: SensorMonitor now treats triggerSensors as PIRs and resetSensors as doors
       this.sensorMonitor = new SensorMonitor(
-        app.homeyApi,
+        app.homeyApi as unknown as HomeyAPI,
         this.homey,
         triggerSensors, // PIR sensors
         resetSensors,   // Door sensors

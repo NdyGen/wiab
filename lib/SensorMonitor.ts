@@ -10,8 +10,24 @@
  * with all Homey devices regardless of their capability change event support.
  */
 
-import Homey from 'homey';
 import { SensorConfig, SensorCallbacks, HomeyAPI, HomeyAPIDevice } from './types';
+
+/**
+ * Interface for logging instance
+ */
+interface Logger {
+  log(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+}
+
+/**
+ * Extended HomeyAPIDevice with additional runtime methods
+ */
+interface ExtendedHomeyAPIDevice extends HomeyAPIDevice {
+  makeCapabilityInstance?(capability: string, callback: (value: boolean) => void): unknown;
+  hasCapability?(capability: string): boolean;
+  getCapabilityValue?(capability: string): unknown;
+}
 
 /**
  * SensorMonitor class for polling-based sensor state monitoring
@@ -33,13 +49,13 @@ import { SensorConfig, SensorCallbacks, HomeyAPI, HomeyAPIDevice } from './types
  */
 export class SensorMonitor {
   private homeyApi: HomeyAPI;
-  private logger: Homey;
+  private logger: Logger;
   private triggerSensors: SensorConfig[];
   private resetSensors: SensorConfig[];
   private callbacks: SensorCallbacks;
   private lastValues: Map<string, boolean> = new Map();
-  private deviceCache: Record<string, HomeyAPIDevice> = {};
-  private deviceRefs: Map<string, HomeyAPIDevice> = new Map(); // Live device references from HomeyAPI
+  private deviceCache: Record<string, ExtendedHomeyAPIDevice> = {};
+  private deviceRefs: Map<string, ExtendedHomeyAPIDevice> = new Map(); // Live device references from HomeyAPI
   private capabilityInstances: Map<string, unknown> = new Map(); // DeviceCapability instances for cleanup
 
   /**
@@ -53,7 +69,7 @@ export class SensorMonitor {
    */
   constructor(
     homeyApi: HomeyAPI,
-    logger: Homey,
+    logger: Logger,
     triggerSensors: SensorConfig[],
     resetSensors: SensorConfig[],
     callbacks: SensorCallbacks
@@ -303,7 +319,7 @@ export class SensorMonitor {
 
       // Create real-time capability listener using makeCapabilityInstance()
       // This returns a DeviceCapability object and invokes the callback with value changes
-      const capabilityInstance = device.makeCapabilityInstance(sensor.capability, (value: boolean) => {
+      const capabilityInstance = device.makeCapabilityInstance?.(sensor.capability, (value: boolean) => {
         const lastValue = this.lastValues.get(key) ?? false;
 
         this.logger.log(
