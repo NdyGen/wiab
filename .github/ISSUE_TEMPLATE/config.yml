@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Homey Community Forum
+    url: https://community.homey.app/
+    about: Ask questions and discuss WIAB with the Homey community
+  - name: Documentation
+    url: https://github.com/NdyGen/wiab/blob/main/README.md
+    about: Read the WIAB documentation and usage guides
+  - name: Contributing Guidelines
+    url: https://github.com/NdyGen/wiab/blob/main/CONTRIBUTING.md
+    about: Learn how to contribute to WIAB development
