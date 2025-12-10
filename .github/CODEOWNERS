@@ -1,0 +1,12 @@
+# CODEOWNERS
+# This file defines code ownership for the WIAB Homey app.
+# Code owners are automatically requested for review when someone opens a PR that modifies code they own.
+
+# Default owner for everything in the repo
+* andy@dongen.net
+
+# Specific ownership can be added here as the project grows
+# Examples:
+# /lib/**/*.ts @username
+# /drivers/**/*.ts @username
+# /.github/workflows/*.yml @username
