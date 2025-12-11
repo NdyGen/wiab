@@ -1,29 +1,32 @@
 /**
- * Occupancy state types and constants for the tri-state occupancy model.
+ * Occupancy state types and constants for the quad-state occupancy model.
  *
- * This module defines the tri-state occupancy model as specified in
- * docs/wiab_multi_door_multi_pir_full.md. The model uses three internal states
- * (UNKNOWN, OCCUPIED, UNOCCUPIED) with a derived boolean output.
+ * This module defines the quad-state occupancy model as specified in
+ * docs/wiab_multi_door_multi_pir_full.md. The model uses four internal states
+ * (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED) with a derived boolean output.
+ * The PAUSED state is used when the device is manually paused via user actions.
  */
 
 /**
- * Internal tri-state occupancy states.
+ * Internal quad-state occupancy states.
  *
  * @enum {string}
  * @property {string} UNKNOWN - Transitional state after door events, resolved by timers or PIR
  * @property {string} OCCUPIED - Room is occupied (motion detected)
  * @property {string} UNOCCUPIED - Room is empty (no motion, or timeout expired)
+ * @property {string} PAUSED - Device is paused and not monitoring sensors
  */
 export enum OccupancyState {
   UNKNOWN = 'UNKNOWN',
   OCCUPIED = 'OCCUPIED',
   UNOCCUPIED = 'UNOCCUPIED',
+  PAUSED = 'PAUSED',
 }
 
 /**
- * Last stable occupancy state (excludes UNKNOWN).
+ * Last stable occupancy state (excludes UNKNOWN and PAUSED).
  *
- * Used to derive the boolean `occupied` output. During UNKNOWN periods,
+ * Used to derive the boolean `occupied` output. During UNKNOWN periods or PAUSED state,
  * the boolean output retains the last stable state.
  *
  * @enum {string}
