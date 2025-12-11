@@ -1165,5 +1165,155 @@ describe('WIABDevice', () => {
       const isPaused = (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
       expect(isPaused).toBe(false);
     });
+
+    /**
+     * Test that door events (reset sensor events) are ignored while paused
+     */
+    it('should ignore door events while paused', async () => {
+      // Setup device
+      const triggerSensors = JSON.stringify([
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ]);
+      const resetSensors = JSON.stringify([
+        { deviceId: 'door-1', capability: 'alarm_contact' },
+      ]);
+
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce(resetSensors);
+
+      await device.onInit();
+
+      // Pause the device
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+
+      // Get the callbacks
+      const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
+      const callbacks = sensorMonitorCall[4];
+
+      jest.clearAllMocks();
+
+      // Try to trigger door event while paused - should be ignored
+      await callbacks.onReset('door-1', true); // door opens
+
+      // No door event log should appear
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Door event')
+      );
+      // State should not change
+      expect(device.setCapabilityValue).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Test that PIR falling edge events are ignored while paused
+     */
+    it('should ignore PIR falling edge while paused', async () => {
+      // Setup device
+      const triggerSensors = JSON.stringify([
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ]);
+      const resetSensors = JSON.stringify([
+        { deviceId: 'door-1', capability: 'alarm_contact' },
+      ]);
+
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce(resetSensors);
+
+      await device.onInit();
+
+      // Pause the device
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('UNOCCUPIED');
+
+      // Get the callbacks
+      const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
+      const callbacks = sensorMonitorCall[4];
+
+      jest.clearAllMocks();
+
+      // Try to trigger PIR falling edge while paused - should be ignored
+      if (callbacks.onPirCleared) {
+        await callbacks.onPirCleared('motion-1');
+
+        // No PIR cleared log should appear
+        expect(device.log).not.toHaveBeenCalledWith(
+          expect.stringContaining('PIR motion cleared')
+        );
+        // No timer should start
+        expect(device.log).not.toHaveBeenCalledWith(
+          expect.stringContaining('T_ENTER timer started')
+        );
+      }
+    });
+
+    /**
+     * Test that monitoring is torn down when pausing
+     */
+    it('should tear down monitoring when pausing device', async () => {
+      // Setup device
+      const triggerSensors = JSON.stringify([
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ]);
+      const resetSensors = JSON.stringify([
+        { deviceId: 'door-1', capability: 'alarm_contact' },
+      ]);
+
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce(resetSensors);
+
+      await device.onInit();
+
+      jest.clearAllMocks();
+
+      // Pause the device
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+
+      // Verify sensor monitoring was stopped
+      expect(mockSensorMonitor.stop).toHaveBeenCalled();
+      // Verify teardown message was logged
+      expect(device.log).toHaveBeenCalledWith(
+        'Tearing down sensor monitoring'
+      );
+    });
+
+    /**
+     * Test that unpause works even when sensor setup encounters errors
+     */
+    it('should complete unpause even if sensor monitoring setup encounters errors', async () => {
+      // Setup device
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce('[]')
+        .mockReturnValueOnce('[]');
+
+      await device.onInit();
+
+      // First pause the device
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+
+      jest.clearAllMocks();
+
+      // Setup device is now paused
+      let isPaused = (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      expect(isPaused).toBe(true);
+
+      // Mock getSetting to return invalid data to cause sensor monitoring setup to fail gracefully
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce('invalid json')
+        .mockReturnValueOnce('invalid json');
+
+      // Attempt to unpause - setupSensorMonitoring catches errors gracefully
+      // so unpause should complete successfully
+      await (device as unknown as { unpauseDevice: () => Promise<void> }).unpauseDevice();
+
+      // Device should be unpaused (isPaused = false)
+      isPaused = (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      expect(isPaused).toBe(false);
+
+      // Verify unpause was logged
+      expect(device.log).toHaveBeenCalledWith(
+        'Device resumed, sensor monitoring reinitialized'
+      );
+    });
   });
 });

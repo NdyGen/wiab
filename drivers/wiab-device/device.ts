@@ -35,14 +35,15 @@ interface WIABApp extends Homey.App {
 /**
  * WIAB (Wasp in a Box) virtual occupancy sensor device.
  *
- * This device implements a tri-state occupancy model (UNKNOWN, OCCUPIED, UNOCCUPIED)
+ * This device implements a quad-state occupancy model (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED)
  * with multiple door sensors and multiple PIR sensors. The model uses two timers:
  * - T_ENTER: Short window after door events to detect entry/exit via motion
  * - T_CLEAR: Longer window with open doors to detect room becoming empty
  *
- * The tri-state model provides a derived boolean output (alarm_occupancy) that
+ * The quad-state model provides a derived boolean output (alarm_occupancy) that
  * represents the last stable occupancy state, maintaining continuity during
- * transitional UNKNOWN periods.
+ * transitional UNKNOWN periods. When PAUSED, the device ignores sensor events
+ * and maintains a fixed state until resumed.
  *
  * Specification: docs/wiab_multi_door_multi_pir_full.md
  *
@@ -50,6 +51,11 @@ interface WIABApp extends Homey.App {
  * 1. onInit() - Initialize to UNOCCUPIED, setup sensor monitoring, read PIR values
  * 2. onSettings() - Reconfigure monitoring and timers when settings change
  * 3. onDeleted() - Cleanup all timers and monitoring resources
+ *
+ * Manual Control:
+ * - SET STATE action: Pauses device with specified occupancy state
+ * - UNPAUSE action: Resumes sensor monitoring and reinitializes state
+ * - IS PAUSED condition: Check if device is currently paused in flows
  */
 class WIABDevice extends Homey.Device {
   private sensorMonitor?: SensorMonitor;
@@ -77,7 +83,6 @@ class WIABDevice extends Homey.Device {
   // Pause/unpause state management
   private isPaused: boolean = false;
   private pausedWithState: StableOccupancyState = StableOccupancyState.UNOCCUPIED;
-  private hasBeenUnpausedOnce: boolean = false;
 
   /**
    * Initializes the WIAB device.
@@ -640,14 +645,26 @@ class WIABDevice extends Homey.Device {
   private async updateOccupancyOutput(): Promise<void> {
     try {
       const occupied = occupancyToBoolean(this.lastStableOccupancy);
-      await this.setCapabilityValue('alarm_occupancy', occupied);
+
+      try {
+        await this.setCapabilityValue('alarm_occupancy', occupied);
+      } catch (error) {
+        this.error(`Failed to set alarm_occupancy capability to ${occupied}:`, error);
+        throw error;
+      }
 
       // Also update the internal quad-state capability for debugging
-      await this.setCapabilityValue('occupancy_state', this.occupancyState);
+      try {
+        await this.setCapabilityValue('occupancy_state', this.occupancyState);
+      } catch (error) {
+        this.error(`Failed to set occupancy_state capability to ${this.occupancyState}:`, error);
+        throw error;
+      }
 
       this.log(`Occupancy output: ${occupied}, internal state: ${this.occupancyState}`);
     } catch (error) {
       this.error('Failed to update occupancy output:', error);
+      throw error;
     }
   }
 
@@ -780,6 +797,7 @@ class WIABDevice extends Homey.Device {
       this.log(`Device paused with state: ${state}`);
     } catch (error) {
       this.error('Failed to pause device:', error);
+      throw error;
     }
   }
 
@@ -804,9 +822,8 @@ class WIABDevice extends Homey.Device {
 
       this.log('Unpausing device and reinitializing with current sensor values');
 
-      // Mark as unpaused and track that we've unpaused once
+      // Mark as unpaused
       this.isPaused = false;
-      this.hasBeenUnpausedOnce = true;
 
       // Reinitialize state machine to UNOCCUPIED (like onInit)
       this.occupancyState = OccupancyState.UNOCCUPIED;
@@ -833,36 +850,7 @@ class WIABDevice extends Homey.Device {
       this.log('Device resumed, sensor monitoring reinitialized');
     } catch (error) {
       this.error('Failed to unpause device:', error);
-    }
-  }
-
-  /**
-   * Sets the occupancy state while device is paused.
-   *
-   * Device remains paused after this call. The boolean output (alarm_occupancy)
-   * is updated to reflect the new state.
-   *
-   * @param state - The occupancy state to set (OCCUPIED or UNOCCUPIED)
-   */
-  private async setStateWhilePaused(state: StableOccupancyState): Promise<void> {
-    try {
-      this.log(`Setting paused state to: ${state}`);
-
-      // Update paused state (whether paused or not)
-      this.pausedWithState = state;
-      this.lastStableOccupancy = state;
-
-      // If currently paused, update the occupancy state to PAUSED with new alarm_occupancy
-      if (this.isPaused) {
-        this.occupancyState = OccupancyState.PAUSED;
-      }
-
-      // Update capabilities
-      await this.updateOccupancyOutput();
-
-      this.log(`State updated to: ${state}`);
-    } catch (error) {
-      this.error('Failed to set state while paused:', error);
+      throw error;
     }
   }
 
@@ -885,6 +873,10 @@ class WIABDevice extends Homey.Device {
     try {
       // Register set_state action handler
       const setStateCard = this.homey.flow.getActionCard('set_state');
+      if (!setStateCard) {
+        throw new Error('set_state action card not found in flow definition');
+      }
+
       setStateCard.registerRunListener(
         async (args: {
           device: WIABDevice;
@@ -898,21 +890,36 @@ class WIABDevice extends Homey.Device {
               ? StableOccupancyState.OCCUPIED
               : StableOccupancyState.UNOCCUPIED;
 
-          // Pause device with specified state
-          await args.device.pauseDevice(state);
+          // Pause device with specified state and propagate errors to flow engine
+          try {
+            await args.device.pauseDevice(state);
+          } catch (error) {
+            args.device.error(`Set state action failed: ${error}`, error);
+            throw error;
+          }
         }
       );
 
       // Register unpause action handler
       const unpauseCard = this.homey.flow.getActionCard('unpause');
+      if (!unpauseCard) {
+        throw new Error('unpause action card not found in flow definition');
+      }
+
       unpauseCard.registerRunListener(async (args: { device: WIABDevice }) => {
         args.device.log('Unpause action triggered');
-        await args.device.unpauseDevice();
+        try {
+          await args.device.unpauseDevice();
+        } catch (error) {
+          args.device.error(`Unpause action failed: ${error}`, error);
+          throw error;
+        }
       });
 
       this.log('Action handlers registered successfully');
     } catch (error) {
       this.error('Failed to register action handlers:', error);
+      throw error;
     }
   }
 
@@ -926,17 +933,27 @@ class WIABDevice extends Homey.Device {
     try {
       // Register is_paused condition handler
       const isPausedCard = this.homey.flow.getConditionCard('is_paused');
+      if (!isPausedCard) {
+        throw new Error('is_paused condition card not found in flow definition');
+      }
+
       isPausedCard.registerRunListener(
         async (args: { device: WIABDevice }): Promise<boolean> => {
-          const paused = args.device.isPausedCheck();
-          args.device.log(`Is paused condition evaluated: ${paused}`);
-          return paused;
+          try {
+            const paused = args.device.isPausedCheck();
+            args.device.log(`Is paused condition evaluated: ${paused}`);
+            return paused;
+          } catch (error) {
+            args.device.error(`Is paused condition evaluation failed: ${error}`, error);
+            throw error;
+          }
         }
       );
 
       this.log('Condition handlers registered successfully');
     } catch (error) {
       this.error('Failed to register condition handlers:', error);
+      throw error;
     }
   }
 

@@ -55,7 +55,9 @@
       "Bash(timeout 120 npm run test)",
       "Bash(timeout 60 npm test:*)",
       "Bash(git fetch:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(npm run validate:*)",
+      "Bash(npm run homey:build:*)"
     ],
     "deny": [],
     "ask": []
