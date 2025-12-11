@@ -384,7 +384,6 @@ If validation fails, you'll see a clear error message explaining what needs to b
 
 - Open an issue on GitHub
 - Contact: andy@dongen.net
-- Check the [CLAUDE.md](CLAUDE.md) for development guidelines
 
 ## License
 
