@@ -5,8 +5,8 @@
     "nl": "Aanwezigheidsstatus"
   },
   "desc": {
-    "en": "Internal tri-state occupancy value (UNKNOWN, OCCUPIED, UNOCCUPIED)",
-    "nl": "Interne tri-state aanwezigheidswaarde (UNKNOWN, OCCUPIED, UNOCCUPIED)"
+    "en": "Internal quad-state occupancy value (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED)",
+    "nl": "Interne quad-state aanwezigheidswaarde (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED)"
   },
   "values": [
     {
@@ -28,6 +28,13 @@
       "title": {
         "en": "Unoccupied",
         "nl": "Leeg"
+      }
+    },
+    {
+      "id": "PAUSED",
+      "title": {
+        "en": "Paused",
+        "nl": "Gepauzeerd"
       }
     }
   ],

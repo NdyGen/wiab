@@ -1,0 +1,127 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for WIAB
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please fill out the form below to help us understand and prioritize your request.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: Is your feature request related to a problem? Please describe.
+      placeholder: "Example: I'm frustrated when I have to manually reset the virtual occupancy sensor because the automation missed a sensor trigger."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution you'd like to see
+      placeholder: "Example: Add a timeout feature that automatically resets occupancy after X minutes of no activity, regardless of reset sensor status."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you've considered
+      placeholder: "Example: I considered using Homey flows to implement this, but it would be cleaner to have it built into WIAB."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Critical - Blocking my use of the app
+        - High - Significantly impacts my usage
+        - Medium - Would be nice to have
+        - Low - Minor improvement
+    validations:
+      required: true
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      description: What type of feature is this?
+      options:
+        - Sensor Configuration
+        - Occupancy Detection Logic
+        - User Interface
+        - Notifications/Alerts
+        - Automation/Flow Integration
+        - Settings/Configuration
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use Case
+      description: Describe your specific use case and how this feature would help
+      placeholder: |
+        Example:
+        I have a home office where motion sensors track occupancy. However, sometimes I sit still for long periods while working, causing the motion sensor to stop detecting me. A timeout feature would allow the system to keep the room marked as occupied for a configurable period after the last motion detection, preventing lights from turning off while I'm working.
+    validations:
+      required: true
+
+  - type: textarea
+    id: technical-details
+    attributes:
+      label: Technical Details (Optional)
+      description: |
+        If you have technical knowledge, provide implementation suggestions:
+        - Which sensors/capabilities would be involved?
+        - How should the feature integrate with existing functionality?
+        - Any technical constraints or considerations?
+      placeholder: |
+        Example:
+        - Add a new setting: "occupancy_timeout" (in minutes)
+        - Start a timer when trigger sensors activate
+        - If no reset sensor triggers and no new trigger sensor activity occurs within the timeout period, automatically deactivate occupancy
+        - Timer should reset whenever a trigger sensor activates again
+    validations:
+      required: false
+
+  - type: textarea
+    id: mockup
+    attributes:
+      label: UI Mockup or Example (Optional)
+      description: If applicable, add screenshots, mockups, or examples from other apps
+      placeholder: Drag and drop images here or paste image URLs
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you be willing to contribute to this feature?
+      options:
+        - label: I would be willing to submit a pull request to implement this feature
+        - label: I would be willing to help test this feature
+        - label: I would be willing to contribute to documentation for this feature
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing issues and feature requests to ensure this is not a duplicate
+          required: true
+        - label: I have clearly described the problem and proposed solution
+          required: true
+        - label: This feature aligns with WIAB's purpose of virtual occupancy sensing
+          required: true

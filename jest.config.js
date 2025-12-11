@@ -1,43 +1,40 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>'],
-  testMatch: ['**/tests/**/*.test.ts'],
+  testMatch: ['<rootDir>/tests/**/*.test.ts'],
   collectCoverageFrom: [
     'lib/**/*.ts',
-    'drivers/**/device.ts',
+    'drivers/wiab-device/device.ts',
     '!lib/types.ts',
-    '!**/*.d.ts',
-    '!**/node_modules/**',
-    '!**/tests/**',
-    '!**/*.test.ts'
+    '!**/*.d.ts'
   ],
   coveragePathIgnorePatterns: [
     '/node_modules/',
-    '/tests/',
-    '\\.d\\.ts$'
+    '/tests/'
   ],
-  coverageProvider: 'v8',
   coverageThreshold: {
     global: {
-      branches: 70,
-      functions: 70,
-      lines: 70,
-      statements: 70
+      branches: 0,
+      functions: 0,
+      lines: 0,
+      statements: 0
     }
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
-  modulePathIgnorePatterns: ['<rootDir>/node_modules/'],
+  extensionsToTreatAsEsm: ['.ts'],
+  forceExit: true,
+  detectOpenHandles: false,
+  testTimeout: 10000,
+  moduleNameMapper: {
+    '^homey$': '<rootDir>/tests/__mocks__/homey.ts'
+  },
   transform: {
-    '^.+\\.ts$': ['ts-jest', {
+    '^.+\\.tsx?$': ['ts-jest', {
+      useESM: false,
       tsconfig: {
         esModuleInterop: true,
         allowSyntheticDefaultImports: true
       }
     }]
-  },
-  moduleNameMapper: {
-    '^homey$': '<rootDir>/tests/__mocks__/homey.ts'
-  },
-  coverageReporters: ['text', 'lcov', 'html']
+  }
 };

@@ -12,7 +12,6 @@
  */
 
 import { DeviceRegistry } from '../../lib/DeviceRegistry';
-import { DeviceInfo } from '../../lib/types';
 import {
   createMockHomey,
   createMockDevice,
@@ -20,7 +19,7 @@ import {
 } from '../setup';
 
 describe('DeviceRegistry', () => {
-  let homey: any;
+  let homey: ReturnType<typeof createMockHomey>;
   let registry: DeviceRegistry;
 
   beforeEach(() => {

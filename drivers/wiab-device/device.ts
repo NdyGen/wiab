@@ -1,6 +1,6 @@
 import Homey from 'homey';
 import { SensorMonitor } from '../../lib/SensorMonitor';
-import { SensorConfig, SensorCallbacks } from '../../lib/types';
+import { SensorConfig, SensorCallbacks, HomeyAPI } from '../../lib/types';
 import {
   OccupancyState,
   StableOccupancyState,
@@ -10,19 +10,40 @@ import {
   areAllDoorsClosed,
   isAnyDoorOpen,
 } from '../../lib/OccupancyState';
-import { classifySensors, ClassifiedSensor } from '../../lib/SensorClassifier';
+import { classifySensors } from '../../lib/SensorClassifier';
+
+/**
+ * Extended HomeyAPIDevice with runtime methods
+ */
+interface ExtendedHomeyAPIDevice {
+  capabilitiesObj: Record<string, { value: unknown }>;
+}
+
+/**
+ * Interface for WIABApp with HomeyAPI
+ * Note: The HomeyAPI devices property is indexed directly, not via getDevices()
+ */
+interface WIABApp extends Homey.App {
+  homeyApi?: {
+    devices: Record<string, ExtendedHomeyAPIDevice>;
+    zones: {
+      getZone(params: { id: string }): Promise<{ name: string }>;
+    };
+  };
+}
 
 /**
  * WIAB (Wasp in a Box) virtual occupancy sensor device.
  *
- * This device implements a tri-state occupancy model (UNKNOWN, OCCUPIED, UNOCCUPIED)
+ * This device implements a quad-state occupancy model (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED)
  * with multiple door sensors and multiple PIR sensors. The model uses two timers:
  * - T_ENTER: Short window after door events to detect entry/exit via motion
  * - T_CLEAR: Longer window with open doors to detect room becoming empty
  *
- * The tri-state model provides a derived boolean output (alarm_occupancy) that
+ * The quad-state model provides a derived boolean output (alarm_occupancy) that
  * represents the last stable occupancy state, maintaining continuity during
- * transitional UNKNOWN periods.
+ * transitional UNKNOWN periods. When PAUSED, the device ignores sensor events
+ * and maintains a fixed state until resumed.
  *
  * Specification: docs/wiab_multi_door_multi_pir_full.md
  *
@@ -30,6 +51,11 @@ import { classifySensors, ClassifiedSensor } from '../../lib/SensorClassifier';
  * 1. onInit() - Initialize to UNOCCUPIED, setup sensor monitoring, read PIR values
  * 2. onSettings() - Reconfigure monitoring and timers when settings change
  * 3. onDeleted() - Cleanup all timers and monitoring resources
+ *
+ * Manual Control:
+ * - SET STATE action: Pauses device with specified occupancy state
+ * - UNPAUSE action: Resumes sensor monitoring and reinitializes state
+ * - IS PAUSED condition: Check if device is currently paused in flows
  */
 class WIABDevice extends Homey.Device {
   private sensorMonitor?: SensorMonitor;
@@ -38,10 +64,11 @@ class WIABDevice extends Homey.Device {
   private occupancyState: OccupancyState = OccupancyState.UNOCCUPIED;
   private lastStableOccupancy: StableOccupancyState = StableOccupancyState.UNOCCUPIED;
   private doorStates: Map<string, DoorState> = new Map();
+  private triggerSensors: SensorConfig[] = []; // PIR sensors stored for checking their state
 
   // PIR tracking
   private lastDoorEventTimestamp: number | null = null;
-  private pirSinceLastDoorEvent: boolean = false;
+  private waitingForPirFallingEdge: boolean = false;
   private lastPirTimestamp: number | null = null;
 
   // T_ENTER timer (spec section 7.1)
@@ -52,6 +79,10 @@ class WIABDevice extends Homey.Device {
   private clearTimer: NodeJS.Timeout | undefined = undefined;
   private clearTimerDeadline: number | null = null;
   private clearTimerAnchor: number | null = null;
+
+  // Pause/unpause state management
+  private isPaused: boolean = false;
+  private pausedWithState: StableOccupancyState = StableOccupancyState.UNOCCUPIED;
 
   /**
    * Initializes the WIAB device.
@@ -64,7 +95,7 @@ class WIABDevice extends Homey.Device {
    * - Read current PIR sensor values to set initial occupancy state
    */
   async onInit(): Promise<void> {
-    this.log('WIAB device initializing with tri-state occupancy model');
+    this.log('WIAB device initializing with quad-state occupancy model');
 
     // Ensure occupancy_state capability exists (for migration of existing devices)
     if (!this.hasCapability('occupancy_state')) {
@@ -81,6 +112,12 @@ class WIABDevice extends Homey.Device {
 
     // Set initial boolean output from stable state
     await this.updateOccupancyOutput();
+
+    // Register action handlers
+    this.registerActionHandlers();
+
+    // Register condition handlers
+    this.registerConditionHandlers();
 
     this.log('WIAB device initialization complete');
   }
@@ -158,6 +195,9 @@ class WIABDevice extends Homey.Device {
       const triggerSensors = this.validateSensorSettings(triggerSensorsJson);
       const resetSensors = this.validateSensorSettings(resetSensorsJson);
 
+      // Store trigger sensors for later reference (checking if any PIR is inactive)
+      this.triggerSensors = triggerSensors;
+
       // Combine all sensors for classification
       const allSensors = [...triggerSensors, ...resetSensors];
 
@@ -179,13 +219,15 @@ class WIABDevice extends Homey.Device {
       // Define callbacks for sensor events
       const callbacks: SensorCallbacks = {
         // PIR sensors trigger motion events
-        onTriggered: (sensorId: string, value: boolean) => this.handlePirMotion(sensorId),
+        onTriggered: (sensorId: string, _value: boolean) => this.handlePirMotion(sensorId),
         // Door sensors trigger door events (both open and close)
         onReset: (sensorId: string, value: boolean) => this.handleDoorEvent(sensorId, value),
+        // PIR falling edge (motion cleared) - only meaningful after door event
+        onPirCleared: (sensorId: string) => this.handlePirCleared(sensorId),
       };
 
       // Get HomeyAPI instance from app
-      const app = this.homey.app as any;
+      const app = this.homey.app as WIABApp;
       if (!app || !app.homeyApi) {
         throw new Error('Homey API not available');
       }
@@ -193,7 +235,7 @@ class WIABDevice extends Homey.Device {
       // Create and start sensor monitor
       // Note: SensorMonitor now treats triggerSensors as PIRs and resetSensors as doors
       this.sensorMonitor = new SensorMonitor(
-        app.homeyApi,
+        app.homeyApi as unknown as HomeyAPI,
         this.homey,
         triggerSensors, // PIR sensors
         resetSensors,   // Door sensors
@@ -229,14 +271,21 @@ class WIABDevice extends Homey.Device {
    * Per spec sections 8.1 and 8.2:
    * - Update door state
    * - Set occupancy_state = UNKNOWN
-   * - Reset PIR tracking
-   * - Start/restart T_ENTER timer
+   * - Set flag to wait for PIR falling edge (someone leaving)
    * - Manage T_CLEAR timer based on door states and stable occupancy
+   *
+   * T_ENTER only starts when PIR clears after a door event (see handlePirCleared).
+   * This prevents false negatives when PIR is continuously active (e.g., bedroom).
    *
    * @param doorId - The device ID of the door sensor that changed
    * @param doorValue - The current value of the door sensor (true = open, false = closed)
    */
   private async handleDoorEvent(doorId: string, doorValue: boolean): Promise<void> {
+    // Ignore sensor events if device is paused
+    if (this.isPaused) {
+      return;
+    }
+
     try {
       const newDoorState = doorValue ? DoorState.OPEN : DoorState.CLOSED;
       const oldDoorState = this.doorStates.get(doorId);
@@ -254,12 +303,24 @@ class WIABDevice extends Homey.Device {
       // Set transitional occupancy (spec 8.1, 8.2)
       this.occupancyState = OccupancyState.UNKNOWN;
 
-      // Reset PIR tracking
-      this.pirSinceLastDoorEvent = false;
+      // Determine if we should start T_ENTER immediately or wait for PIR falling edge
+      // Single PIR or all PIRs active: wait for falling edge
+      // Multiple PIRs with any inactive: start T_ENTER immediately (can detect re-entry through other active PIRs)
+      const anyPirInactive = await this.isAnyPirInactive();
       this.lastDoorEventTimestamp = Date.now();
 
-      // Start/restart T_ENTER timer (spec 8.1, 8.2)
-      this.startEnterTimer();
+      if (anyPirInactive) {
+        // At least one PIR is inactive - start T_ENTER immediately
+        // We can detect return motion through other active PIRs
+        this.log('Door event: at least one PIR inactive - starting T_ENTER immediately');
+        this.startEnterTimer();
+        this.waitingForPirFallingEdge = false;
+      } else {
+        // All PIRs are active - wait for falling edge before starting T_ENTER
+        // This prevents false negatives when someone stays active (e.g., bedroom scenario)
+        this.log('Door event: all PIRs active - waiting for PIR falling edge to start T_ENTER');
+        this.waitingForPirFallingEdge = true;
+      }
 
       // Manage T_CLEAR timer
       if (allClosed) {
@@ -282,11 +343,11 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
-   * Handles PIR motion sensor events.
+   * Handles PIR motion sensor events (rising edge - motion detected).
    *
    * Per spec section 8.3:
-   * - Mark PIR since last door event
    * - Update last PIR timestamp
+   * - Clear the waiting-for-falling-edge flag (motion detected = someone coming back)
    * - Branch based on door status (all closed vs. any open)
    *
    * 8.3.1: All doors closed → immediate OCCUPIED, stop T_CLEAR
@@ -295,12 +356,21 @@ class WIABDevice extends Homey.Device {
    * @param pirId - The device ID of the PIR sensor that detected motion
    */
   private async handlePirMotion(pirId: string): Promise<void> {
+    // Ignore sensor events if device is paused
+    if (this.isPaused) {
+      return;
+    }
+
     try {
       this.log(`PIR motion detected: ${pirId}`);
 
       // Update PIR tracking (spec 8.3)
       this.lastPirTimestamp = Date.now();
-      this.pirSinceLastDoorEvent = true;
+      // Clear the waiting flag since we have new motion (someone is back or never left)
+      this.waitingForPirFallingEdge = false;
+
+      // Stop any pending T_ENTER timer since motion confirms occupancy
+      this.stopEnterTimer();
 
       // Check door status
       const allClosed = areAllDoorsClosed(this.doorStates);
@@ -335,6 +405,45 @@ class WIABDevice extends Homey.Device {
       );
     } catch (error) {
       this.error('Failed to handle PIR motion:', error);
+    }
+  }
+
+  /**
+   * Handles PIR sensor falling edge (motion cleared).
+   *
+   * Only relevant if we were waiting for this after a door event.
+   * Starts T_ENTER timer to determine if someone is coming back within the timeout window.
+   *
+   * @param pirId - The device ID of the PIR sensor
+   */
+  private async handlePirCleared(pirId: string): Promise<void> {
+    // Ignore sensor events if device is paused
+    if (this.isPaused) {
+      return;
+    }
+
+    try {
+      this.log(`PIR motion cleared: ${pirId}`);
+
+      // Only meaningful if we're waiting for falling edge after a door event
+      if (!this.waitingForPirFallingEdge) {
+        this.log('PIR cleared but not waiting for falling edge - ignoring');
+        return;
+      }
+
+      // Clear the flag - we've received the falling edge we were waiting for
+      this.waitingForPirFallingEdge = false;
+
+      // Start T_ENTER timer to determine if motion resumes within timeout
+      // If motion resumes (someone coming back) → OCCUPIED
+      // If timeout expires without motion → UNOCCUPIED
+      this.startEnterTimer();
+
+      this.log(
+        `PIR cleared after door event - T_ENTER timer started to detect return`
+      );
+    } catch (error) {
+      this.error('Failed to handle PIR cleared:', error);
     }
   }
 
@@ -384,8 +493,10 @@ class WIABDevice extends Homey.Device {
    * Handles T_ENTER timer expiry.
    *
    * Per spec section 8.4:
-   * - If PIR occurred since last door event → OCCUPIED (safety net)
-   * - If no PIR occurred → UNOCCUPIED
+   * T_ENTER is started when PIR clears after a door event.
+   * It determines if someone is coming back within the timeout window:
+   * - If PIR occurs during T_ENTER → OCCUPIED (someone came back or never really left)
+   * - If T_ENTER expires without PIR → UNOCCUPIED (nobody came back, room is empty)
    */
   private async handleEnterTimerExpiry(): Promise<void> {
     try {
@@ -399,8 +510,14 @@ class WIABDevice extends Homey.Device {
         // Check if any doors are open (leaky room scenario)
         const anyOpen = isAnyDoorOpen(this.doorStates);
 
-        if (this.pirSinceLastDoorEvent) {
-          // PIR occurred during T_ENTER window
+        // Check if motion was detected since last door event
+        // (handlePirMotion sets lastPirTimestamp and clears waitingForPirFallingEdge)
+        const pirOccurredDuringWait = this.lastPirTimestamp !== null &&
+                                      this.lastDoorEventTimestamp !== null &&
+                                      this.lastPirTimestamp > this.lastDoorEventTimestamp;
+
+        if (pirOccurredDuringWait) {
+          // Motion detected during T_ENTER window after door event
           if (anyOpen) {
             // Leaky room: keep tri-state UNKNOWN, set stable occupancy OCCUPIED
             this.log('T_ENTER expired with PIR but doors open: tri-state stays UNKNOWN, stable = OCCUPIED');
@@ -413,7 +530,7 @@ class WIABDevice extends Homey.Device {
             this.lastStableOccupancy = StableOccupancyState.OCCUPIED;
           }
         } else {
-          // No PIR → UNOCCUPIED (spec 8.4)
+          // No PIR during T_ENTER window → UNOCCUPIED (spec 8.4)
           this.log('T_ENTER expired without PIR: setting UNOCCUPIED');
           this.occupancyState = OccupancyState.UNOCCUPIED;
           this.lastStableOccupancy = StableOccupancyState.UNOCCUPIED;
@@ -523,18 +640,31 @@ class WIABDevice extends Homey.Device {
    * - occupied = true if last_stable_occupancy == OCCUPIED
    * - occupied = false if last_stable_occupancy == UNOCCUPIED
    * - During UNKNOWN periods, the boolean retains the last stable value
+   * - When PAUSED, the boolean reflects the paused state (not the internal PAUSED state)
    */
   private async updateOccupancyOutput(): Promise<void> {
     try {
       const occupied = occupancyToBoolean(this.lastStableOccupancy);
-      await this.setCapabilityValue('alarm_occupancy', occupied);
 
-      // Also update the internal tri-state capability for debugging
-      await this.setCapabilityValue('occupancy_state', this.occupancyState);
+      try {
+        await this.setCapabilityValue('alarm_occupancy', occupied);
+      } catch (error) {
+        this.error(`Failed to set alarm_occupancy capability to ${occupied}:`, error);
+        throw error;
+      }
+
+      // Also update the internal quad-state capability for debugging
+      try {
+        await this.setCapabilityValue('occupancy_state', this.occupancyState);
+      } catch (error) {
+        this.error(`Failed to set occupancy_state capability to ${this.occupancyState}:`, error);
+        throw error;
+      }
 
       this.log(`Occupancy output: ${occupied}, internal state: ${this.occupancyState}`);
     } catch (error) {
       this.error('Failed to update occupancy output:', error);
+      throw error;
     }
   }
 
@@ -546,7 +676,7 @@ class WIABDevice extends Homey.Device {
    */
   private async getDoorSensorValue(doorId: string): Promise<boolean | null> {
     try {
-      const app = this.homey.app as any;
+      const app = this.homey.app as WIABApp;
       if (!app || !app.homeyApi) {
         this.error('Homey API not available');
         return null;
@@ -585,6 +715,249 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
+   * Checks if any trigger sensor (PIR) is currently inactive (FALSE).
+   *
+   * This is used to determine if we should start T_ENTER immediately on door event.
+   * With multiple PIRs: if ANY PIR is inactive, we can detect return motion through other active PIRs,
+   * so we start T_ENTER immediately. Only wait for falling edge if ALL PIRs are continuously active.
+   *
+   * @returns true if at least one trigger sensor is inactive (FALSE), false if all are active or none available
+   */
+  private async isAnyPirInactive(): Promise<boolean> {
+    try {
+      const app = this.homey.app as WIABApp;
+      if (!app || !app.homeyApi) {
+        return false; // If API unavailable, assume all PIRs are active
+      }
+
+      const devices = app.homeyApi.devices;
+      if (!devices) {
+        return false;
+      }
+
+      // Check each trigger sensor (PIR)
+      for (const sensor of this.triggerSensors) {
+        const device = devices[sensor.deviceId];
+        if (!device || !device.capabilitiesObj) {
+          continue; // Skip if device not found
+        }
+
+        const capabilitiesObj = device.capabilitiesObj;
+        if (!(sensor.capability in capabilitiesObj)) {
+          continue; // Skip if capability not found
+        }
+
+        const value = capabilitiesObj[sensor.capability]?.value;
+        const isPirActive = typeof value === 'boolean' ? value : false;
+
+        // If any PIR is inactive, return true
+        if (!isPirActive) {
+          this.log(`Detected inactive PIR: ${sensor.deviceId} - starting T_ENTER immediately`);
+          return true;
+        }
+      }
+
+      // All PIRs are active (or no PIRs available)
+      return false;
+    } catch (error) {
+      this.error('Error checking PIR status:', error);
+      return false; // Default to false if we can't check
+    }
+  }
+
+  /**
+   * Pauses the device and sets it to a specific occupancy state.
+   *
+   * When paused:
+   * - Device stops monitoring sensors (callbacks are ignored)
+   * - All timers are stopped
+   * - occupancy_state capability is set to PAUSED
+   * - alarm_occupancy is set to the specified state
+   *
+   * @param state - The occupancy state to set (OCCUPIED or UNOCCUPIED)
+   */
+  private async pauseDevice(state: StableOccupancyState): Promise<void> {
+    try {
+      this.log(`Pausing device with state: ${state}`);
+
+      // Mark as paused
+      this.isPaused = true;
+      this.pausedWithState = state;
+
+      // Stop all monitoring and timers
+      this.teardownSensorMonitoring();
+
+      // Set occupancy state to PAUSED
+      this.occupancyState = OccupancyState.PAUSED;
+      this.lastStableOccupancy = state;
+
+      // Update capabilities
+      await this.updateOccupancyOutput();
+
+      this.log(`Device paused with state: ${state}`);
+    } catch (error) {
+      this.error('Failed to pause device:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Unpauses the device and reinitializes sensor monitoring.
+   *
+   * This is idempotent - only the first call after pausing will reinitialize.
+   * Subsequent calls while already unpaused are ignored.
+   *
+   * When unpaused:
+   * - Device resumes sensor monitoring
+   * - Occupancy state is reinitialized based on current sensor values
+   * - Timers are restarted
+   */
+  private async unpauseDevice(): Promise<void> {
+    try {
+      // Only allow unpause once - subsequent calls are ignored
+      if (!this.isPaused) {
+        this.log('Device is not paused - unpause request ignored');
+        return;
+      }
+
+      this.log('Unpausing device and reinitializing with current sensor values');
+
+      // Mark as unpaused
+      this.isPaused = false;
+
+      // Reinitialize state machine to UNOCCUPIED (like onInit)
+      this.occupancyState = OccupancyState.UNOCCUPIED;
+      this.lastStableOccupancy = StableOccupancyState.UNOCCUPIED;
+
+      // Clear door states
+      this.doorStates.clear();
+
+      // Clear PIR tracking
+      this.lastDoorEventTimestamp = null;
+      this.waitingForPirFallingEdge = false;
+      this.lastPirTimestamp = null;
+
+      // Stop any running timers
+      this.stopEnterTimer();
+      this.stopClearTimer();
+
+      // Restart sensor monitoring (which will read initial PIR values)
+      await this.setupSensorMonitoring();
+
+      // Update output
+      await this.updateOccupancyOutput();
+
+      this.log('Device resumed, sensor monitoring reinitialized');
+    } catch (error) {
+      this.error('Failed to unpause device:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Checks if the device is currently paused.
+   *
+   * @returns true if device is paused, false otherwise
+   */
+  private isPausedCheck(): boolean {
+    return this.isPaused;
+  }
+
+  /**
+   * Registers action handlers for set_state and unpause actions.
+   *
+   * Called during device initialization to register the action listeners
+   * that will be invoked when the user triggers these actions in flows.
+   */
+  private registerActionHandlers(): void {
+    try {
+      // Register set_state action handler
+      const setStateCard = this.homey.flow.getActionCard('set_state');
+      if (!setStateCard) {
+        throw new Error('set_state action card not found in flow definition');
+      }
+
+      setStateCard.registerRunListener(
+        async (args: {
+          device: WIABDevice;
+          state: 'occupied' | 'unoccupied';
+        }) => {
+          args.device.log(`Set state action triggered: ${args.state}`);
+
+          // Convert action argument to StableOccupancyState
+          const state =
+            args.state === 'occupied'
+              ? StableOccupancyState.OCCUPIED
+              : StableOccupancyState.UNOCCUPIED;
+
+          // Pause device with specified state and propagate errors to flow engine
+          try {
+            await args.device.pauseDevice(state);
+          } catch (error) {
+            args.device.error(`Set state action failed: ${error}`, error);
+            throw error;
+          }
+        }
+      );
+
+      // Register unpause action handler
+      const unpauseCard = this.homey.flow.getActionCard('unpause');
+      if (!unpauseCard) {
+        throw new Error('unpause action card not found in flow definition');
+      }
+
+      unpauseCard.registerRunListener(async (args: { device: WIABDevice }) => {
+        args.device.log('Unpause action triggered');
+        try {
+          await args.device.unpauseDevice();
+        } catch (error) {
+          args.device.error(`Unpause action failed: ${error}`, error);
+          throw error;
+        }
+      });
+
+      this.log('Action handlers registered successfully');
+    } catch (error) {
+      this.error('Failed to register action handlers:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Registers condition handlers for is_paused condition.
+   *
+   * Called during device initialization to register the condition listener
+   * that will be evaluated when the user includes this condition in flows.
+   */
+  private registerConditionHandlers(): void {
+    try {
+      // Register is_paused condition handler
+      const isPausedCard = this.homey.flow.getConditionCard('is_paused');
+      if (!isPausedCard) {
+        throw new Error('is_paused condition card not found in flow definition');
+      }
+
+      isPausedCard.registerRunListener(
+        async (args: { device: WIABDevice }): Promise<boolean> => {
+          try {
+            const paused = args.device.isPausedCheck();
+            args.device.log(`Is paused condition evaluated: ${paused}`);
+            return paused;
+          } catch (error) {
+            args.device.error(`Is paused condition evaluation failed: ${error}`, error);
+            throw error;
+          }
+        }
+      );
+
+      this.log('Condition handlers registered successfully');
+    } catch (error) {
+      this.error('Failed to register condition handlers:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Validates and parses sensor settings JSON.
    *
    * @param jsonString - JSON string containing sensor configuration array
@@ -613,4 +986,5 @@ class WIABDevice extends Homey.Device {
   }
 }
 
+export default WIABDevice;
 module.exports = WIABDevice;
