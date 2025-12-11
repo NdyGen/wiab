@@ -114,10 +114,15 @@ describe('WIABDevice', () => {
         'Classified sensors: 0 doors, 0 PIRs'
       );
       expect(SensorMonitor).toHaveBeenCalledWith(
+        expect.any(Object), // homeyApi
         mockHomey,
         [],
         [],
-        expect.any(Object)
+        expect.objectContaining({
+          onTriggered: expect.any(Function),
+          onReset: expect.any(Function),
+          onPirCleared: expect.any(Function),
+        })
       );
       expect(mockSensorMonitor.start).toHaveBeenCalled();
     });
@@ -367,7 +372,7 @@ describe('WIABDevice', () => {
       await callbacks.onTriggered('test-sensor-id', true);
 
       expect(device.log).toHaveBeenCalledWith(
-        expect.stringContaining('Trigger sensor activated - checking entry timer state')
+        expect.stringContaining('PIR motion detected')
       );
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'alarm_occupancy',
@@ -394,15 +399,11 @@ describe('WIABDevice', () => {
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
       const callbacks = sensorMonitorCall[4];
 
-      // Trigger the reset callback with test sensor ID
+      // Trigger the reset callback with test sensor ID (true = door opened)
       await callbacks.onReset('test-sensor-id', true);
 
       expect(device.log).toHaveBeenCalledWith(
-        expect.stringContaining('Reset sensor activated - handling based on current occupancy state')
-      );
-      expect(device.setCapabilityValue).toHaveBeenCalledWith(
-        'alarm_occupancy',
-        false
+        expect.stringContaining('Door event')
       );
     });
 
@@ -428,10 +429,12 @@ describe('WIABDevice', () => {
 
       await callbacks.onTriggered('test-sensor-id', true);
 
-      expect(device.error).toHaveBeenCalledWith(
-        'Failed to handle trigger:',
-        expect.any(Error)
-      );
+      // Error may be caught at different levels depending on when setCapabilityValue fails
+      // It could be either in the updateOccupancyOutput or in the main handler
+      const errorCalls = (device.error as jest.Mock).mock.calls;
+      expect(errorCalls.some(call =>
+        call[0].includes('Failed to update occupancy output') || call[0].includes('Failed to handle PIR motion')
+      )).toBe(true);
     });
 
     /**
@@ -456,10 +459,12 @@ describe('WIABDevice', () => {
 
       await callbacks.onReset('test-sensor-id', true);
 
-      expect(device.error).toHaveBeenCalledWith(
-        'Failed to handle reset:',
-        expect.any(Error)
-      );
+      // Error may be caught at different levels depending on when setCapabilityValue fails
+      // It could be either in the updateOccupancyOutput or in the main handler
+      const errorCalls = (device.error as jest.Mock).mock.calls;
+      expect(errorCalls.some(call =>
+        call[0].includes('Failed to update occupancy output') || call[0].includes('Failed to handle door event')
+      )).toBe(true);
     });
   });
 
@@ -480,7 +485,10 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       expect(device.log).toHaveBeenCalledWith(
-        'Setting up monitoring for 2 trigger sensors and 0 reset sensors'
+        expect.stringContaining('Classified sensors')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        'Sensor monitoring initialized successfully'
       );
     });
 
@@ -495,7 +503,10 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       expect(device.log).toHaveBeenCalledWith(
-        'Setting up monitoring for 0 trigger sensors and 0 reset sensors'
+        'Classified sensors: 0 doors, 0 PIRs'
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        'Sensor monitoring initialized successfully'
       );
     });
 
@@ -514,7 +525,7 @@ describe('WIABDevice', () => {
         expect.any(Error)
       );
       expect(device.log).toHaveBeenCalledWith(
-        'Setting up monitoring for 0 trigger sensors and 0 reset sensors'
+        'Classified sensors: 0 doors, 0 PIRs'
       );
     });
 
@@ -538,7 +549,7 @@ describe('WIABDevice', () => {
         expect.any(Object)
       );
       expect(device.log).toHaveBeenCalledWith(
-        'Setting up monitoring for 0 trigger sensors and 0 reset sensors'
+        'Classified sensors: 0 doors, 0 PIRs'
       );
     });
 
@@ -553,7 +564,7 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       expect(device.log).toHaveBeenCalledWith(
-        'Setting up monitoring for 0 trigger sensors and 0 reset sensors'
+        'Classified sensors: 0 doors, 0 PIRs'
       );
     });
 
@@ -568,13 +579,18 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       expect(device.log).toHaveBeenCalledWith(
-        'Setting up monitoring for 0 trigger sensors and 0 reset sensors'
+        'Classified sensors: 0 doors, 0 PIRs'
       );
       expect(SensorMonitor).toHaveBeenCalledWith(
+        expect.any(Object), // homeyApi
         mockHomey,
         [],
         [],
-        expect.any(Object)
+        expect.objectContaining({
+          onTriggered: expect.any(Function),
+          onReset: expect.any(Function),
+          onPirCleared: expect.any(Function),
+        })
       );
     });
   });

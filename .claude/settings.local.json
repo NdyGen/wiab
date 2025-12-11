@@ -41,7 +41,21 @@
       "Bash(gh pr create:*)",
       "Bash(xargs -I {} bash -c 'echo {} | sed \"\"\"\"s|.*runs/||;s|/.*||\"\"\"\"')",
       "Bash(xargs gh run view:*)",
-      "Bash(npm test:*)"
+      "Bash(npm test:*)",
+      "mcp__sequential-thinking__sequentialthinking",
+      "Bash(npm test:coverage:*)",
+      "Bash(npm run test:coverage:*)",
+      "mcp__playwright__browser_snapshot",
+      "Bash(git remote:*)",
+      "Bash(npm run test:*)",
+      "Bash(timeout 30 npm run test:*)",
+      "Bash(pkill:*)",
+      "Bash(timeout 60 npm run test:*)",
+      "Bash(timeout 10 cat:*)",
+      "Bash(timeout 120 npm run test)",
+      "Bash(timeout 60 npm test:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)"
     ],
     "deny": [],
     "ask": []

@@ -9,14 +9,16 @@ type MockHomey = Record<string, unknown>;
 
 export default {
   Device: class MockDevice {
-    homey: MockHomey;
+    homey: MockHomey = {};
     log = jest.fn();
     error = jest.fn();
     getSetting = jest.fn();
     setCapabilityValue = jest.fn();
+    hasCapability = jest.fn();
+    addCapability = jest.fn();
   },
   App: class MockApp {
-    homey: MockHomey;
+    homey: MockHomey = {};
     log = jest.fn();
     error = jest.fn();
   },
