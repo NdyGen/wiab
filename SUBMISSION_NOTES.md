@@ -34,22 +34,40 @@ This error occurs even when:
    - `/drivers/wiab-device/assets/images/large.png` (500x500px)
    - `/drivers/wiab-device/assets/images/xlarge.png` (500x500px)
 
-### Recommended Next Steps
+### Status: Issue Reported to Homey Team
 
-**Option 1: Report to Homey and Wait (Recommended)**
-- File an issue on the Homey GitHub repository
-- Link: https://github.com/athombv/homey-sdk
-- Include: This reproduction case and error messages
-- Wait for Homey team to release a fix in CLI v3.10.1+
+**GitHub Issue #414 Filed**
+- Repository: https://github.com/athombv/homey-apps-sdk-issues
+- Issue: https://github.com/athombv/homey-apps-sdk-issues/issues/414
+- Title: "Homey CLI v3.10.0: Driver images property stripped during build but required for publish validation"
+- Date Filed: 2025-12-11
+- Status: Open - Awaiting Homey team response and fix
 
-**Option 2: Workaround (If Available)**
-- Check Homey community forums for reported workarounds
-- Monitor Homey SDK releases for fixes
-- Some users may have patches or alternative submission methods
+The comprehensive issue report includes:
+- Exact reproduction steps
+- Root cause analysis with evidence
+- All workarounds attempted
+- Full environment and app details
+- Suggested fixes for the Homey team
 
-**Option 3: Manual API Submission (If Possible)**
-- Contact Homey support to explore direct API submission
-- Ask if there's a bypass for the CLI validation bug
+### Waiting for Fix
+
+The app is now waiting for:
+1. Homey team to acknowledge and investigate the bug
+2. Fix to be released in CLI v3.10.1 or later
+3. Once fixed, run `homey app publish` to submit to App Store
+
+### Alternative Options (If Needed)
+
+**Option 1: Contact Homey Support**
+- If CLI fix takes too long, contact Homey support
+- Ask if there's a bypass or alternative submission method
+- Reference GitHub issue #414
+
+**Option 2: Monitor CLI Releases**
+- Subscribe to Homey SDK releases
+- Check https://github.com/athombv/homey-apps-sdk-issues/releases
+- Upgrade CLI once v3.10.1+ is released
 
 ### Files Prepared for Submission
 - `.homeycompose/drivers/wiab-device/driver.compose.json` - Has images defined
@@ -62,6 +80,9 @@ This error occurs even when:
 - 2025-12-11: Release v1.0.0 created and tagged
 - 2025-12-11: Documentation finalized
 - 2025-12-11: Submission blocked by Homey CLI v3.10.0 bug
+- 2025-12-11: Community forum searched for workarounds (none found)
+- 2025-12-11: GitHub issue #414 filed with Homey team
+- 2025-12-11: App awaiting CLI fix to proceed with submission
 
 ### Contact Information
 - App ID: `net.dongen.wiab`
