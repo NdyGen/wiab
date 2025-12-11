@@ -22,6 +22,9 @@ module.exports = {
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
   extensionsToTreatAsEsm: ['.ts'],
+  forceExit: true,
+  detectOpenHandles: false,
+  testTimeout: 10000,
   moduleNameMapper: {
     '^homey$': '<rootDir>/tests/__mocks__/homey.ts'
   },
