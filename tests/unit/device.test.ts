@@ -14,7 +14,7 @@
 
 import WIABDevice from '../../drivers/wiab-device/device';
 import { SensorMonitor } from '../../lib/SensorMonitor';
-import { createMockHomey } from '../setup';
+import { createMockHomey, createMockHomeyApi } from '../setup';
 
 // Mock SensorMonitor to control its behavior in tests
 jest.mock('../../lib/SensorMonitor');
@@ -35,7 +35,7 @@ describe('WIABDevice', () => {
     mockSensorMonitor = {
       start: jest.fn(),
       stop: jest.fn(),
-    } as jest.Mocked<SensorMonitor>;
+    } as unknown as jest.Mocked<SensorMonitor>;
 
     // Make SensorMonitor constructor return our mock
     (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mockImplementation(
@@ -46,11 +46,20 @@ describe('WIABDevice', () => {
     device = new WIABDevice();
     (device as unknown as { homey: ReturnType<typeof createMockHomey> }).homey = mockHomey;
 
+    // Setup mock app with homeyApi for device to use
+    const mockHomeyApi = createMockHomeyApi();
+    const mockApp = {
+      homeyApi: mockHomeyApi,
+    };
+    (device as unknown as { homey: { app: unknown } }).homey.app = mockApp;
+
     // Mock device methods
     device.log = jest.fn();
     device.error = jest.fn();
     device.getSetting = jest.fn();
     device.setCapabilityValue = jest.fn().mockResolvedValue(undefined);
+    device.hasCapability = jest.fn(() => true);
+    device.addCapability = jest.fn().mockResolvedValue(undefined);
   });
 
   describe('onInit', () => {
@@ -72,18 +81,20 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       expect(device.log).toHaveBeenCalledWith(
-        'WIAB device has been initialized'
+        'WIAB device initializing with tri-state occupancy model'
       );
       expect(device.log).toHaveBeenCalledWith(
         'WIAB device initialization complete'
       );
       expect(SensorMonitor).toHaveBeenCalledWith(
-        mockHomey,
+        expect.any(Object), // homeyApi
+        mockHomey, // logger
         [{ deviceId: 'motion-1', capability: 'alarm_motion' }],
         [{ deviceId: 'contact-1', capability: 'alarm_contact' }],
         expect.objectContaining({
           onTriggered: expect.any(Function),
           onReset: expect.any(Function),
+          onPirCleared: expect.any(Function),
         })
       );
       expect(mockSensorMonitor.start).toHaveBeenCalled();
@@ -100,7 +111,7 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       expect(device.log).toHaveBeenCalledWith(
-        'Setting up monitoring for 0 trigger sensors and 0 reset sensors'
+        'Classified sensors: 0 doors, 0 PIRs'
       );
       expect(SensorMonitor).toHaveBeenCalledWith(
         mockHomey,
@@ -191,7 +202,7 @@ describe('WIABDevice', () => {
       });
 
       expect(device.log).toHaveBeenCalledWith(
-        'WIAB device settings were changed'
+        'WIAB device settings changed:', ['triggerSensors']
       );
       expect(device.log).toHaveBeenCalledWith(
         'Sensor configuration changed, reinitializing monitoring'
@@ -258,7 +269,7 @@ describe('WIABDevice', () => {
       });
 
       expect(device.log).toHaveBeenCalledWith(
-        'WIAB device settings were changed'
+        'WIAB device settings changed:', ['timeout']
       );
       // Should not log sensor reconfiguration
       expect(device.log).not.toHaveBeenCalledWith(
@@ -311,7 +322,7 @@ describe('WIABDevice', () => {
       // Delete device
       await device.onDeleted();
 
-      expect(device.log).toHaveBeenCalledWith('WIAB device has been deleted');
+      expect(device.log).toHaveBeenCalledWith('WIAB device deleted, cleaning up resources');
       expect(device.log).toHaveBeenCalledWith(
         'Tearing down sensor monitoring'
       );
@@ -325,7 +336,7 @@ describe('WIABDevice', () => {
       // Don't initialize device, just delete
       await device.onDeleted();
 
-      expect(device.log).toHaveBeenCalledWith('WIAB device has been deleted');
+      expect(device.log).toHaveBeenCalledWith('WIAB device deleted, cleaning up resources');
       // Should not throw error
       expect(mockSensorMonitor.stop).not.toHaveBeenCalled();
     });
@@ -353,7 +364,7 @@ describe('WIABDevice', () => {
       const callbacks = sensorMonitorCall[4];
 
       // Trigger the callback with test sensor ID
-      await callbacks.onTriggered('test-sensor-id');
+      await callbacks.onTriggered('test-sensor-id', true);
 
       expect(device.log).toHaveBeenCalledWith(
         expect.stringContaining('Trigger sensor activated - checking entry timer state')
@@ -384,7 +395,7 @@ describe('WIABDevice', () => {
       const callbacks = sensorMonitorCall[4];
 
       // Trigger the reset callback with test sensor ID
-      await callbacks.onReset('test-sensor-id');
+      await callbacks.onReset('test-sensor-id', true);
 
       expect(device.log).toHaveBeenCalledWith(
         expect.stringContaining('Reset sensor activated - handling based on current occupancy state')
@@ -415,7 +426,7 @@ describe('WIABDevice', () => {
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
       const callbacks = sensorMonitorCall[4];
 
-      await callbacks.onTriggered('test-sensor-id');
+      await callbacks.onTriggered('test-sensor-id', true);
 
       expect(device.error).toHaveBeenCalledWith(
         'Failed to handle trigger:',
@@ -443,7 +454,7 @@ describe('WIABDevice', () => {
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
       const callbacks = sensorMonitorCall[4];
 
-      await callbacks.onReset('test-sensor-id');
+      await callbacks.onReset('test-sensor-id', true);
 
       expect(device.error).toHaveBeenCalledWith(
         'Failed to handle reset:',
@@ -594,14 +605,14 @@ describe('WIABDevice', () => {
       const callbacks = sensorMonitorCall[4];
 
       // Trigger sensor
-      await callbacks.onTriggered('test-sensor-id');
+      await callbacks.onTriggered('test-sensor-id', true);
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'alarm_occupancy',
         true
       );
 
       // Reset sensor
-      await callbacks.onReset('test-sensor-id');
+      await callbacks.onReset('test-sensor-id', true);
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'alarm_occupancy',
         false
@@ -651,6 +662,229 @@ describe('WIABDevice', () => {
       // New monitor should be created and started
       expect(SensorMonitor).toHaveBeenCalledTimes(2);
       expect(mockSensorMonitor.start).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('Multi-PIR T_ENTER Logic', () => {
+    /**
+     * Test scenario: Single PIR, all active - should wait for falling edge
+     *
+     * Bedroom scenario: Person in bed (PIR active), door opens
+     * Expected: Wait for PIR falling edge before starting T_ENTER
+     */
+    it('should wait for PIR falling edge when single PIR is active', async () => {
+      // Setup: Single PIR, currently active
+      const triggerSensors = JSON.stringify([
+        { deviceId: 'pir-1', capability: 'alarm_motion' },
+      ]);
+      const resetSensors = JSON.stringify([
+        { deviceId: 'door-1', capability: 'alarm_contact' },
+      ]);
+
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce(resetSensors);
+
+      await device.onInit();
+
+      // Mock HomeyAPI to show PIR is active (TRUE)
+      const mockHomeyApi = createMockHomeyApi();
+      const mockPirDevice = {
+        capabilitiesObj: {
+          alarm_motion: { value: true },
+        },
+      };
+      (mockHomeyApi.devices as Record<string, unknown>)['pir-1'] = mockPirDevice;
+      (device as unknown as { homey: { app: { homeyApi: unknown } } }).homey.app.homeyApi = mockHomeyApi;
+
+      // Simulate door event (reset sensor activation)
+      const sensorMonitorCalls = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls;
+      const lastCall = sensorMonitorCalls[sensorMonitorCalls.length - 1];
+      const callbacks = lastCall[4];
+
+      jest.clearAllMocks();
+
+      // Trigger door event (reset sensor)
+      await callbacks.onReset('door-1', true);
+
+      // Verify: T_ENTER timer should NOT be started yet
+      // (it would only be started after onPirCleared is called)
+      expect(device.log).toHaveBeenCalledWith(
+        'Door event: all PIRs active - waiting for PIR falling edge to start T_ENTER'
+      );
+    });
+
+    /**
+     * Test scenario: Multiple PIRs with one inactive - should start T_ENTER immediately
+     *
+     * Multi-room scenario: Person exits bathroom (bathroom PIR FALSE),
+     * living room PIR active (TRUE), bathroom door opens
+     * Expected: Start T_ENTER immediately (can detect return through living room PIR)
+     */
+    it('should start T_ENTER immediately when any PIR is inactive', async () => {
+      // Setup: Two PIRs
+      const triggerSensors = JSON.stringify([
+        { deviceId: 'pir-bathroom', capability: 'alarm_motion' },
+        { deviceId: 'pir-living', capability: 'alarm_motion' },
+      ]);
+      const resetSensors = JSON.stringify([
+        { deviceId: 'door-bathroom', capability: 'alarm_contact' },
+      ]);
+
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce(resetSensors);
+
+      await device.onInit();
+
+      // Mock HomeyAPI with multi-PIR setup:
+      // - Bathroom PIR is INACTIVE (person just left)
+      // - Living room PIR is ACTIVE (person might still be there)
+      const mockHomeyApi = createMockHomeyApi();
+      (mockHomeyApi.devices as Record<string, unknown>)['pir-bathroom'] = {
+        capabilitiesObj: {
+          alarm_motion: { value: false }, // Inactive!
+        },
+      };
+      (mockHomeyApi.devices as Record<string, unknown>)['pir-living'] = {
+        capabilitiesObj: {
+          alarm_motion: { value: true }, // Active
+        },
+      };
+      (device as unknown as { homey: { app: { homeyApi: unknown } } }).homey.app.homeyApi = mockHomeyApi;
+
+      // Get callbacks from the most recent SensorMonitor call
+      const sensorMonitorCalls = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls;
+      const lastCall = sensorMonitorCalls[sensorMonitorCalls.length - 1];
+      const callbacks = lastCall[4];
+
+      jest.clearAllMocks();
+
+      // Simulate door event on bathroom
+      await callbacks.onReset('door-bathroom', true);
+
+      // Verify: Should log that at least one PIR is inactive and start T_ENTER immediately
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('at least one PIR inactive - starting T_ENTER immediately')
+      );
+    });
+
+    /**
+     * Test scenario: PIR falling edge triggers T_ENTER start
+     *
+     * Bedroom scenario: Person in bed leaves (PIR falls from TRUE to FALSE)
+     * Expected: handlePirCleared starts T_ENTER timer
+     */
+    it('should start T_ENTER when PIR falling edge detected after door event', async () => {
+      // Setup
+      const triggerSensors = JSON.stringify([
+        { deviceId: 'pir-1', capability: 'alarm_motion' },
+      ]);
+      const resetSensors = JSON.stringify([
+        { deviceId: 'door-1', capability: 'alarm_contact' },
+      ]);
+
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce(resetSensors);
+
+      await device.onInit();
+
+      // Setup mock HomeyAPI with active PIR
+      const mockHomeyApi = createMockHomeyApi();
+      (mockHomeyApi.devices as Record<string, unknown>)['pir-1'] = {
+        capabilitiesObj: {
+          alarm_motion: { value: true },
+        },
+      };
+      (device as unknown as { homey: { app: { homeyApi: unknown } } }).homey.app.homeyApi = mockHomeyApi;
+
+      // Get callbacks from the most recent SensorMonitor call
+      const sensorMonitorCalls = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls;
+      const lastCall = sensorMonitorCalls[sensorMonitorCalls.length - 1];
+      const callbacks = lastCall[4];
+
+      jest.clearAllMocks();
+
+      // Step 1: Door opens with active PIR
+      await callbacks.onReset('door-1', true);
+
+      expect(device.log).toHaveBeenCalledWith(
+        'Door event: all PIRs active - waiting for PIR falling edge to start T_ENTER'
+      );
+
+      jest.clearAllMocks();
+
+      // Step 2: PIR clears (falling edge)
+      if (callbacks.onPirCleared) {
+        await callbacks.onPirCleared('pir-1');
+      }
+
+      // Verify T_ENTER started
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('PIR cleared after door event - T_ENTER timer started')
+      );
+    });
+
+    /**
+     * Test scenario: PIR motion during T_ENTER window cancels the timer
+     *
+     * Person exits, PIR clears (T_ENTER starts), then returns and PIR triggers again
+     * Expected: T_ENTER timer stops, occupancy stays OCCUPIED
+     */
+    it('should cancel T_ENTER timer when PIR motion detected', async () => {
+      // Setup
+      const triggerSensors = JSON.stringify([
+        { deviceId: 'pir-1', capability: 'alarm_motion' },
+      ]);
+      const resetSensors = JSON.stringify([
+        { deviceId: 'door-1', capability: 'alarm_contact' },
+      ]);
+
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce(resetSensors);
+
+      await device.onInit();
+
+      // Setup mock HomeyAPI
+      const mockHomeyApi = createMockHomeyApi();
+      (mockHomeyApi.devices as Record<string, unknown>)['pir-1'] = {
+        capabilitiesObj: {
+          alarm_motion: { value: true },
+        },
+      };
+      (device as unknown as { homey: { app: { homeyApi: unknown } } }).homey.app.homeyApi = mockHomeyApi;
+
+      // Get callbacks from the most recent SensorMonitor call
+      const sensorMonitorCalls = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls;
+      const lastCall = sensorMonitorCalls[sensorMonitorCalls.length - 1];
+      const callbacks = lastCall[4];
+
+      jest.clearAllMocks();
+
+      // Step 1: Door opens
+      await callbacks.onReset('door-1', true);
+      jest.clearAllMocks();
+
+      // Step 2: PIR clears (T_ENTER starts)
+      if (callbacks.onPirCleared) {
+        await callbacks.onPirCleared('pir-1');
+      }
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('PIR cleared after door event')
+      );
+      jest.clearAllMocks();
+
+      // Step 3: PIR motion detected again (person returns)
+      await callbacks.onTriggered('pir-1', true);
+
+      // Verify T_ENTER timer was stopped
+      expect(device.log).toHaveBeenCalledWith(
+        'PIR motion detected: pir-1'
+      );
+      // The handlePirMotion should have called stopEnterTimer()
+      // and cleared waitingForPirFallingEdge flag
     });
   });
 });

@@ -361,7 +361,7 @@ export class SensorMonitor {
               this.callbacks.onReset(sensor.deviceId, value);
             }
           } else {
-            // PIR sensors (trigger sensors): only trigger on rising edge (motion detected)
+            // PIR sensors (trigger sensors): trigger on rising edge (motion detected) and falling edge (motion cleared)
             if (value && !lastValue) {
               this.logger.log(
                 `[CAPABILITY] ✅ Trigger sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
@@ -369,13 +369,17 @@ export class SensorMonitor {
                 `Calling onTriggered() callback with sensorId: ${sensor.deviceId}`
               );
               this.callbacks.onTriggered(sensor.deviceId, value);
-            } else {
-              // Falling edge: motion cleared - ignore
+            } else if (!value && lastValue) {
+              // Falling edge: motion cleared
               this.logger.log(
                 `[CAPABILITY] ⬇️ Trigger sensor FALLING EDGE: ` +
                 `${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
-                `from ${lastValue} to ${value} - IGNORED (motion clearing is not an event)`
+                `from ${lastValue} to ${value} - MOTION CLEARED - ` +
+                `Calling onPirCleared() callback with sensorId: ${sensor.deviceId}`
               );
+              if (this.callbacks.onPirCleared) {
+                this.callbacks.onPirCleared(sensor.deviceId);
+              }
             }
           }
         } else {
