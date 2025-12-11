@@ -11,14 +11,16 @@ This approach provides more reliable presence detection than individual motion s
 ## Features
 
 - Create virtual occupancy sensors that aggregate multiple physical sensors
-- Tri-state occupancy model (UNKNOWN, OCCUPIED, UNOCCUPIED) with intelligent state transitions
+- Quad-state occupancy model (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED) with intelligent state transitions
 - Configure trigger sensors (motion detectors, presence sensors) that activate occupancy
 - Configure reset sensors (door/window contacts) that deactivate occupancy
 - Automatic sensor classification based on capability names
 - Works with any Homey device that has boolean capabilities (alarms, contacts, motion, etc.)
-- Event-driven real-time monitoring using HomeyAPI WebSocket for instant response
+- Real-time monitoring using capability listeners for instant response to sensor changes
 - Configurable T_ENTER timer (5-60s) for entry/exit detection window
 - Configurable T_CLEAR timer (60-3600s) for auto-vacate timeout with open doors
+- Manual control via action cards: **Set occupancy state** and **Resume monitoring**
+- Check device pause status with **Is paused** condition card
 - Easy integration with Homey flows
 - Support for both local and cloud Homey platforms
 
@@ -164,10 +166,28 @@ WIAB analyzes the capability name to determine the sensor type. Motion/presence 
 ### Device Capabilities
 WIAB devices expose two capabilities for use in flows:
 - **`alarm_occupancy`** (boolean): Simple ON/OFF occupancy state for flow compatibility
-- **`occupancy_state`** (enum): Tri-state value (UNKNOWN, OCCUPIED, UNOCCUPIED) for advanced logic
+- **`occupancy_state`** (enum): Quad-state value (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED) for advanced logic
 
-### Then Card
-Not applicable - WIAB devices respond to other sensors and don't have controllable actions.
+### Then Card (Action Cards)
+WIAB provides two action cards for manual occupancy control:
+
+**Set Occupancy State** - Pauses the device and sets it to a specific occupancy state
+- Pauses automatic sensor monitoring
+- Sets `occupancy_state` to OCCUPIED or UNOCCUPIED
+- Sets `alarm_occupancy` to true or false
+- Useful for nighttime routines or temporary overrides
+- Example: Pause at night to prevent pet motion from triggering lights
+
+**Resume Monitoring** - Resumes automatic sensor monitoring
+- Stops paused mode
+- Reinitializes occupancy state based on current sensor values
+- Sensor listeners restart automatically
+- Returns device to normal operation
+
+### Condition Card
+**Is Paused** - Check if the device is currently in paused mode
+- Returns true if device is paused, false otherwise
+- Use in flows to check pause status before taking action
 
 ### Example Flow 1: Turn on lights when occupancy detected
 ```
@@ -187,6 +207,23 @@ WHEN: WIAB Device occupancy turned on
 AND: Temperature is below 20°C
 THEN: Set thermostat to 21°C
 ```
+
+### Example Flow 4: Nighttime routine with pause
+```
+WHEN: I say "goodnight"
+THEN: Set WIAB device to Unoccupied
+AND: Turn off all lights
+AND: Set thermostat to 18°C
+```
+(Device pauses; sensor motion from pets won't trigger lights)
+
+### Example Flow 5: Morning resume
+```
+WHEN: Time is 7:00 AM
+THEN: Resume WIAB device monitoring
+AND: Enable all automations
+```
+(Device returns to normal monitoring mode)
 
 ## Troubleshooting
 
@@ -219,22 +256,41 @@ THEN: Set thermostat to 21°C
 - Check the device actually supports that capability (in device settings)
 - Common mistake: using `motion` instead of `alarm_motion`
 
+## Known Limitations
+
+- **Motion-based only**: The app detects occupancy through motion/presence sensors. It cannot detect stationary presence (e.g., a person sitting still without moving).
+- **Requires visible motion**: For rooms where occupancy needs to be detected without motion (e.g., reading quietly), motion sensors alone are insufficient.
+- **Door/window sensors are exit indicators**: Door contacts indicate someone may exit, not whether the room is actually occupied. Occupancy is confirmed only when combined with motion sensors.
+- **Sensor availability required**: All configured sensors must be reachable and responsive. Offline or unavailable devices are skipped, potentially affecting detection accuracy.
+- **Capability listener dependency**: Occupancy detection relies on real-time capability updates from the Homey HomeyAPI. If devices don't support capability listeners, detection may be delayed.
+- **Multiple sensor configuration needed**: The app works best with multiple sensors (trigger + reset). Single-sensor setups may not provide reliable occupancy detection.
+- **Timer-dependent**: Accurate occupancy detection depends on correctly configured T_ENTER and T_CLEAR timers. Poor timer settings can lead to false positives or negatives.
+- **Reset sensor ambiguity**: Opening a door indicates possible exit but not actual room vacancy. Closing the door without motion is interpreted as exit, even if the room is still occupied.
+
+## Homey Compatibility
+
+- **Minimum Firmware Version**: Homey firmware >=12.2.0
+- **Supported Platforms**: Local Homey and Cloud Homey (both supported equally)
+- **SDK Version**: Homey SDK v3
+- **Device Support**: Works with any Homey device exposing boolean alarm capabilities
+
 ## How It Works
 
-WIAB implements an event-driven tri-state occupancy model using HomeyAPI WebSocket connections for real-time sensor monitoring:
+WIAB implements an event-driven quad-state occupancy model using real-time capability listeners for sensor monitoring:
 
 ### Monitoring Architecture
-1. **Event-Driven**: Uses HomeyAPI WebSocket `$update` events for instant sensor state notifications (no polling)
+1. **Event-Driven**: Uses capability listeners for instant sensor state notifications (real-time, no polling)
 2. **Real-Time Response**: Sensor changes trigger callbacks immediately via `makeCapabilityInstance()`
 3. **Edge Detection**: Only responds to FALSE → TRUE transitions (sensor activation events)
 4. **Priority System**: Reset sensors (doors) are checked before trigger sensors (motion)
 
-### Tri-State Occupancy Model
-The device maintains three occupancy states:
+### Quad-State Occupancy Model
+The device maintains four occupancy states:
 
 - **UNKNOWN**: Transitional state during timer windows
 - **OCCUPIED**: Room is occupied (alarm_occupancy = true)
 - **UNOCCUPIED**: Room is empty (alarm_occupancy = false)
+- **PAUSED**: Device is paused, sensors are ignored (manual override)
 
 ### State Transitions
 
@@ -260,16 +316,17 @@ The device maintains three occupancy states:
 
 ## Technical Details
 
-- **Monitoring Method**: Event-driven using HomeyAPI WebSocket connections (no polling)
+- **Monitoring Method**: Real-time event-driven using capability listeners (no polling)
 - **Sensor Detection**: Edge-based (detects FALSE → TRUE transitions)
 - **Priority System**: Reset sensors (doors) checked before trigger sensors (motion)
-- **State Model**: Tri-state (UNKNOWN, OCCUPIED, UNOCCUPIED)
+- **State Model**: Quad-state (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED)
 - **Timers**:
-  - T_ENTER: 5-60 seconds (default 20s)
-  - T_CLEAR: 60-3600 seconds (default 600s)
+  - T_ENTER: 5-60 seconds (default 20s) - Window after door events to detect entry/exit
+  - T_CLEAR: 60-3600 seconds (default 600s) - Timeout to mark room empty when doors open
 - **SDK Version**: Homey SDK v3
 - **Compatibility**: Homey firmware >=12.2.0
 - **Platform Support**: Both local and cloud Homey
+- **Capability Listeners**: Uses `makeCapabilityInstance()` for real-time updates (not WebSocket polling)
 - **Dependencies**:
   - homey: ^3.0.0
   - homey-api: ^3.14.22
@@ -318,13 +375,32 @@ Contributions are welcome! Please feel free to submit pull requests or open issu
 ## Changelog
 
 ### Version 1.0.0
-- Initial release
-- Virtual occupancy sensor with trigger and reset capabilities
-- Tri-state occupancy model (UNKNOWN, OCCUPIED, UNOCCUPIED)
-- Event-driven sensor monitoring using HomeyAPI WebSocket connections
+**Initial Release - Virtual Occupancy Sensor with Manual Control**
+
+**Core Features:**
+- Virtual occupancy sensor combining multiple physical sensors
+- Quad-state occupancy model (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED)
+- Real-time event-driven monitoring using capability listeners
 - Configurable T_ENTER and T_CLEAR timers for intelligent state transitions
 - Automatic sensor classification based on capability names
-- JSON-based sensor configuration
-- Support for multiple sensor types
-- Comprehensive error handling and logging
+- JSON-based sensor configuration for trigger (motion/presence) and reset (door/window) sensors
+- Support for multiple sensors per type with priority-based conflict resolution
+
+**Action Cards:**
+- SET STATE action: Pauses device and sets occupancy state to OCCUPIED or UNOCCUPIED
+- UNPAUSE action: Resumes automatic sensor monitoring with state reinitialization
+
+**Condition Cards:**
+- IS PAUSED condition: Check if device is currently in paused mode
+
+**Flow Integration:**
+- When card: Triggers on occupancy state changes
+- And card: Checks current occupancy state
+- Full flow compatibility with Homey automation engine
+
+**Technical:**
+- Comprehensive error handling and validation
 - Real-time state updates with edge detection
+- Support for both local and cloud Homey platforms
+- Homey SDK v3 compatible
+- Requires Homey firmware >=12.2.0
