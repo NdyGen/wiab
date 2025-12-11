@@ -677,7 +677,7 @@ if (!device.hasCapability(sensor.capability)) {
 
 ## Development Workflow
 
-### Build Process
+### Quick Start for Single Feature
 
 ```bash
 # 1. Install dependencies
@@ -699,18 +699,44 @@ npm run lint
 npm run validate
 ```
 
+### Parallel Development with Multiple Agents
+
+For AI agents working on multiple features simultaneously, **use git worktrees** to avoid branch conflicts and enable true parallel development.
+
+See [Parallel Development with Git Worktrees](#parallel-development-with-git-worktrees) section below for complete instructions and examples.
+
 ### Pre-Commit Checklist
 
-Before committing code:
+Before committing code, run these checks locally to ensure code quality:
 
-1. All tests pass: `npm test`
-2. Coverage meets threshold (70%): `npm run test:coverage`
-3. No linting errors: `npm run lint`
-4. TypeScript compiles: `npm run build`
-5. Homey validation passes: `npm run validate`
-6. Code is documented (public methods have Javadoc)
-7. Error handling is implemented
-8. Logging statements are present for key events
+```bash
+# 1. Build TypeScript
+npm run build
+
+# 2. Run linter
+npm run lint
+
+# 3. Run all tests
+npm test
+
+# 4. Verify coverage meets 70% threshold
+npm run test:coverage
+
+# 5. Validate Homey app
+npm run validate
+```
+
+**Pre-commit checklist:**
+
+1. ✅ TypeScript compiles without errors (`npm run build`)
+2. ✅ All tests pass (`npm test`)
+3. ✅ Test coverage meets 70% threshold (`npm run test:coverage` - Jest enforces this)
+4. ✅ No linting errors (`npm run lint`)
+5. ✅ Homey app validation passes (`npm run validate`)
+6. ✅ Code is documented (public methods have Javadoc)
+7. ✅ Error handling is implemented
+8. ✅ Logging statements are present for key events
+9. ✅ No references to Claude, AI tools, or code generation in code, comments, or commit messages
 
 ### Git Workflow
 
@@ -739,6 +765,179 @@ git push
 - Keep commits professional and concise
 - Use conventional commit format: feat, fix, docs, refactor, test, chore
 
+### Gitflow Branching Model
+
+WIAB uses Gitflow for structured development and release management. This ensures stable production code and organized feature development.
+
+**Permanent Branches:**
+- **`main`** - Production-ready code. Always deployable. Protected with required reviews and status checks.
+- **`develop`** - Integration branch for features. Default PR target for new functionality. Also protected.
+
+**Temporary Branches:**
+- **`feature/*`** - New features or enhancements (e.g., `feature/sensor-timeout`, `feature/pairing-improvements`)
+- **`release/*`** - Release preparation (e.g., `release/1.1.0`). Created from develop, merged to main and back to develop.
+- **`hotfix/*`** - Critical production fixes (e.g., `hotfix/1.0.1`). Created from main, merged to main and back to develop.
+
+**Branch Naming Convention:**
+- Use lowercase, hyphenated names
+- Be descriptive: `feature/sensor-timeout` not `feature/fix`
+- Reference issues if applicable: `feature/sensor-timeout-#42`
+
+**PR Target Rules:**
+- **New features/enhancements**: Create PR targeting `develop`
+- **Hotfixes**: Create PR targeting `main` (will be merged back to develop automatically)
+- **Releases**: Create PR targeting `main`
+
+**Using Slash Commands (Recommended):**
+```bash
+# Start a new feature branch
+/git:start-feature sensor-timeout
+
+# Work on your feature
+git add .
+git commit -m "feat: add sensor timeout configuration"
+
+# Finish feature (creates PR to develop)
+/git:finish-feature sensor-timeout
+
+# Start a release
+/git:start-release 1.1.0
+
+# Finish release (merges to main and develop, creates tag)
+/git:finish-release 1.1.0
+
+# Start a hotfix
+/git:start-hotfix 1.0.1
+
+# Finish hotfix (merges to main and develop, creates tag)
+/git:finish-hotfix 1.0.1
+```
+
+**Manual Approach:**
+```bash
+# Create and checkout feature branch from develop
+git checkout develop
+git pull origin develop
+git checkout -b feature/your-feature-name
+
+# Make changes, commit, push
+git add .
+git commit -m "feat: your feature description"
+git push -u origin feature/your-feature-name
+
+# Create PR on GitHub targeting develop
+```
+
+### Squash Merge Strategy
+
+WIAB uses **squash merging** for PRs. This means:
+- All commits on your feature branch are combined into a single commit
+- The **PR title becomes the commit message** on the target branch (develop/main)
+- This commit appears in the main git log, release notes, and changelogs
+
+**Why Squash Merging?**
+- Clean, linear history on main/develop branches
+- Each PR becomes one logical commit
+- Easier to understand project history
+- Enables automated changelog generation from PR titles
+
+**CRITICAL: PR Titles Must Be Valid**
+
+Since PR titles become commit messages, they **must** follow conventional commit format and will be automatically validated by GitHub Actions.
+
+**Format:**
+```
+<type>(<scope>): <subject>
+```
+
+**Valid Examples:**
+```
+feat: add sensor timeout configuration
+fix: resolve occupancy state race condition
+docs(readme): update installation instructions
+refactor(sensors): extract validation logic
+test: add edge cases for door sensor events
+chore(deps): update homey sdk to 3.1.0
+```
+
+**Invalid Examples:**
+```
+feat: Added sensor timeout              # Past tense - must be imperative
+fix: Resolve occupancy state            # Capitalized subject - must be lowercase
+Update README                            # Missing type prefix
+Feature/sensor timeout                   # Not conventional format
+WIP: experimental changes                # Not a valid commit type
+```
+
+**Validation Rules:**
+- ✅ Must start with valid type: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+- ✅ Subject must start with **lowercase** letter
+- ✅ Subject must use **imperative mood** ("add" not "added")
+- ✅ Scope is optional but recommended for clarity
+- ✅ No period at end of subject line
+- ❌ No mentions of Claude, AI tools, or code generation
+
+**Automated Validation:**
+GitHub Actions automatically validates your PR title when:
+- PR is opened
+- PR title is edited
+- New commits are pushed
+
+If validation fails, you'll see a clear error message. Simply edit the PR title to fix it.
+
+### Branch Protection Rules
+
+**`main` Branch Protection:**
+- Requires PR with ≥1 approval before merging
+- Requires all status checks to pass (build, test, lint, validate, PR title validation)
+- Requires branch to be up to date with base branch before merging
+- Requires all conversations to be resolved
+- No direct pushes allowed (must use PRs)
+- Linear history preferred
+
+**`develop` Branch Protection:**
+- Requires PR with ≥1 approval before merging
+- Requires all status checks to pass (build, test, lint, validate, PR title validation)
+- Requires branch to be up to date with base branch before merging
+- No force pushes allowed
+
+These rules ensure code quality and prevent accidental direct commits to protected branches.
+
+### Pull Request Process
+
+**Before Creating PR:**
+1. Ensure all local checks pass:
+   - `npm run build` (no TypeScript errors)
+   - `npm test` (all tests pass)
+   - `npm run test:coverage` (≥70% coverage)
+   - `npm run lint` (no linting errors)
+   - `npm run validate` (Homey validation passes)
+2. Branch is up to date with target branch
+3. Branch name follows convention (feature/*, hotfix/*, release/*)
+4. No references to Claude or AI tools in code/comments
+
+**Creating the PR:**
+1. Push your branch to GitHub
+2. Create PR using GitHub UI or `/git:finish-feature` command
+3. **Ensure PR title follows conventional commit format** - it will be validated
+4. Fill out the PR template completely
+5. Link related issues using `Closes #123` or `Related to #456`
+6. Add screenshots/videos for UI changes if applicable
+7. Assign yourself as assignee
+8. Add appropriate labels (bug, feature, documentation, etc.)
+
+**During Review:**
+- CI checks must pass (enforced by branch protection)
+- At least 1 approval required (enforced by branch protection)
+- Address review feedback promptly
+- All conversations must be resolved (enforced by branch protection)
+
+**After Merge:**
+- Your branch is automatically deleted
+- Pull latest changes: `git pull origin develop` (or main)
+- Delete local branch: `git branch -d feature/your-feature-name`
+- Continue with next feature!
+
 ### Homey App Deployment
 
 ```bash
@@ -756,6 +955,317 @@ homey app run
 
 # 5. Publish to Homey App Store (production)
 homey app publish
+```
+
+### CI/CD Pipeline
+
+WIAB uses GitHub Actions to automatically run quality checks on every push and PR. The pipeline ensures code meets quality standards before merging.
+
+**Pipeline Stages:**
+
+1. **Checkout** - Get the code
+2. **Setup Node.js** - Install Node 20.x with npm cache
+3. **Install Dependencies** - `npm ci` (clean install)
+4. **Build TypeScript** - Compile to JavaScript (`npm run build`)
+5. **Lint Code** - Check style and best practices (`npm run lint`)
+6. **Run Tests with Coverage** - Execute all tests and generate coverage reports (`npm run test:coverage`)
+7. **Check Coverage Threshold** - Verify 70% coverage is met (Jest enforces this)
+8. **Validate Homey App** - Verify app structure and metadata (`npm run validate`)
+9. **Status Check** - Aggregate all checks for PR merge decision
+
+**When Pipeline Runs:**
+- On every push to `main` or `develop` branches
+- On every pull request to `main` or `develop` branches
+
+**What Causes Pipeline Failures:**
+
+Your PR will fail the pipeline if:
+- ❌ TypeScript compilation fails (`npm run build`)
+- ❌ Any test fails (`npm test`)
+- ❌ Coverage drops below 70% threshold (`npm run test:coverage`)
+- ❌ Linting errors found (`npm run lint`)
+- ❌ Homey validation fails (`npm run validate`)
+- ❌ PR title doesn't follow conventional commit format
+
+**Fixing Pipeline Failures:**
+
+```bash
+# 1. Pull latest changes
+git pull origin develop
+
+# 2. Fix the issues locally (see error messages)
+# - Fix TypeScript errors: check npm run build output
+# - Fix test failures: check npm test output
+# - Fix coverage: add missing tests or remove untested code
+# - Fix linting: run npm run lint -- --fix for auto-fixes
+# - Fix validation: check homey app validate output
+
+# 3. Re-run checks locally to verify
+npm run build
+npm run lint
+npm test
+npm run test:coverage
+npm run validate
+
+# 4. Commit and push fixes
+git add .
+git commit -m "fix: resolve CI pipeline failures"
+git push
+
+# 5. Pipeline will automatically re-run
+```
+
+**Coverage Threshold (70%):**
+
+The project enforces 70% code coverage minimum:
+- Branches: 70%
+- Functions: 70%
+- Lines: 70%
+- Statements: 70%
+
+If coverage drops below 70%, the pipeline fails. To improve coverage:
+- Add unit tests for new code
+- Test edge cases (empty arrays, null values, invalid IDs)
+- Mock external dependencies (Homey SDK)
+- Focus tests on business logic, not framework
+
+Check coverage locally before pushing:
+```bash
+npm run test:coverage
+# Opens coverage/index.html in browser to see what's not covered
+```
+
+### Parallel Development with Git Worktrees
+
+Git worktrees enable multiple AI agents to work simultaneously on different features without interfering with each other. Each worktree is an independent working directory with its own branch, allowing true parallel development.
+
+**Why Worktrees for Parallel Development?**
+- ✅ Each agent works in isolation without checking out branches
+- ✅ No branch conflicts - different worktrees can use different branches
+- ✅ Faster context switching - agents don't need to wait for `git checkout` to complete
+- ✅ Simultaneous feature development - multiple features in progress at once
+- ✅ Cleaner workflow - no accidental commits to wrong branches
+- ✅ Easy coordination - agents can reference specific worktree locations
+
+**Worktree Basics:**
+
+A worktree is simply another directory in your repository with a different branch checked out:
+
+```
+project/
+├── .git/                    # Shared git database
+├── src/
+├── tests/
+└── .git/worktrees/         # Worktree directories
+    ├── feature-sensor-timeout/
+    └── feature-pairing-improvements/
+```
+
+All worktrees share the same `.git` directory, so commits, merges, and history are synchronized.
+
+**Creating a Worktree for a New Feature:**
+
+```bash
+# 1. Create a new worktree with a feature branch
+git worktree add ../wiab-feature-sensor-timeout -b feature/sensor-timeout develop
+
+# This creates:
+# - A new directory: ../wiab-feature-sensor-timeout
+# - A new feature branch: feature/sensor-timeout (based on develop)
+# - Ready for development immediately
+```
+
+**Working in a Worktree:**
+
+```bash
+# 1. Navigate to the worktree
+cd ../wiab-feature-sensor-timeout
+
+# 2. Install dependencies (only needed once per worktree)
+npm install
+
+# 3. Run checks
+npm run build
+npm test
+npm run test:coverage
+
+# 4. Make changes and commit normally
+git add .
+git commit -m "feat: add sensor timeout configuration"
+
+# 5. Push when ready
+git push -u origin feature/sensor-timeout
+
+# 6. Create PR on GitHub
+```
+
+**Listing Active Worktrees:**
+
+```bash
+# See all worktrees in the repository
+git worktree list
+
+# Output example:
+# /Users/andy/projects/ndygen/wiab (develop)
+# /Users/andy/projects/ndygen/wiab-feature-sensor-timeout (feature/sensor-timeout)
+# /Users/andy/projects/ndygen/wiab-feature-pairing (feature/pairing-improvements)
+```
+
+**Removing a Worktree (Cleanup):**
+
+```bash
+# After your PR is merged, clean up the worktree
+
+# 1. Navigate away from the worktree
+cd /Users/andy/projects/ndygen/wiab
+
+# 2. Remove the worktree
+git worktree remove ../wiab-feature-sensor-timeout
+
+# Or with force if branch hasn't been merged:
+git worktree remove --force ../wiab-feature-sensor-timeout
+
+# 3. Delete the directory (if not already deleted)
+rm -rf ../wiab-feature-sensor-timeout
+```
+
+**Worktree for Pull Requests:**
+
+When multiple agents need to work on PRs to the same branch (e.g., both reviewing/testing PRs to `develop`):
+
+```bash
+# Agent 1 working on feature
+git worktree add ../wiab-feature-a -b feature/timeout develop
+cd ../wiab-feature-a
+
+# Agent 2 working on different feature (in another terminal)
+git worktree add ../wiab-feature-b -b feature/pairing develop
+cd ../wiab-feature-b
+
+# Each agent works independently without interfering
+```
+
+**Worktree for Testing Multiple Branches:**
+
+Testing a feature against the main branch before creating a PR:
+
+```bash
+# 1. Create worktree with feature branch
+git worktree add ../wiab-test-feature -b feature/my-feature develop
+
+# 2. Create another worktree with main branch for comparison
+git worktree add ../wiab-test-main main
+
+# 3. Run tests on both branches
+cd ../wiab-test-feature && npm test
+cd ../wiab-test-main && npm test
+
+# 4. Compare results between worktrees
+```
+
+**Worktree with Slash Commands:**
+
+For streamlined workflow with slash commands:
+
+```bash
+# 1. Create worktree for new feature
+git worktree add ../wiab-feature-timeout -b feature/sensor-timeout develop
+
+# 2. Navigate to worktree
+cd ../wiab-feature-timeout
+
+# 3. Start feature work (now worktrees know about this branch)
+/git:start-feature sensor-timeout
+
+# 4. Make changes, run tests, commit
+git add .
+git commit -m "feat: add sensor timeout"
+
+# 5. Finish feature (creates PR from worktree)
+/git:finish-feature sensor-timeout
+
+# 6. After PR merges, clean up
+cd /Users/andy/projects/ndygen/wiab
+git worktree remove ../wiab-feature-timeout
+```
+
+**Important Worktree Rules:**
+
+1. ✅ **One branch per worktree** - A branch can only be checked out in one worktree at a time
+2. ✅ **Share .git directory** - All worktrees share the same git database
+3. ✅ **Independent node_modules** - Each worktree needs its own npm dependencies
+4. ✅ **Independent build artifacts** - Each worktree has its own build output
+5. ✅ **Clean up after merging** - Remove worktrees when features are complete
+
+**Common Worktree Patterns:**
+
+**Pattern 1: Dedicated Main Worktree**
+```bash
+# Keep main worktree for develop/main branches only
+/Users/andy/projects/ndygen/wiab/  # develop (main worktree)
+../wiab-feature-1/                  # feature/timeout
+../wiab-feature-2/                  # feature/pairing
+../wiab-hotfix-1/                   # hotfix/bug-fix
+```
+
+**Pattern 2: Temporary Test Worktrees**
+```bash
+# Create test worktrees, delete after testing
+git worktree add ../wiab-test-integration -b test/integration-check develop
+cd ../wiab-test-integration
+npm test
+# ... test results ...
+cd /path/to/main
+git worktree remove ../wiab-test-integration
+```
+
+**Pattern 3: Parallel Agent Workflow**
+```bash
+# Agent 1
+git worktree add ../wiab-agent1 -b feature/agent1-work develop
+cd ../wiab-agent1
+# ... work on feature 1 ...
+
+# Agent 2 (in different terminal/context)
+git worktree add ../wiab-agent2 -b feature/agent2-work develop
+cd ../wiab-agent2
+# ... work on feature 2 simultaneously ...
+
+# Both agents commit/push independently
+# Both agents can create PRs simultaneously
+# No conflicts or interference
+```
+
+**Troubleshooting Worktrees:**
+
+**Problem: "fatal: 'feature/timeout' is already checked out"**
+```bash
+# Solution: The branch is already in another worktree
+git worktree list  # Find which worktree has it
+
+# Either:
+# 1. Use that worktree
+# 2. Remove the other worktree first
+# 3. Use a different branch name
+```
+
+**Problem: "fatal: cannot remove /path/to/worktree: Main working tree cannot be removed"**
+```bash
+# Solution: You're trying to remove the main worktree
+# Navigate away first, then remove other worktrees
+cd /path/to/main/worktree
+git worktree remove /path/to/other/worktree
+```
+
+**Problem: Worktree is broken/orphaned**
+```bash
+# Solution: Prune broken worktrees
+git worktree prune
+
+# If still broken:
+git worktree list  # Find the bad one
+git worktree remove --force ../broken-worktree
+rm -rf ../broken-worktree
 ```
 
 ## Important Implementation Details
@@ -858,6 +1368,55 @@ Potential improvements for future versions:
 5. **Configuration Validation**: UI-based device picker instead of JSON
 6. **Multi-Zone Support**: Multiple virtual sensors per WIAB device
 
+## Important: AI Tool References Policy
+
+**CRITICAL REQUIREMENT: Do not reference Claude, AI assistants, or code generation tools in any project files, comments, pull requests, or git commits.**
+
+This applies to:
+- ❌ Source code comments
+- ❌ Documentation files
+- ❌ PR descriptions or titles
+- ❌ Commit messages
+- ❌ Issue descriptions
+- ❌ Test files
+
+**Why?** This ensures professionalism, maintains project integrity, and keeps focus on the work itself rather than the tools used.
+
+**Examples of what NOT to do:**
+```typescript
+// ❌ DON'T: Generated with Claude AI
+// ❌ DON'T: AI-assisted implementation
+// ❌ DON'T: Created by Claude Code
+const monitor = new SensorMonitor(...);
+```
+
+**Examples of what TO do:**
+```typescript
+// ✅ DO: Clear, descriptive, professional comments
+// Initializes sensor monitoring with priority-based event handling
+const monitor = new SensorMonitor(...);
+```
+
+**Commit Messages:**
+```bash
+# ✅ Good - describe the change
+git commit -m "feat: add sensor timeout configuration"
+
+# ❌ Bad - references AI tools
+git commit -m "feat: add sensor timeout (generated with Claude)"
+```
+
+**PR Descriptions:**
+```markdown
+# ✅ Good - focus on the feature
+## Description
+This PR implements sensor timeout configuration...
+
+# ❌ Bad - mentions AI tools
+## Description
+I had Claude help me implement sensor timeout configuration...
+```
+
 ## Summary
 
 This document provides the foundation for developing and maintaining the WIAB Homey app. Key principles:
@@ -867,5 +1426,15 @@ This document provides the foundation for developing and maintaining the WIAB Ho
 3. **Testability**: Write tests for business logic, mock external dependencies
 4. **Documentation**: Document public interfaces, explain complex logic
 5. **Error Handling**: Fail gracefully, log comprehensively, never crash
+6. **Professionalism**: No references to AI tools, keep focus on the work itself
+7. **Parallel Development**: Use git worktrees for simultaneous feature development by multiple agents
+
+### Key Capabilities for AI Agents:
+
+- **Single Feature Development**: Follow standard Gitflow workflow with feature branches
+- **Parallel Feature Development**: Use git worktrees to work on multiple features simultaneously without interference
+- **Professional Standards**: Conventional commits, comprehensive testing, proper documentation
+- **Quality Assurance**: Automated CI/CD pipeline with branch protection and validation
+- **Organized Workflow**: Gitflow structure with clear release and hotfix procedures
 
 When in doubt, refer to this document and the Homey SDK documentation. Always prioritize code quality, test coverage, and user experience.

@@ -10,7 +10,24 @@
  * with all Homey devices regardless of their capability change event support.
  */
 
-import { SensorConfig, SensorCallbacks } from './types';
+import { SensorConfig, SensorCallbacks, HomeyAPI, HomeyAPIDevice } from './types';
+
+/**
+ * Interface for logging instance
+ */
+interface Logger {
+  log(...args: unknown[]): void;
+  error(...args: unknown[]): void;
+}
+
+/**
+ * Extended HomeyAPIDevice with additional runtime methods
+ */
+interface ExtendedHomeyAPIDevice extends HomeyAPIDevice {
+  makeCapabilityInstance?(capability: string, callback: (value: boolean) => void): unknown;
+  hasCapability?(capability: string): boolean;
+  getCapabilityValue?(capability: string): unknown;
+}
 
 /**
  * SensorMonitor class for polling-based sensor state monitoring
@@ -31,15 +48,15 @@ import { SensorConfig, SensorCallbacks } from './types';
  * ```
  */
 export class SensorMonitor {
-  private homeyApi: any;
-  private logger: any;
+  private homeyApi: HomeyAPI;
+  private logger: Logger;
   private triggerSensors: SensorConfig[];
   private resetSensors: SensorConfig[];
   private callbacks: SensorCallbacks;
   private lastValues: Map<string, boolean> = new Map();
-  private deviceCache: Record<string, any> = {};
-  private deviceRefs: Map<string, any> = new Map(); // Live device references from HomeyAPI
-  private capabilityInstances: Map<string, any> = new Map(); // DeviceCapability instances for cleanup
+  private deviceCache: Record<string, ExtendedHomeyAPIDevice> = {};
+  private deviceRefs: Map<string, ExtendedHomeyAPIDevice> = new Map(); // Live device references from HomeyAPI
+  private capabilityInstances: Map<string, unknown> = new Map(); // DeviceCapability instances for cleanup
 
   /**
    * Creates a new SensorMonitor instance
@@ -51,8 +68,8 @@ export class SensorMonitor {
    * @param {SensorCallbacks} callbacks - Callback functions for sensor state changes
    */
   constructor(
-    homeyApi: any,
-    logger: any,
+    homeyApi: HomeyAPI,
+    logger: Logger,
     triggerSensors: SensorConfig[],
     resetSensors: SensorConfig[],
     callbacks: SensorCallbacks
@@ -302,7 +319,7 @@ export class SensorMonitor {
 
       // Create real-time capability listener using makeCapabilityInstance()
       // This returns a DeviceCapability object and invokes the callback with value changes
-      const capabilityInstance = device.makeCapabilityInstance(sensor.capability, (value: any) => {
+      const capabilityInstance = device.makeCapabilityInstance?.(sensor.capability, (value: boolean) => {
         const lastValue = this.lastValues.get(key) ?? false;
 
         this.logger.log(
@@ -344,7 +361,7 @@ export class SensorMonitor {
               this.callbacks.onReset(sensor.deviceId, value);
             }
           } else {
-            // PIR sensors (trigger sensors): only trigger on rising edge (motion detected)
+            // PIR sensors (trigger sensors): trigger on rising edge (motion detected) and falling edge (motion cleared)
             if (value && !lastValue) {
               this.logger.log(
                 `[CAPABILITY] ✅ Trigger sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
@@ -352,13 +369,17 @@ export class SensorMonitor {
                 `Calling onTriggered() callback with sensorId: ${sensor.deviceId}`
               );
               this.callbacks.onTriggered(sensor.deviceId, value);
-            } else {
-              // Falling edge: motion cleared - ignore
+            } else if (!value && lastValue) {
+              // Falling edge: motion cleared
               this.logger.log(
                 `[CAPABILITY] ⬇️ Trigger sensor FALLING EDGE: ` +
                 `${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
-                `from ${lastValue} to ${value} - IGNORED (motion clearing is not an event)`
+                `from ${lastValue} to ${value} - MOTION CLEARED - ` +
+                `Calling onPirCleared() callback with sensorId: ${sensor.deviceId}`
               );
+              if (this.callbacks.onPirCleared) {
+                this.callbacks.onPirCleared(sensor.deviceId);
+              }
             }
           }
         } else {

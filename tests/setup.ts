@@ -18,27 +18,27 @@
  * @returns A mock Homey instance suitable for testing
  */
 export function createMockHomey() {
-  const mockDrivers: Map<string, any> = new Map();
+  const mockDrivers: Map<string, MockDriver> = new Map();
 
   return {
-    log: jest.fn((...args: any[]) => {
+    log: jest.fn((..._args: unknown[]) => {
       // Uncomment for debugging tests:
       // console.log('[MOCK HOMEY]', ...args);
     }),
-    error: jest.fn((...args: any[]) => {
+    error: jest.fn((..._args: unknown[]) => {
       // Uncomment for debugging tests:
       // console.error('[MOCK HOMEY ERROR]', ...args);
     }),
     drivers: {
       getDrivers: jest.fn(() => {
-        const driversObj: { [key: string]: any } = {};
+        const driversObj: Record<string, MockDriver> = {};
         mockDrivers.forEach((driver, name) => {
           driversObj[name] = driver;
         });
         return driversObj;
       }),
       getDriver: jest.fn((name: string) => mockDrivers.get(name)),
-      _addDriver: (name: string, driver: any) => {
+      _addDriver: (name: string, driver: MockDriver) => {
         mockDrivers.set(name, driver);
       },
       _clear: () => {
@@ -57,13 +57,14 @@ export function createMockHomey() {
  * @returns A mock HomeyAPI instance suitable for testing
  */
 export function createMockHomeyApi() {
-  const deviceMap: Record<string, any> = {};
+  const deviceMap: Record<string, MockDevice> = {};
+  const zoneMap: Record<string, { id: string; name: string }> = {};
 
   return {
     devices: {
       getDevices: jest.fn(async () => ({ ...deviceMap })),
       getDevice: jest.fn(async (id: string) => deviceMap[id]),
-      _addDevice: (id: string, device: any) => {
+      _addDevice: (id: string, device: MockDevice) => {
         // Devices from createMockDevice already have capabilitiesObj and event emitter functionality
         deviceMap[id] = device;
       },
@@ -72,6 +73,17 @@ export function createMockHomeyApi() {
       },
       _clear: () => {
         Object.keys(deviceMap).forEach(key => delete deviceMap[key]);
+      },
+    },
+    zones: {
+      getZone: jest.fn(async (params: { id: string }) => {
+        return zoneMap[params.id] || { id: params.id, name: `Zone ${params.id}` };
+      }),
+      _addZone: (id: string, name: string) => {
+        zoneMap[id] = { id, name };
+      },
+      _clear: () => {
+        Object.keys(zoneMap).forEach(key => delete zoneMap[key]);
       },
     },
   };
@@ -93,8 +105,8 @@ export function createMockDevice(config: {
   id: string;
   name?: string;
   capabilities?: string[];
-  capabilityValues?: { [key: string]: any };
-  settings?: { [key: string]: any };
+  capabilityValues?: Record<string, unknown>;
+  settings?: Record<string, unknown>;
 }) {
   const {
     id,
@@ -105,7 +117,7 @@ export function createMockDevice(config: {
   } = config;
 
   // Create capabilitiesObj structure for HomeyAPI compatibility
-  const capabilitiesObj: any = {};
+  const capabilitiesObj: Record<string, { value: unknown; id: string }> = {};
   capabilities.forEach((cap: string) => {
     capabilitiesObj[cap] = {
       value: capabilityValues[cap],
@@ -114,9 +126,10 @@ export function createMockDevice(config: {
   });
 
   // Create event listener management
-  const listeners: Map<string, Function[]> = new Map();
+  const listeners: Map<string, ((update: CapabilityUpdate) => void)[]> = new Map();
+  const capabilityCallbacks: Map<string, (value: boolean) => void> = new Map();
 
-  const device: any = {
+  const device: MockDevice = {
     getData: jest.fn(() => ({ id })),
     getName: jest.fn(() => name),
     getCapabilities: jest.fn(() => [...capabilities]),
@@ -132,7 +145,7 @@ export function createMockDevice(config: {
       return capabilityValues[capability];
     }),
     setCapabilityValue: jest.fn(
-      async (capability: string, value: any) => {
+      async (capability: string, value: unknown) => {
         if (!capabilities.includes(capability)) {
           throw new Error(
             `Device ${id} does not have capability ${capability}`
@@ -143,29 +156,40 @@ export function createMockDevice(config: {
     ),
     getSetting: jest.fn((key: string) => settings[key]),
     getSettings: jest.fn(() => ({ ...settings })),
-    setSettings: jest.fn(async (newSettings: { [key: string]: any }) => {
+    setSettings: jest.fn(async (newSettings: Record<string, unknown>) => {
       Object.assign(settings, newSettings);
     }),
     log: jest.fn(),
     error: jest.fn(),
-    _setCapabilityValue: (capability: string, value: any) => {
+    _setCapabilityValue: (capability: string, value: unknown) => {
       capabilityValues[capability] = value;
       // Also update capabilitiesObj when value changes
       if (capabilitiesObj[capability]) {
         capabilitiesObj[capability].value = value;
       }
+      // Call the capability callback if it exists (for real-time monitoring)
+      const callback = capabilityCallbacks.get(capability);
+      if (callback && typeof value === 'boolean') {
+        callback(value);
+      }
     },
     _getCapabilityValues: () => ({ ...capabilityValues }),
     // HomeyAPI compatibility
     capabilitiesObj,
+    // Capability monitoring via makeCapabilityInstance
+    makeCapabilityInstance: (capability: string, callback: (value: boolean) => void) => {
+      capabilityCallbacks.set(capability, callback);
+      // Return a dummy object to satisfy the interface
+      return { capability };
+    },
     // Event emitter functionality
-    on: (event: string, handler: Function) => {
+    on: (event: string, handler: (update: CapabilityUpdate) => void) => {
       if (!listeners.has(event)) {
         listeners.set(event, []);
       }
       listeners.get(event)!.push(handler);
     },
-    removeListener: (event: string, handler: Function) => {
+    removeListener: (event: string, handler: (update: CapabilityUpdate) => void) => {
       if (listeners.has(event)) {
         const handlers = listeners.get(event)!;
         const index = handlers.indexOf(handler);
@@ -174,12 +198,17 @@ export function createMockDevice(config: {
         }
       }
     },
-    _emit: (event: string, data: any) => {
+    _emit: (event: string, data: unknown) => {
       if (listeners.has(event)) {
-        listeners.get(event)!.forEach((handler) => handler(data));
+        listeners.get(event)!.forEach((handler) => handler(data as CapabilityUpdate));
       }
     },
     _listeners: listeners,
+    _capabilityCallbacks: capabilityCallbacks,
+    _clearCapabilityCallbacks: () => {
+      capabilityCallbacks.clear();
+    },
+    name, // Add name property for HomeyAPIDevice compatibility
   };
 
   return device;
@@ -194,17 +223,62 @@ export function createMockDevice(config: {
  * @param devices - Array of mock devices managed by this driver
  * @returns A mock driver instance
  */
-export function createMockDriver(devices: any[] = []) {
+/**
+ * CapabilityUpdate interface for device events
+ */
+interface CapabilityUpdate {
+  capabilityId: string;
+  value: unknown;
+}
+
+/**
+ * Mock device with minimal interface matching HomeyDevice
+ */
+interface MockDevice {
+  getData: jest.Mock<{ id: string }>;
+  getName: jest.Mock<string>;
+  getCapabilities: jest.Mock<string[]>;
+  hasCapability: jest.Mock<boolean>;
+  getCapabilityValue: jest.Mock<unknown>;
+  setCapabilityValue: jest.Mock<Promise<void>>;
+  getSetting: jest.Mock<unknown>;
+  getSettings: jest.Mock<Record<string, unknown>>;
+  setSettings: jest.Mock<Promise<void>>;
+  log: jest.Mock<void>;
+  error: jest.Mock<void>;
+  name: string;
+  capabilitiesObj: Record<string, { value: unknown; id?: string }>;
+  on: (event: string, handler: (update: CapabilityUpdate) => void) => void;
+  removeListener: (event: string, handler: (update: CapabilityUpdate) => void) => void;
+  makeCapabilityInstance?: (capability: string, callback: (value: boolean) => void) => unknown;
+  _setCapabilityValue: (capability: string, value: unknown) => void;
+  _getCapabilityValues: () => Record<string, unknown>;
+  _emit: (event: string, data: unknown) => void;
+  _listeners: Map<string, ((update: CapabilityUpdate) => void)[]>;
+  _capabilityCallbacks: Map<string, (value: boolean) => void>;
+  _clearCapabilityCallbacks: () => void;
+}
+
+/**
+ * Mock driver interface compatible with HomeyDriver
+ */
+interface MockDriver {
+  getDevices?(): MockDevice[];
+  getDevice?(deviceData: { id: string }): MockDevice | undefined;
+  [key: string]: unknown;
+}
+
+export function createMockDriver(devices: MockDevice[] = []) {
   return {
     getDevices: jest.fn(() => [...devices]),
     getDevice: jest.fn((deviceData: { id: string }) => {
-      return devices.find((d) => d.getData().id === deviceData.id);
+      return devices.find((d: MockDevice) => d.getData().id === deviceData.id);
     }),
-    _addDevice: (device: any) => {
+    _addDevice: (device: MockDevice) => {
       devices.push(device);
     },
     _removeDevice: (deviceId: string) => {
-      const index = devices.findIndex((d) => d.getData().id === deviceId);
+      const index = devices.findIndex((d: MockDevice) => d.getData().id === deviceId);
       if (index !== -1) {
         devices.splice(index, 1);
       }

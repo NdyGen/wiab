@@ -42,6 +42,11 @@ jobs:
           echo "Verifying coverage meets 70% threshold..."
           # Jest will fail if coverage is below threshold defined in jest.config.js
 
+      - name: Generate Homey app.json
+        run: |
+          cp .homeycompose/app.json app.json
+          npx homey app build
+
       - name: Validate Homey app
         run: npm run validate
 

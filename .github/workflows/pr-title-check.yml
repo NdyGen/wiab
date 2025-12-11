@@ -1,0 +1,62 @@
+name: PR Title Validation
+
+# Validate PR titles follow conventional commit format
+# Since we use squash merges, the PR title becomes the commit message on develop/main
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+
+permissions:
+  pull-requests: write
+  statuses: write
+
+jobs:
+  validate-title:
+    name: Validate PR Title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Configure allowed commit types
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+
+          # Require a scope (e.g., "feat(sensors): ...")
+          requireScope: false
+
+          # Validate subject follows pattern
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject "{subject}" found in the pull request title "{title}"
+            must start with a lowercase letter and be in imperative mood.
+
+            Examples:
+            ✓ feat: add sensor timeout configuration
+            ✓ fix: resolve occupancy state race condition
+            ✗ feat: Added sensor timeout (past tense)
+            ✗ fix: Resolve occupancy state (capitalized)
+
+          # Allow merge commits in title (for releases)
+          ignoreLabels: |
+            bot
+            dependencies
+
+          # Customize validation message
+          headerPattern: '^(\w+)(?:\(([^)]*)\))?!?: (.+)$'
+          headerPatternCorrespondence: type, scope, subject

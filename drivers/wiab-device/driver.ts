@@ -2,6 +2,13 @@ import Homey from 'homey';
 import { HomeyAPI, HomeyAPIDevice, PairingDeviceConfig } from '../../lib/types';
 
 /**
+ * Interface for WIABApp with HomeyAPI
+ */
+interface WIABApp extends Homey.App {
+  homeyApi?: HomeyAPI;
+}
+
+/**
  * Driver class for the WIAB (Wasp in a Box) virtual occupancy sensor.
  *
  * This driver manages the pairing process for creating new WIAB device instances.
@@ -41,7 +48,7 @@ class WIABDriver extends Homey.Driver {
   private async getDevicesWithCapability(capability: string): Promise<PairingDeviceConfig[]> {
     this.log(`Fetching devices with ${capability} capability`);
 
-    const app = this.homey.app as any;
+    const app = this.homey.app as WIABApp;
     if (!app || !app.homeyApi) {
       throw new Error('Homey API not available');
     }
@@ -61,9 +68,9 @@ class WIABDriver extends Homey.Driver {
         // Fetch zone name if device has a zone assigned
         let zoneName: string | null = null;
         try {
-          const deviceObj = device as any;
-          if (deviceObj.zone) {
-            const zone = await homeyApi.zones.getZone({ id: deviceObj.zone });
+          const deviceWithZone = device as HomeyAPIDevice & { zone?: string };
+          if (deviceWithZone.zone) {
+            const zone = await homeyApi.zones.getZone({ id: deviceWithZone.zone });
             zoneName = zone.name;
             this.log(`Device ${device.name} is in zone: ${zoneName}`);
           }
@@ -104,8 +111,8 @@ class WIABDriver extends Homey.Driver {
     this.log('WIAB pairing session started');
 
     // Store selected sensors during pairing flow
-    let triggerSensors: any[] = [];
-    let resetSensors: any[] = [];
+    let triggerSensors: PairingDeviceConfig[] = [];
+    let resetSensors: PairingDeviceConfig[] = [];
 
     /**
      * Handler for fetching motion devices.
@@ -136,7 +143,7 @@ class WIABDriver extends Homey.Driver {
     /**
      * Handler for storing selected trigger sensors.
      */
-    session.setHandler('select_trigger_sensors', async (devices: any[]) => {
+    session.setHandler('select_trigger_sensors', async (devices: PairingDeviceConfig[]) => {
       this.log('Trigger sensors selected:', devices);
       triggerSensors = devices || [];
       return { success: true };
@@ -145,7 +152,7 @@ class WIABDriver extends Homey.Driver {
     /**
      * Handler for storing selected reset sensors.
      */
-    session.setHandler('select_reset_sensors', async (devices: any[]) => {
+    session.setHandler('select_reset_sensors', async (devices: PairingDeviceConfig[]) => {
       this.log('Reset sensors selected:', devices);
       resetSensors = devices || [];
       return { success: true };

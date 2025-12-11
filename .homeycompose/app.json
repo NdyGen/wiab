@@ -1,0 +1,52 @@
+{
+  "id": "net.dongen.wiab",
+  "version": "1.0.0",
+  "compatibility": ">=12.2.0",
+  "sdk": 3,
+  "platforms": [
+    "local",
+    "cloud"
+  ],
+  "name": {
+    "en": "Wasp in a Box",
+    "nl": "Wasp in a Box"
+  },
+  "description": {
+    "en": "Virtual presence detection based on sensor triggers",
+    "nl": "Virtuele aanwezigheidsdetectie op basis van sensor triggers"
+  },
+  "category": [
+    "security"
+  ],
+  "permissions": [
+    "homey:manager:api"
+  ],
+  "brandColor": "#FF6600",
+  "author": {
+    "name": "Andy van Dongen",
+    "email": "andy@dongen.net"
+  },
+  "contributors": {
+    "developers": [
+      {
+        "name": "Andy van Dongen",
+        "email": "andy@dongen.net"
+      }
+    ]
+  },
+  "images": {
+    "small": "/assets/images/small.png",
+    "large": "/assets/images/large.png",
+    "xlarge": "/assets/images/xlarge.png"
+  },
+  "api": {
+    "getMotionDevices": {
+      "method": "GET",
+      "path": "/devices/motion"
+    },
+    "getContactDevices": {
+      "method": "GET",
+      "path": "/devices/contact"
+    }
+  }
+}
