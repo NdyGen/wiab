@@ -81,7 +81,7 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       expect(device.log).toHaveBeenCalledWith(
-        'WIAB device initializing with tri-state occupancy model'
+        'WIAB device initializing with quad-state occupancy model'
       );
       expect(device.log).toHaveBeenCalledWith(
         'WIAB device initialization complete'
@@ -901,6 +901,269 @@ describe('WIABDevice', () => {
       );
       // The handlePirMotion should have called stopEnterTimer()
       // and cleared waitingForPirFallingEdge flag
+    });
+  });
+
+  describe('Pause/Unpause functionality', () => {
+    /**
+     * Test that pauseDevice stops monitoring and sets occupancy state to PAUSED
+     */
+    it('should pause device and set occupancy state to PAUSED', async () => {
+      // Setup device
+      const triggerSensors = JSON.stringify([
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ]);
+      const resetSensors = JSON.stringify([
+        { deviceId: 'contact-1', capability: 'alarm_contact' },
+      ]);
+
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce(resetSensors);
+
+      await device.onInit();
+
+      jest.clearAllMocks();
+
+      // Note: registerRunListener is called in onInit, which registers the action handlers
+      // We test by directly calling the pause method (which would be triggered by the action)
+
+      // Manually pause device with OCCUPIED state
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+
+      // Verify device is paused
+      expect(device.log).toHaveBeenCalledWith(
+        'Pausing device with state: OCCUPIED'
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        'Device paused with state: OCCUPIED'
+      );
+      // Should have set capabilities to PAUSED state with OCCUPIED boolean
+      expect(device.setCapabilityValue).toHaveBeenCalledWith(
+        'occupancy_state',
+        'PAUSED'
+      );
+      expect(device.setCapabilityValue).toHaveBeenCalledWith(
+        'alarm_occupancy',
+        true // OCCUPIED = true
+      );
+      // Should have stopped sensor monitoring
+      expect(mockSensorMonitor.stop).toHaveBeenCalled();
+    });
+
+    /**
+     * Test that pauseDevice with UNOCCUPIED sets alarm_occupancy to false
+     */
+    it('should pause device with UNOCCUPIED state setting alarm_occupancy to false', async () => {
+      // Setup device
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce('[]')
+        .mockReturnValueOnce('[]');
+
+      await device.onInit();
+      jest.clearAllMocks();
+
+      // Pause with UNOCCUPIED
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('UNOCCUPIED');
+
+      expect(device.setCapabilityValue).toHaveBeenCalledWith(
+        'alarm_occupancy',
+        false // UNOCCUPIED = false
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        'Device paused with state: UNOCCUPIED'
+      );
+    });
+
+    /**
+     * Test that unpauseDevice reinitializes monitoring when paused
+     */
+    it('should unpause device and reinitialize sensor monitoring', async () => {
+      // Setup device
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce('[]')
+        .mockReturnValueOnce('[]');
+
+      await device.onInit();
+
+      // First, pause the device
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+
+      jest.clearAllMocks();
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce('[]')
+        .mockReturnValueOnce('[]');
+
+      // Then unpause
+      await (device as unknown as { unpauseDevice: () => Promise<void> }).unpauseDevice();
+
+      expect(device.log).toHaveBeenCalledWith(
+        'Unpausing device and reinitializing with current sensor values'
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        'Device resumed, sensor monitoring reinitialized'
+      );
+      // Verify unpause properly reset state
+      const isPaused = (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      expect(isPaused).toBe(false);
+    });
+
+    /**
+     * Test that unpause is idempotent - second call is ignored
+     */
+    it('should ignore unpause when device is already unpaused', async () => {
+      // Setup device (already unpaused by default)
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce('[]')
+        .mockReturnValueOnce('[]');
+
+      await device.onInit();
+
+      jest.clearAllMocks();
+
+      // Try to unpause when already unpaused
+      await (device as unknown as { unpauseDevice: () => Promise<void> }).unpauseDevice();
+
+      expect(device.log).toHaveBeenCalledWith(
+        'Device is not paused - unpause request ignored'
+      );
+    });
+
+    /**
+     * Test that sensor callbacks are ignored while paused
+     */
+    it('should ignore sensor events while paused', async () => {
+      // Setup device
+      const triggerSensors = JSON.stringify([
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ]);
+
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce('[]');
+
+      await device.onInit();
+
+      // Pause the device
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('UNOCCUPIED');
+
+      // Get the callbacks
+      const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
+      const callbacks = sensorMonitorCall[4];
+
+      jest.clearAllMocks();
+
+      // Try to trigger motion while paused - should be ignored
+      await callbacks.onTriggered('motion-1', true);
+
+      // No PIR motion log should appear
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('PIR motion detected')
+      );
+      // Capability should not be updated
+      expect(device.setCapabilityValue).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Test isPausedCheck condition
+     */
+    it('should correctly report paused state', async () => {
+      // Setup device
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce('[]')
+        .mockReturnValueOnce('[]');
+
+      await device.onInit();
+
+      // Initially not paused
+      let isPaused = await (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      expect(isPaused).toBe(false);
+
+      // Pause device
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+
+      // Now paused
+      isPaused = await (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      expect(isPaused).toBe(true);
+
+      // Unpause device
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce('[]')
+        .mockReturnValueOnce('[]');
+
+      await (device as unknown as { unpauseDevice: () => Promise<void> }).unpauseDevice();
+
+      // No longer paused
+      isPaused = await (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      expect(isPaused).toBe(false);
+    });
+
+    /**
+     * Test full pause/unpause scenario: paused device ignores sensors, unpaused device responds
+     */
+    it('should handle complete pause/unpause workflow', async () => {
+      // Setup device with sensors
+      const triggerSensors = JSON.stringify([
+        { deviceId: 'motion-1', capability: 'alarm_motion' },
+      ]);
+      const resetSensors = JSON.stringify([
+        { deviceId: 'contact-1', capability: 'alarm_contact' },
+      ]);
+
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce(resetSensors);
+
+      await device.onInit();
+
+      const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
+      const callbacks = sensorMonitorCall[4];
+
+      jest.clearAllMocks();
+
+      // Step 1: Device is unpaused, motion triggers occupancy
+      await callbacks.onTriggered('motion-1', true);
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('PIR motion detected')
+      );
+
+      jest.clearAllMocks();
+
+      // Step 2: Pause device to UNOCCUPIED
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('UNOCCUPIED');
+
+      expect(device.setCapabilityValue).toHaveBeenCalledWith(
+        'alarm_occupancy',
+        false
+      );
+
+      jest.clearAllMocks();
+
+      // Step 3: Motion events are now ignored while paused
+      await callbacks.onTriggered('motion-1', true);
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('PIR motion detected')
+      );
+
+      jest.clearAllMocks();
+
+      // Step 4: Unpause device
+      (device.getSetting as jest.Mock)
+        .mockReturnValueOnce(triggerSensors)
+        .mockReturnValueOnce(resetSensors);
+
+      await (device as unknown as { unpauseDevice: () => Promise<void> }).unpauseDevice();
+
+      expect(device.log).toHaveBeenCalledWith(
+        'Device resumed, sensor monitoring reinitialized'
+      );
+
+      jest.clearAllMocks();
+
+      // Step 5: Test that device is responsive again after unpausing
+      // We verify this by checking that isPausedCheck returns false
+      const isPaused = (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      expect(isPaused).toBe(false);
     });
   });
 });

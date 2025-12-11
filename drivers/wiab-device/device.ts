@@ -74,6 +74,11 @@ class WIABDevice extends Homey.Device {
   private clearTimerDeadline: number | null = null;
   private clearTimerAnchor: number | null = null;
 
+  // Pause/unpause state management
+  private isPaused: boolean = false;
+  private pausedWithState: StableOccupancyState = StableOccupancyState.UNOCCUPIED;
+  private hasBeenUnpausedOnce: boolean = false;
+
   /**
    * Initializes the WIAB device.
    *
@@ -85,7 +90,7 @@ class WIABDevice extends Homey.Device {
    * - Read current PIR sensor values to set initial occupancy state
    */
   async onInit(): Promise<void> {
-    this.log('WIAB device initializing with tri-state occupancy model');
+    this.log('WIAB device initializing with quad-state occupancy model');
 
     // Ensure occupancy_state capability exists (for migration of existing devices)
     if (!this.hasCapability('occupancy_state')) {
@@ -102,6 +107,12 @@ class WIABDevice extends Homey.Device {
 
     // Set initial boolean output from stable state
     await this.updateOccupancyOutput();
+
+    // Register action handlers
+    this.registerActionHandlers();
+
+    // Register condition handlers
+    this.registerConditionHandlers();
 
     this.log('WIAB device initialization complete');
   }
@@ -265,6 +276,11 @@ class WIABDevice extends Homey.Device {
    * @param doorValue - The current value of the door sensor (true = open, false = closed)
    */
   private async handleDoorEvent(doorId: string, doorValue: boolean): Promise<void> {
+    // Ignore sensor events if device is paused
+    if (this.isPaused) {
+      return;
+    }
+
     try {
       const newDoorState = doorValue ? DoorState.OPEN : DoorState.CLOSED;
       const oldDoorState = this.doorStates.get(doorId);
@@ -335,6 +351,11 @@ class WIABDevice extends Homey.Device {
    * @param pirId - The device ID of the PIR sensor that detected motion
    */
   private async handlePirMotion(pirId: string): Promise<void> {
+    // Ignore sensor events if device is paused
+    if (this.isPaused) {
+      return;
+    }
+
     try {
       this.log(`PIR motion detected: ${pirId}`);
 
@@ -391,6 +412,11 @@ class WIABDevice extends Homey.Device {
    * @param pirId - The device ID of the PIR sensor
    */
   private async handlePirCleared(pirId: string): Promise<void> {
+    // Ignore sensor events if device is paused
+    if (this.isPaused) {
+      return;
+    }
+
     try {
       this.log(`PIR motion cleared: ${pirId}`);
 
@@ -609,13 +635,14 @@ class WIABDevice extends Homey.Device {
    * - occupied = true if last_stable_occupancy == OCCUPIED
    * - occupied = false if last_stable_occupancy == UNOCCUPIED
    * - During UNKNOWN periods, the boolean retains the last stable value
+   * - When PAUSED, the boolean reflects the paused state (not the internal PAUSED state)
    */
   private async updateOccupancyOutput(): Promise<void> {
     try {
       const occupied = occupancyToBoolean(this.lastStableOccupancy);
       await this.setCapabilityValue('alarm_occupancy', occupied);
 
-      // Also update the internal tri-state capability for debugging
+      // Also update the internal quad-state capability for debugging
       await this.setCapabilityValue('occupancy_state', this.occupancyState);
 
       this.log(`Occupancy output: ${occupied}, internal state: ${this.occupancyState}`);
@@ -718,6 +745,198 @@ class WIABDevice extends Homey.Device {
     } catch (error) {
       this.error('Error checking PIR status:', error);
       return false; // Default to false if we can't check
+    }
+  }
+
+  /**
+   * Pauses the device and sets it to a specific occupancy state.
+   *
+   * When paused:
+   * - Device stops monitoring sensors (callbacks are ignored)
+   * - All timers are stopped
+   * - occupancy_state capability is set to PAUSED
+   * - alarm_occupancy is set to the specified state
+   *
+   * @param state - The occupancy state to set (OCCUPIED or UNOCCUPIED)
+   */
+  private async pauseDevice(state: StableOccupancyState): Promise<void> {
+    try {
+      this.log(`Pausing device with state: ${state}`);
+
+      // Mark as paused
+      this.isPaused = true;
+      this.pausedWithState = state;
+
+      // Stop all monitoring and timers
+      this.teardownSensorMonitoring();
+
+      // Set occupancy state to PAUSED
+      this.occupancyState = OccupancyState.PAUSED;
+      this.lastStableOccupancy = state;
+
+      // Update capabilities
+      await this.updateOccupancyOutput();
+
+      this.log(`Device paused with state: ${state}`);
+    } catch (error) {
+      this.error('Failed to pause device:', error);
+    }
+  }
+
+  /**
+   * Unpauses the device and reinitializes sensor monitoring.
+   *
+   * This is idempotent - only the first call after pausing will reinitialize.
+   * Subsequent calls while already unpaused are ignored.
+   *
+   * When unpaused:
+   * - Device resumes sensor monitoring
+   * - Occupancy state is reinitialized based on current sensor values
+   * - Timers are restarted
+   */
+  private async unpauseDevice(): Promise<void> {
+    try {
+      // Only allow unpause once - subsequent calls are ignored
+      if (!this.isPaused) {
+        this.log('Device is not paused - unpause request ignored');
+        return;
+      }
+
+      this.log('Unpausing device and reinitializing with current sensor values');
+
+      // Mark as unpaused and track that we've unpaused once
+      this.isPaused = false;
+      this.hasBeenUnpausedOnce = true;
+
+      // Reinitialize state machine to UNOCCUPIED (like onInit)
+      this.occupancyState = OccupancyState.UNOCCUPIED;
+      this.lastStableOccupancy = StableOccupancyState.UNOCCUPIED;
+
+      // Clear door states
+      this.doorStates.clear();
+
+      // Clear PIR tracking
+      this.lastDoorEventTimestamp = null;
+      this.waitingForPirFallingEdge = false;
+      this.lastPirTimestamp = null;
+
+      // Stop any running timers
+      this.stopEnterTimer();
+      this.stopClearTimer();
+
+      // Restart sensor monitoring (which will read initial PIR values)
+      await this.setupSensorMonitoring();
+
+      // Update output
+      await this.updateOccupancyOutput();
+
+      this.log('Device resumed, sensor monitoring reinitialized');
+    } catch (error) {
+      this.error('Failed to unpause device:', error);
+    }
+  }
+
+  /**
+   * Sets the occupancy state while device is paused.
+   *
+   * Device remains paused after this call. The boolean output (alarm_occupancy)
+   * is updated to reflect the new state.
+   *
+   * @param state - The occupancy state to set (OCCUPIED or UNOCCUPIED)
+   */
+  private async setStateWhilePaused(state: StableOccupancyState): Promise<void> {
+    try {
+      this.log(`Setting paused state to: ${state}`);
+
+      // Update paused state (whether paused or not)
+      this.pausedWithState = state;
+      this.lastStableOccupancy = state;
+
+      // If currently paused, update the occupancy state to PAUSED with new alarm_occupancy
+      if (this.isPaused) {
+        this.occupancyState = OccupancyState.PAUSED;
+      }
+
+      // Update capabilities
+      await this.updateOccupancyOutput();
+
+      this.log(`State updated to: ${state}`);
+    } catch (error) {
+      this.error('Failed to set state while paused:', error);
+    }
+  }
+
+  /**
+   * Checks if the device is currently paused.
+   *
+   * @returns true if device is paused, false otherwise
+   */
+  private isPausedCheck(): boolean {
+    return this.isPaused;
+  }
+
+  /**
+   * Registers action handlers for set_state and unpause actions.
+   *
+   * Called during device initialization to register the action listeners
+   * that will be invoked when the user triggers these actions in flows.
+   */
+  private registerActionHandlers(): void {
+    try {
+      // Register set_state action handler
+      const setStateCard = this.homey.flow.getActionCard('set_state');
+      setStateCard.registerRunListener(
+        async (args: {
+          device: WIABDevice;
+          state: 'occupied' | 'unoccupied';
+        }) => {
+          args.device.log(`Set state action triggered: ${args.state}`);
+
+          // Convert action argument to StableOccupancyState
+          const state =
+            args.state === 'occupied'
+              ? StableOccupancyState.OCCUPIED
+              : StableOccupancyState.UNOCCUPIED;
+
+          // Pause device with specified state
+          await args.device.pauseDevice(state);
+        }
+      );
+
+      // Register unpause action handler
+      const unpauseCard = this.homey.flow.getActionCard('unpause');
+      unpauseCard.registerRunListener(async (args: { device: WIABDevice }) => {
+        args.device.log('Unpause action triggered');
+        await args.device.unpauseDevice();
+      });
+
+      this.log('Action handlers registered successfully');
+    } catch (error) {
+      this.error('Failed to register action handlers:', error);
+    }
+  }
+
+  /**
+   * Registers condition handlers for is_paused condition.
+   *
+   * Called during device initialization to register the condition listener
+   * that will be evaluated when the user includes this condition in flows.
+   */
+  private registerConditionHandlers(): void {
+    try {
+      // Register is_paused condition handler
+      const isPausedCard = this.homey.flow.getConditionCard('is_paused');
+      isPausedCard.registerRunListener(
+        async (args: { device: WIABDevice }): Promise<boolean> => {
+          const paused = args.device.isPausedCheck();
+          args.device.log(`Is paused condition evaluated: ${paused}`);
+          return paused;
+        }
+      );
+
+      this.log('Condition handlers registered successfully');
+    } catch (error) {
+      this.error('Failed to register condition handlers:', error);
     }
   }
 
