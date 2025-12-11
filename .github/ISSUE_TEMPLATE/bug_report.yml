@@ -1,0 +1,134 @@
+name: Bug Report
+description: Report a bug or issue with WIAB
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below to help us investigate and fix the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: "Example: The virtual occupancy sensor doesn't deactivate when a reset sensor triggers."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior
+      placeholder: |
+        1. Configure WIAB with motion sensor as trigger
+        2. Add door contact as reset sensor
+        3. Trigger motion sensor
+        4. Open door (trigger reset sensor)
+        5. Observe that occupancy doesn't reset
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen
+      placeholder: "Example: Virtual occupancy sensor should deactivate when reset sensor is triggered."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened
+      placeholder: "Example: Virtual occupancy sensor remains active despite reset sensor triggering."
+    validations:
+      required: true
+
+  - type: input
+    id: wiab-version
+    attributes:
+      label: WIAB Version
+      description: What version of WIAB are you running?
+      placeholder: "Example: 1.0.0"
+    validations:
+      required: true
+
+  - type: input
+    id: homey-version
+    attributes:
+      label: Homey Version
+      description: What version of Homey are you running?
+      placeholder: "Example: 10.0.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: homey-type
+    attributes:
+      label: Homey Device Type
+      description: What type of Homey device are you using?
+      options:
+        - Homey Pro (2023)
+        - Homey Pro (2019)
+        - Homey (2016-2019)
+        - Homey Bridge
+        - Don't know
+    validations:
+      required: true
+
+  - type: textarea
+    id: device-configuration
+    attributes:
+      label: Device Configuration
+      description: |
+        Please describe your WIAB device configuration:
+        - Which sensors are configured as trigger sensors?
+        - Which sensors are configured as reset sensors?
+        - What are the capabilities being monitored? (e.g., alarm_motion, alarm_contact)
+      placeholder: |
+        Trigger sensors:
+        - Motion sensor (living room) - alarm_motion
+        - PIR sensor (hallway) - alarm_motion
+
+        Reset sensors:
+        - Front door contact - alarm_contact
+        - Back door contact - alarm_contact
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: |
+        If applicable, add logs from Homey app (Settings > Apps > WIAB > View app logs).
+        Please remove any sensitive information.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context about the problem here (screenshots, workarounds, etc.)
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please confirm the following before submitting
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have provided all required information above
+          required: true
+        - label: I am running the latest version of WIAB (or have noted the version above)
+          required: false
