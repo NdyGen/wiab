@@ -19,6 +19,8 @@
  */
 export function createMockHomey() {
   const mockDrivers: Map<string, MockDriver> = new Map();
+  const mockActionCards: Map<string, { registerRunListener: jest.Mock }> = new Map();
+  const mockConditionCards: Map<string, { registerRunListener: jest.Mock }> = new Map();
 
   return {
     log: jest.fn((..._args: unknown[]) => {
@@ -43,6 +45,30 @@ export function createMockHomey() {
       },
       _clear: () => {
         mockDrivers.clear();
+      },
+    },
+    flow: {
+      getActionCard: jest.fn((id: string) => {
+        if (!mockActionCards.has(id)) {
+          mockActionCards.set(id, {
+            registerRunListener: jest.fn(),
+          });
+        }
+        return mockActionCards.get(id);
+      }),
+      getConditionCard: jest.fn((id: string) => {
+        if (!mockConditionCards.has(id)) {
+          mockConditionCards.set(id, {
+            registerRunListener: jest.fn(),
+          });
+        }
+        return mockConditionCards.get(id);
+      }),
+      _getActionCard: (id: string) => mockActionCards.get(id),
+      _getConditionCard: (id: string) => mockConditionCards.get(id),
+      _clear: () => {
+        mockActionCards.clear();
+        mockConditionCards.clear();
       },
     },
   };

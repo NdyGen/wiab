@@ -57,7 +57,9 @@
       "Bash(git fetch:*)",
       "Bash(git merge:*)",
       "Bash(npm run validate:*)",
-      "Bash(npm run homey:build:*)"
+      "Bash(npm run homey:build:*)",
+      "Bash(homey app install:*)",
+      "Bash(gh run list:*)"
     ],
     "deny": [],
     "ask": []

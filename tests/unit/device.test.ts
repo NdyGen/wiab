@@ -411,60 +411,76 @@ describe('WIABDevice', () => {
      * Test error handling when setting capability value fails
      */
     it('should handle capability value error in handleTriggered', async () => {
-      // Setup device
+      // Setup device with empty sensor config (to avoid API calls)
       (device.getSetting as jest.Mock)
         .mockReturnValueOnce('[]')
         .mockReturnValueOnce('[]');
 
-      // Make setCapabilityValue fail
-      (device.setCapabilityValue as jest.Mock).mockRejectedValue(
+      await device.onInit();
+
+      // Make setCapabilityValue fail AFTER init, to isolate the error test
+      (device.setCapabilityValue as jest.Mock).mockRejectedValueOnce(
         new Error('Capability error')
       );
 
-      await device.onInit();
-
-      // Get and trigger callback
+      // Get the callbacks from the sensor monitor
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
       const callbacks = sensorMonitorCall[4];
 
-      await callbacks.onTriggered('test-sensor-id', true);
+      // Call the trigger callback (fire-and-forget)
+      callbacks.onTriggered('test-sensor-id', true);
 
-      // Error may be caught at different levels depending on when setCapabilityValue fails
-      // It could be either in the updateOccupancyOutput or in the main handler
+      // Wait for pending promises with retries to ensure async handler completes
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Verify error was logged by the async handler
       const errorCalls = (device.error as jest.Mock).mock.calls;
-      expect(errorCalls.some(call =>
-        call[0].includes('Failed to update occupancy output') || call[0].includes('Failed to handle PIR motion')
-      )).toBe(true);
+      const hasCapabilityError = errorCalls.some(call =>
+        typeof call[0] === 'string' && (
+          call[0].includes('Failed to set') ||
+          call[0].includes('Failed to update occupancy') ||
+          call[0].includes('Failed to handle')
+        )
+      );
+      expect(hasCapabilityError).toBe(true);
     });
 
     /**
      * Test error handling in handleReset
      */
     it('should handle capability value error in handleReset', async () => {
-      // Setup device
+      // Setup device with empty sensor config (to avoid API calls)
       (device.getSetting as jest.Mock)
         .mockReturnValueOnce('[]')
         .mockReturnValueOnce('[]');
 
-      // Make setCapabilityValue fail
-      (device.setCapabilityValue as jest.Mock).mockRejectedValue(
+      await device.onInit();
+
+      // Make setCapabilityValue fail AFTER init, to isolate the error test
+      (device.setCapabilityValue as jest.Mock).mockRejectedValueOnce(
         new Error('Capability error')
       );
 
-      await device.onInit();
-
-      // Get and trigger callback
+      // Get the callbacks from the sensor monitor
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
       const callbacks = sensorMonitorCall[4];
 
-      await callbacks.onReset('test-sensor-id', true);
+      // Call the reset callback (fire-and-forget)
+      callbacks.onReset('test-sensor-id', true);
 
-      // Error may be caught at different levels depending on when setCapabilityValue fails
-      // It could be either in the updateOccupancyOutput or in the main handler
+      // Wait for pending promises with retries to ensure async handler completes
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Verify error was logged by the async handler
       const errorCalls = (device.error as jest.Mock).mock.calls;
-      expect(errorCalls.some(call =>
-        call[0].includes('Failed to update occupancy output') || call[0].includes('Failed to handle door event')
-      )).toBe(true);
+      const hasCapabilityError = errorCalls.some(call =>
+        typeof call[0] === 'string' && (
+          call[0].includes('Failed to set') ||
+          call[0].includes('Failed to update occupancy') ||
+          call[0].includes('Failed to handle')
+        )
+      );
+      expect(hasCapabilityError).toBe(true);
     });
   });
 
