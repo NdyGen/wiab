@@ -5,14 +5,19 @@
   },
   "class": "sensor",
   "capabilities": [
-    "alarm_occupancy"
+    "alarm_occupancy",
+    "occupancy_state"
   ],
   "platforms": [
     "local",
     "cloud"
   ],
   "connectivity": [],
-  "icon": "/drivers/wiab-device/assets/icon.svg",
+  "images": {
+    "small": "/drivers/wiab-device/assets/images/small.png",
+    "large": "/drivers/wiab-device/assets/images/large.png",
+    "xlarge": "/drivers/wiab-device/assets/images/xlarge.png"
+  },
   "pair": [
     {
       "id": "select_trigger_sensors",
