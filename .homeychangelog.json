@@ -2,5 +2,8 @@
   "1.0.0": {
     "en": "Initial release of Wasp in a Box - Virtual presence detection system",
     "nl": "Eerste versie van Wasp in a Box - Virtueel aanwezigheidsdetectiesysteem"
+  },
+  "1.0.1": {
+    "en": "Removed Homey Cloud platform support (Homey Pro only)"
   }
 }
