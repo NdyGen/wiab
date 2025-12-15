@@ -12,4 +12,5 @@ coverage/
 
 
 # Added by Homey CLI
-/.homeybuild/.playwright-mcp/
+/.homeybuild/
+.playwright-mcp/
