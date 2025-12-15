@@ -1,6 +1,6 @@
 {
   "id": "net.dongen.wiab",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "compatibility": ">=12.2.0",
   "sdk": 3,
   "platforms": [
@@ -33,6 +33,12 @@
       }
     ]
   },
+  "bugs": {
+    "url": "https://github.com/NdyGen/wiab/issues"
+  },
+  "support": "https://github.com/NdyGen/wiab/issues",
+  "source": "https://github.com/NdyGen/wiab",
+  "homepage": "https://github.com/NdyGen/wiab",
   "images": {
     "small": "/assets/images/small.png",
     "large": "/assets/images/large.png",
