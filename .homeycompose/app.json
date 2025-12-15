@@ -1,11 +1,10 @@
 {
   "id": "net.dongen.wiab",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "compatibility": ">=12.2.0",
   "sdk": 3,
   "platforms": [
-    "local",
-    "cloud"
+    "local"
   ],
   "name": {
     "en": "Wasp in a Box",
