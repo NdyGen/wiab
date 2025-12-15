@@ -9,8 +9,7 @@
     "occupancy_state"
   ],
   "platforms": [
-    "local",
-    "cloud"
+    "local"
   ],
   "connectivity": [],
   "images": {
