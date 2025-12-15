@@ -1,94 +1,143 @@
 # WIAB v1.0.0 - App Store Submission Status
 
-## Current Status: BLOCKED - Homey CLI Bug
+## Current Status: ✅ SUCCESSFULLY SUBMITTED
 
-### Issue
-The Homey CLI v3.10.0 (latest) has a validation bug that prevents publishing the WIAB app:
+### Submission Details
+**Build ID**: 1
+**Version**: 1.0.0
+**Status**: In Homey's review queue
+**Submission Date**: 2025-12-15
+**Build URL**: https://tools.developer.homey.app/apps/app/net.dongen.wiab/build/1
+**GitHub Release**: https://github.com/NdyGen/wiab/releases/tag/v1.0.0
 
-**The Bug:**
-- The CLI validator REQUIRES the `images` property on drivers for `publish`-level validation
-- But the CLI's app build process AUTOMATICALLY REMOVES the `images` property from drivers
-- This creates an impossible condition where validation cannot pass
+### Resolution of GitHub Issue #414
 
-### Evidence
-```
-✖ App did not validate against level `publish`:
-✖ drivers.wiab-device: property `images` is required in order to publish an app.
-```
-
-This error occurs even when:
-1. `images` are defined in `.homeycompose/drivers/wiab-device/driver.compose.json`
-2. `images` are manually injected into `app.json`
-3. The app builds successfully at `debug` validation level
-4. All other validations pass
-
-### What We've Verified
-✅ App code compiles without errors  
-✅ All 78 unit tests pass  
-✅ App validates at `debug` level  
-✅ Homey developer account is configured  
-✅ Release v1.0.0 is tagged and on main branch  
-✅ Documentation is complete and accurate  
-✅ Driver images exist and are properly formatted:
-   - `/drivers/wiab-device/assets/images/small.png` (75x75px)
-   - `/drivers/wiab-device/assets/images/large.png` (500x500px)
-   - `/drivers/wiab-device/assets/images/xlarge.png` (500x500px)
-
-### Status: Issue Reported to Homey Team
-
-**GitHub Issue #414 Filed**
-- Repository: https://github.com/athombv/homey-apps-sdk-issues
+**Original Issue**: Homey CLI v3.10.0 validation bug with driver images property
 - Issue: https://github.com/athombv/homey-apps-sdk-issues/issues/414
-- Title: "Homey CLI v3.10.0: Driver images property stripped during build but required for publish validation"
-- Date Filed: 2025-12-11
-- Status: Open - Awaiting Homey team response and fix
+- Filed: 2025-12-11
 
-The comprehensive issue report includes:
-- Exact reproduction steps
-- Root cause analysis with evidence
-- All workarounds attempted
-- Full environment and app details
-- Suggested fixes for the Homey team
+**Resolution**: The driver compose file location fix (commit d79c2af) on the develop branch resolved the issue:
+- Moved driver compose files from `.homeycompose/drivers/wiab-device/` to `drivers/wiab-device/`
+- This aligns with the correct Homey SDK v3 structure where driver compose files belong in the `drivers/` directory
+- The Homey CLI correctly reads and processes driver metadata from this location
+- The `images` property is now properly included in the final `app.json` after build
 
-### Waiting for Fix
+### Validation Success
+✅ App validates at `publish` level (highest validation tier)
+✅ All 78 unit tests pass
+✅ 70%+ code coverage maintained
+✅ TypeScript compiles without errors
+✅ ESLint passes with no warnings
+✅ All images meet Homey App Store requirements:
+   - App images: 250x175, 500x350, 1000x700
+   - Driver images: 75x75, 500x500, 500x500 (xlarge same as large for consistency)
 
-The app is now waiting for:
-1. Homey team to acknowledge and investigate the bug
-2. Fix to be released in CLI v3.10.1 or later
-3. Once fixed, run `homey app publish` to submit to App Store
+### Release Process (Full Gitflow)
 
-### Alternative Options (If Needed)
+**Branch Strategy:**
+- Created release/1.0.0 from develop branch
+- Merged main into release branch to reconcile divergence
+- Created PR #9 (release/1.0.0 → main) with full CI validation
+- Tagged v1.0.0 on main branch (commit c4fa3e7)
+- Created PR #10 (main → develop) for merge-back
+- All PRs squash-merged with conventional commit messages
 
-**Option 1: Contact Homey Support**
-- If CLI fix takes too long, contact Homey support
-- Ask if there's a bypass or alternative submission method
-- Reference GitHub issue #414
+**Hotfix for Image Dimensions:**
+- Created hotfix/image-dimensions branch from main
+- Fixed image dimensions to meet App Store requirements
+- Created PR #11 with image fixes
+- Merged to main and back to develop
+- Final commit: 4d334b8
 
-**Option 2: Monitor CLI Releases**
-- Subscribe to Homey SDK releases
-- Check https://github.com/athombv/homey-apps-sdk-issues/releases
-- Upgrade CLI once v3.10.1+ is released
+**Quality Gates Passed:**
+- ✅ All CI/CD checks (build, test, lint, coverage, validate)
+- ✅ PR title validation (conventional commit format)
+- ✅ Branch protection rules enforced
+- ✅ Test coverage threshold maintained (70%+)
 
-### Files Prepared for Submission
-- `.homeycompose/drivers/wiab-device/driver.compose.json` - Has images defined
-- `app.json` - Generated build output (images stripped by CLI)
-- All app code, tests, and documentation complete
-- v1.0.0 release tag created and pushed
+### Files Submitted
+- `app.json` - Generated with all metadata, capabilities, and flow cards
+- `drivers/wiab-device/driver.compose.json` - Driver configuration with images property
+- `README.txt` - Plain text store listing with comprehensive documentation
+- `assets/images/*.png` - App marketing images (small, large, xlarge)
+- `drivers/wiab-device/assets/images/*.png` - Driver images (small, large, xlarge)
+- All source code, tests, and documentation
 
-### Timeline
+### Submission Timeline
+
+**Development Phase:**
 - 2025-12-11: App development completed
-- 2025-12-11: Release v1.0.0 created and tagged
+- 2025-12-11: Initial v1.0.0 tag created (later removed for proper Gitflow)
 - 2025-12-11: Documentation finalized
-- 2025-12-11: Submission blocked by Homey CLI v3.10.0 bug
-- 2025-12-11: Community forum searched for workarounds (none found)
+- 2025-12-11: Submission initially blocked by GitHub issue #414
 - 2025-12-11: GitHub issue #414 filed with Homey team
-- 2025-12-11: App awaiting CLI fix to proceed with submission
+
+**Release Phase:**
+- 2025-12-15: Started Full Gitflow release process
+- 2025-12-15: Deleted old v1.0.0 tag
+- 2025-12-15: Created release/1.0.0 branch from develop (includes fix d79c2af)
+- 2025-12-15: Merged main into release branch to reconcile divergence
+- 2025-12-15: Created and merged PR #9 (release → main)
+- 2025-12-15: Created new v1.0.0 annotated tag on commit c4fa3e7
+- 2025-12-15: Created and merged PR #10 (main → develop merge-back)
+
+**Submission Phase:**
+- 2025-12-15: Validated app at publish level - discovered driver compose fix resolved issue #414!
+- 2025-12-15: Fixed image dimension validation errors (PR #11 hotfix)
+- 2025-12-15: Created README.txt for App Store requirements
+- 2025-12-15: Successfully submitted to Homey App Store (Build ID: 1)
+- 2025-12-15: Created GitHub Release v1.0.0 with comprehensive release notes
+
+### What Resolved the Issue
+
+The driver compose file location fix (commit d79c2af) from the develop branch was the key:
+
+**Before (Broken):**
+```
+.homeycompose/drivers/wiab-device/
+├── driver.compose.json          # ❌ Ignored by Homey CLI
+├── driver.images.compose.json   # ❌ Ignored by Homey CLI
+└── driver.settings.compose.json # ❌ Ignored by Homey CLI
+```
+
+**After (Working):**
+```
+drivers/wiab-device/
+└── driver.compose.json          # ✅ Correctly processed by Homey CLI
+    (includes images, settings, all metadata)
+```
+
+This change ensured the Homey CLI:
+1. Correctly reads driver metadata from the proper location
+2. Includes the `images` property in the final `app.json`
+3. Passes publish-level validation without errors
+
+### Next Steps
+
+**Awaiting Homey Review:**
+- App is now in Homey's review queue
+- Review typically takes 1-7 business days
+- Will receive email notification when review is complete
+- No action required until review feedback is received
+
+**If Approved:**
+- App will be published to Homey App Store
+- Users can install via Homey mobile app or web interface
+- App will be publicly listed at: https://homey.app/a/net.dongen.wiab/
+
+**If Changes Requested:**
+- Address feedback from Homey review team
+- Create feature branch from main for any fixes
+- Follow Gitflow hotfix process for critical issues
+- Resubmit updated build
 
 ### Contact Information
 - App ID: `net.dongen.wiab`
 - Version: 1.0.0
 - Author: Andy van Dongen (andy@dongen.net)
+- Repository: https://github.com/NdyGen/wiab
+- Build URL: https://tools.developer.homey.app/apps/app/net.dongen.wiab/build/1
 
 ---
 
-**Status: Ready for submission once Homey CLI bug is fixed**
+**Status: Successfully submitted - Awaiting Homey team review**
