@@ -5,5 +5,9 @@
   },
   "1.0.1": {
     "en": "Removed Homey Cloud platform support (Homey Pro only)"
+  },
+  "1.0.2": {
+    "en": "Added GitHub support URLs for issue tracking and public support",
+    "nl": "GitHub ondersteunings-URLs toegevoegd voor issue tracking en publieke ondersteuning"
   }
 }
