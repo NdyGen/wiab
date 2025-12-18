@@ -448,6 +448,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Approve pull request
+        run: |
+          gh pr review ${{ env.PR_NUMBER }} --approve --body "✅ Automated approval: All quality checks passed in workflow Phase 2.
+
+          This release PR has been automatically approved because:
+          - Version validation passed
+          - Build successful
+          - All tests passed
+          - Linting passed
+          - Homey app validation passed
+
+          The PR will auto-merge once CI checks complete."
+          echo "✅ Approved PR #${{ env.PR_NUMBER }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Wait for CI checks
         run: |
           echo "⏳ Waiting for CI checks to pass..."
@@ -530,9 +546,27 @@ jobs:
 
       - name: Create git tag
         run: |
-          # Fetch the merged commit
+          # Pull the latest main branch (which includes the merge commit)
           git fetch origin main
-          git checkout ${{ env.MERGE_SHA }}
+          git checkout main
+          git pull origin main
+
+          # Verify we have the correct merge commit
+          CURRENT_SHA=$(git rev-parse HEAD)
+          if [ "$CURRENT_SHA" != "${{ env.MERGE_SHA }}" ]; then
+            echo "::error::Current SHA $CURRENT_SHA doesn't match merge SHA ${{ env.MERGE_SHA }}"
+            exit 1
+          fi
+
+          # Verify changelog entry exists
+          if ! grep -q '"${{ env.VERSION }}"' .homeychangelog.json; then
+            echo "::error::Changelog entry for ${{ env.VERSION }} not found in .homeychangelog.json"
+            echo "Contents of .homeychangelog.json:"
+            cat .homeychangelog.json
+            exit 1
+          fi
+
+          echo "✅ Verified merge commit and changelog entry"
 
           # Create annotated tag
           git tag -a "${{ env.TAG }}" -m "Release ${{ env.TAG }}
