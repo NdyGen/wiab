@@ -433,7 +433,6 @@ jobs:
             --body "$PR_BODY" \
             --base main \
             --head ${{ env.BRANCH_NAME }} \
-            --label "release" \
             | grep -oP '(?<=/pull/)\d+')
 
           echo "pr-number=${PR_NUMBER}" >> $GITHUB_OUTPUT
