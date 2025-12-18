@@ -67,6 +67,36 @@ jobs:
       - name: Validate Homey app
         run: npx homey app validate
 
+      - name: Generate and update changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 ${{ env.TAG }}^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            CHANGELOG_TEXT="Initial release"
+          else
+            # Generate changelog from commits since previous tag
+            CHANGELOG_TEXT=$(git log $PREV_TAG..${{ env.TAG }} --pretty=format:"%s" --no-merges | head -1)
+
+            # If no commits found, use default message
+            if [ -z "$CHANGELOG_TEXT" ]; then
+              CHANGELOG_TEXT="Bug fixes and improvements"
+            fi
+          fi
+
+          echo "Generated changelog: $CHANGELOG_TEXT"
+
+          # Update .homeychangelog.json with new version entry
+          node -e "
+            const fs = require('fs');
+            const changelog = JSON.parse(fs.readFileSync('.homeychangelog.json', 'utf8'));
+            changelog['${{ env.VERSION }}'] = {
+              'en': '$CHANGELOG_TEXT'
+            };
+            fs.writeFileSync('.homeychangelog.json', JSON.stringify(changelog, null, 2) + '\n');
+            console.log('✅ Updated .homeychangelog.json with version ${{ env.VERSION }}');
+          "
+
       - name: Publish to Homey App Store
         uses: athombv/github-action-homey-app-publish@master
         id: publish
