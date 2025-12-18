@@ -765,78 +765,80 @@ git push
 - Keep commits professional and concise
 - Use conventional commit format: feat, fix, docs, refactor, test, chore
 
-### Gitflow Branching Model
+### GitHub Flow Branching Model
 
-WIAB uses Gitflow for structured development and release management. This ensures stable production code and organized feature development.
+WIAB uses GitHub Flow, a simplified branching strategy with a single main branch and feature branches. This ensures clean history and straightforward releases.
 
-**Permanent Branches:**
-- **`main`** - Production-ready code. Always deployable. Protected with required reviews and status checks.
-- **`develop`** - Integration branch for features. Default PR target for new functionality. Also protected.
+**Main Branch:**
+- **`main`** - Production-ready code. Always deployable. Protected with required reviews and status checks. All feature PRs target main.
 
-**Temporary Branches:**
+**Feature Branches:**
 - **`feature/*`** - New features or enhancements (e.g., `feature/sensor-timeout`, `feature/pairing-improvements`)
-- **`release/*`** - Release preparation (e.g., `release/1.1.0`). Created from develop, merged to main and back to develop.
-- **`hotfix/*`** - Critical production fixes (e.g., `hotfix/1.0.1`). Created from main, merged to main and back to develop.
+- Created from `main`, merged back to `main` via PR
+- Deleted after merge
 
 **Branch Naming Convention:**
 - Use lowercase, hyphenated names
 - Be descriptive: `feature/sensor-timeout` not `feature/fix`
 - Reference issues if applicable: `feature/sensor-timeout-#42`
 
-**PR Target Rules:**
-- **New features/enhancements**: Create PR targeting `develop`
-- **Hotfixes**: Create PR targeting `main` (will be merged back to develop automatically)
-- **Releases**: Create PR targeting `main`
-
-**Using Slash Commands (Recommended):**
+**Workflow:**
 ```bash
-# Start a new feature branch
-/git:start-feature sensor-timeout
-
-# Work on your feature
-git add .
-git commit -m "feat: add sensor timeout configuration"
-
-# Finish feature (creates PR to develop)
-/git:finish-feature sensor-timeout
-
-# Start a release
-/git:start-release 1.1.0
-
-# Finish release (merges to main and develop, creates tag)
-/git:finish-release 1.1.0
-
-# Start a hotfix
-/git:start-hotfix 1.0.1
-
-# Finish hotfix (merges to main and develop, creates tag)
-/git:finish-hotfix 1.0.1
-```
-
-**Manual Approach:**
-```bash
-# Create and checkout feature branch from develop
-git checkout develop
-git pull origin develop
+# 1. Create feature branch from main
+git checkout main
+git pull origin main
 git checkout -b feature/your-feature-name
 
-# Make changes, commit, push
+# 2. Make changes and commit
 git add .
 git commit -m "feat: your feature description"
+
+# 3. Push feature branch
 git push -u origin feature/your-feature-name
 
-# Create PR on GitHub targeting develop
+# 4. Create PR on GitHub targeting main
+
+# 5. After PR is merged, clean up
+git checkout main
+git pull origin main
+git branch -d feature/your-feature-name
 ```
+
+**Release Process (Tag-Based):**
+
+Releases are automated via GitHub Actions. When you're ready to release:
+
+```bash
+# 1. Ensure main is up to date
+git checkout main
+git pull origin main
+
+# 2. Create and push version tag
+git tag v1.0.3
+git push origin v1.0.3
+
+# 3. GitHub Actions automatically:
+#    - Builds and tests the app
+#    - Updates version in app.json and package.json
+#    - Publishes to Homey App Store
+#    - Creates GitHub release with changelog
+#    - Commits version updates back to main
+```
+
+**Tag Format:**
+- Use semantic versioning: `v<major>.<minor>.<patch>`
+- Examples: `v1.0.3`, `v2.1.0`, `v1.0.0`
+- Tags trigger the automated release workflow
 
 ### Squash Merge Strategy
 
 WIAB uses **squash merging** for PRs. This means:
 - All commits on your feature branch are combined into a single commit
-- The **PR title becomes the commit message** on the target branch (develop/main)
+- The **PR title becomes the commit message** on the main branch
 - This commit appears in the main git log, release notes, and changelogs
 
 **Why Squash Merging?**
-- Clean, linear history on main/develop branches
+- Clean, linear history on main branch
 - Each PR becomes one logical commit
 - Easier to understand project history
 - Enables automated changelog generation from PR titles
@@ -893,15 +895,10 @@ If validation fails, you'll see a clear error message. Simply edit the PR title 
 - Requires branch to be up to date with base branch before merging
 - Requires all conversations to be resolved
 - No direct pushes allowed (must use PRs)
-- Linear history preferred
-
-**`develop` Branch Protection:**
-- Requires PR with ≥1 approval before merging
-- Requires all status checks to pass (build, test, lint, validate, PR title validation)
-- Requires branch to be up to date with base branch before merging
+- Linear history enforced with squash merging
 - No force pushes allowed
 
-These rules ensure code quality and prevent accidental direct commits to protected branches.
+These rules ensure code quality and prevent accidental direct commits to the main branch.
 
 ### Pull Request Process
 
@@ -913,7 +910,7 @@ These rules ensure code quality and prevent accidental direct commits to protect
    - `npm run lint` (no linting errors)
    - `npm run validate` (Homey validation passes)
 2. Branch is up to date with target branch
-3. Branch name follows convention (feature/*, hotfix/*, release/*)
+3. Branch name follows convention (feature/*)
 4. No references to Claude or AI tools in code/comments
 
 **Creating the PR:**
@@ -934,7 +931,7 @@ These rules ensure code quality and prevent accidental direct commits to protect
 
 **After Merge:**
 - Your branch is automatically deleted
-- Pull latest changes: `git pull origin develop` (or main)
+- Pull latest changes: `git pull origin main`
 - Delete local branch: `git branch -d feature/your-feature-name`
 - Continue with next feature!
 
@@ -974,8 +971,8 @@ WIAB uses GitHub Actions to automatically run quality checks on every push and P
 9. **Status Check** - Aggregate all checks for PR merge decision
 
 **When Pipeline Runs:**
-- On every push to `main` or `develop` branches
-- On every pull request to `main` or `develop` branches
+- On every push to `main` branch
+- On every pull request to `main` branch
 
 **What Causes Pipeline Failures:**
 
@@ -991,7 +988,7 @@ Your PR will fail the pipeline if:
 
 ```bash
 # 1. Pull latest changes
-git pull origin develop
+git pull origin main
 
 # 2. Fix the issues locally (see error messages)
 # - Fix TypeScript errors: check npm run build output
@@ -1067,11 +1064,11 @@ All worktrees share the same `.git` directory, so commits, merges, and history a
 
 ```bash
 # 1. Create a new worktree with a feature branch
-git worktree add ../wiab-feature-sensor-timeout -b feature/sensor-timeout develop
+git worktree add ../wiab-feature-sensor-timeout -b feature/sensor-timeout main
 
 # This creates:
 # - A new directory: ../wiab-feature-sensor-timeout
-# - A new feature branch: feature/sensor-timeout (based on develop)
+# - A new feature branch: feature/sensor-timeout (based on main)
 # - Ready for development immediately
 ```
 
@@ -1106,7 +1103,7 @@ git push -u origin feature/sensor-timeout
 git worktree list
 
 # Output example:
-# /Users/andy/projects/ndygen/wiab (develop)
+# /Users/andy/projects/ndygen/wiab (main)
 # /Users/andy/projects/ndygen/wiab-feature-sensor-timeout (feature/sensor-timeout)
 # /Users/andy/projects/ndygen/wiab-feature-pairing (feature/pairing-improvements)
 ```
@@ -1131,15 +1128,15 @@ rm -rf ../wiab-feature-sensor-timeout
 
 **Worktree for Pull Requests:**
 
-When multiple agents need to work on PRs to the same branch (e.g., both reviewing/testing PRs to `develop`):
+When multiple agents need to work on different features simultaneously:
 
 ```bash
 # Agent 1 working on feature
-git worktree add ../wiab-feature-a -b feature/timeout develop
+git worktree add ../wiab-feature-a -b feature/timeout main
 cd ../wiab-feature-a
 
 # Agent 2 working on different feature (in another terminal)
-git worktree add ../wiab-feature-b -b feature/pairing develop
+git worktree add ../wiab-feature-b -b feature/pairing main
 cd ../wiab-feature-b
 
 # Each agent works independently without interfering
@@ -1151,7 +1148,7 @@ Testing a feature against the main branch before creating a PR:
 
 ```bash
 # 1. Create worktree with feature branch
-git worktree add ../wiab-test-feature -b feature/my-feature develop
+git worktree add ../wiab-test-feature -b feature/my-feature main
 
 # 2. Create another worktree with main branch for comparison
 git worktree add ../wiab-test-main main
@@ -1169,22 +1166,19 @@ For streamlined workflow with slash commands:
 
 ```bash
 # 1. Create worktree for new feature
-git worktree add ../wiab-feature-timeout -b feature/sensor-timeout develop
+git worktree add ../wiab-feature-timeout -b feature/sensor-timeout main
 
 # 2. Navigate to worktree
 cd ../wiab-feature-timeout
 
-# 3. Start feature work (now worktrees know about this branch)
-/git:start-feature sensor-timeout
-
-# 4. Make changes, run tests, commit
+# 3. Make changes, run tests, commit
 git add .
 git commit -m "feat: add sensor timeout"
+git push -u origin feature/sensor-timeout
 
-# 5. Finish feature (creates PR from worktree)
-/git:finish-feature sensor-timeout
+# 4. Create PR on GitHub (targets main automatically)
 
-# 6. After PR merges, clean up
+# 5. After PR merges, clean up
 cd /Users/andy/projects/ndygen/wiab
 git worktree remove ../wiab-feature-timeout
 ```
@@ -1201,17 +1195,16 @@ git worktree remove ../wiab-feature-timeout
 
 **Pattern 1: Dedicated Main Worktree**
 ```bash
-# Keep main worktree for develop/main branches only
-/Users/andy/projects/ndygen/wiab/  # develop (main worktree)
+# Keep main worktree for main branch only
+/Users/andy/projects/ndygen/wiab/  # main (main worktree)
 ../wiab-feature-1/                  # feature/timeout
 ../wiab-feature-2/                  # feature/pairing
-../wiab-hotfix-1/                   # hotfix/bug-fix
 ```
 
 **Pattern 2: Temporary Test Worktrees**
 ```bash
 # Create test worktrees, delete after testing
-git worktree add ../wiab-test-integration -b test/integration-check develop
+git worktree add ../wiab-test-integration -b test/integration-check main
 cd ../wiab-test-integration
 npm test
 # ... test results ...
@@ -1222,17 +1215,17 @@ git worktree remove ../wiab-test-integration
 **Pattern 3: Parallel Agent Workflow**
 ```bash
 # Agent 1
-git worktree add ../wiab-agent1 -b feature/agent1-work develop
+git worktree add ../wiab-agent1 -b feature/agent1-work main
 cd ../wiab-agent1
 # ... work on feature 1 ...
 
 # Agent 2 (in different terminal/context)
-git worktree add ../wiab-agent2 -b feature/agent2-work develop
+git worktree add ../wiab-agent2 -b feature/agent2-work main
 cd ../wiab-agent2
 # ... work on feature 2 simultaneously ...
 
 # Both agents commit/push independently
-# Both agents can create PRs simultaneously
+# Both agents can create PRs simultaneously (all target main)
 # No conflicts or interference
 ```
 
@@ -1431,10 +1424,11 @@ This document provides the foundation for developing and maintaining the WIAB Ho
 
 ### Key Capabilities for AI Agents:
 
-- **Single Feature Development**: Follow standard Gitflow workflow with feature branches
+- **Single Feature Development**: Follow GitHub Flow with feature branches targeting main
 - **Parallel Feature Development**: Use git worktrees to work on multiple features simultaneously without interference
 - **Professional Standards**: Conventional commits, comprehensive testing, proper documentation
 - **Quality Assurance**: Automated CI/CD pipeline with branch protection and validation
-- **Organized Workflow**: Gitflow structure with clear release and hotfix procedures
+- **Simplified Workflow**: Single main branch with automated tag-based releases
+- **Automated Releases**: Tag-based deployment via GitHub Actions
 
 When in doubt, refer to this document and the Homey SDK documentation. Always prioritize code quality, test coverage, and user experience.
