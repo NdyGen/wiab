@@ -14,15 +14,22 @@ The repository must have the `HOMEY_BEARER_TOKEN` secret configured:
 2. Navigate to **Secrets and variables** → **Actions**
 3. Ensure `HOMEY_BEARER_TOKEN` is set with your Homey App Store authentication token
 
-To get your Homey bearer token:
-```bash
-# Login to Homey CLI
-homey login
+To get your Homey Personal Access Token (PAT):
 
-# The token is stored in ~/.athom-cli.json
-cat ~/.athom-cli.json
-# Copy the "token" value to GitHub secrets
-```
+1. Go to **Homey Developer Tools**: https://tools.developer.homey.app
+2. Log in with your Athom account if needed
+3. Navigate to **My Account** (in the left sidebar)
+4. Scroll down to the **Personal Access Token** section
+5. Click the **Reveal** button to show the token
+6. Copy the token (it will look like `pat-apps-XXXXX-XXXXX`)
+7. Go to your GitHub repository settings
+8. Navigate to **Settings** → **Secrets and variables** → **Actions**
+9. Click **New repository secret**
+10. Name: `HOMEY_BEARER_TOKEN`
+11. Value: Paste the token you copied
+12. Click **Add secret**
+
+**Note**: This Personal Access Token is specifically designed for CI/CD environments and is different from OAuth2 API clients.
 
 ### 2. Clean Main Branch
 
