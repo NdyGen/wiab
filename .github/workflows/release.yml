@@ -441,91 +441,22 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Enable auto-merge
+      - name: Merge pull request
+        id: merge-pr
         run: |
-          gh pr merge ${{ env.PR_NUMBER }} --auto --squash
-          echo "✅ Enabled auto-merge for PR #${{ env.PR_NUMBER }}"
-          echo "ℹ️ PR will auto-merge once CI checks pass (no approval required)"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "ℹ️ Quality checks already passed in Phase 2"
+          echo "ℹ️ PR contains only version updates - safe to merge directly"
 
-      - name: Wait for CI checks
-        run: |
-          echo "⏳ Waiting for CI checks to pass..."
+          # Merge the PR
+          gh pr merge ${{ env.PR_NUMBER }} --squash --delete-branch
 
-          # Wait up to 10 minutes for checks
-          TIMEOUT=600
-          ELAPSED=0
-          INTERVAL=15
+          echo "✅ PR #${{ env.PR_NUMBER }} merged successfully"
 
-          while [ $ELAPSED -lt $TIMEOUT ]; do
-            # Get check status
-            STATUS=$(gh pr view ${{ env.PR_NUMBER }} --json statusCheckRollup --jq '.statusCheckRollup[].conclusion' | sort -u)
-
-            # Check if all checks passed
-            if echo "$STATUS" | grep -q "FAILURE\|CANCELLED"; then
-              echo "::error::❌ CI checks failed"
-              gh pr view ${{ env.PR_NUMBER }} --json statusCheckRollup
-              exit 1
-            fi
-
-            # Check if all successful
-            PENDING=$(echo "$STATUS" | grep -c "PENDING\|IN_PROGRESS" || true)
-            if [ "$PENDING" -eq 0 ]; then
-              echo "✅ All CI checks passed"
-              break
-            fi
-
-            echo "⏳ Checks still running... ($ELAPSED/$TIMEOUT seconds)"
-            sleep $INTERVAL
-            ELAPSED=$((ELAPSED + INTERVAL))
-          done
-
-          if [ $ELAPSED -ge $TIMEOUT ]; then
-            echo "::error::❌ Timeout waiting for CI checks"
-            exit 1
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Wait for PR merge
-        id: wait-merge
-        run: |
-          echo "⏳ Waiting for PR to merge..."
-
-          # Wait up to 5 minutes for merge
-          TIMEOUT=300
-          ELAPSED=0
-          INTERVAL=10
-
-          while [ $ELAPSED -lt $TIMEOUT ]; do
-            # Check if PR is merged
-            MERGED=$(gh pr view ${{ env.PR_NUMBER }} --json state --jq '.state')
-
-            if [ "$MERGED" = "MERGED" ]; then
-              # Get merge commit SHA
-              MERGE_SHA=$(gh pr view ${{ env.PR_NUMBER }} --json mergeCommit --jq '.mergeCommit.oid')
-              echo "merge-sha=${MERGE_SHA}" >> $GITHUB_OUTPUT
-              echo "MERGE_SHA=${MERGE_SHA}" >> $GITHUB_ENV
-              echo "✅ PR merged successfully"
-              echo "Merge commit: ${MERGE_SHA}"
-              break
-            fi
-
-            if [ "$MERGED" = "CLOSED" ]; then
-              echo "::error::❌ PR was closed without merging"
-              exit 1
-            fi
-
-            echo "⏳ Waiting for merge... ($ELAPSED/$TIMEOUT seconds)"
-            sleep $INTERVAL
-            ELAPSED=$((ELAPSED + INTERVAL))
-          done
-
-          if [ $ELAPSED -ge $TIMEOUT ]; then
-            echo "::error::❌ Timeout waiting for PR merge"
-            exit 1
-          fi
+          # Get merge commit SHA
+          MERGE_SHA=$(gh pr view ${{ env.PR_NUMBER }} --json mergeCommit --jq '.mergeCommit.oid')
+          echo "merge-sha=${MERGE_SHA}" >> $GITHUB_OUTPUT
+          echo "MERGE_SHA=${MERGE_SHA}" >> $GITHUB_ENV
+          echo "Merge commit: ${MERGE_SHA}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -561,12 +492,6 @@ jobs:
           # Push tag
           git push origin ${{ env.TAG }}
           echo "✅ Created and pushed tag ${{ env.TAG }}"
-
-      - name: Delete release branch
-        if: success()
-        run: |
-          git push origin --delete ${{ env.BRANCH_NAME }}
-          echo "✅ Deleted release branch ${{ env.BRANCH_NAME }}"
 
       - name: PR and merge summary
         run: |
