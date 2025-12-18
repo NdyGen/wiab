@@ -1,13 +1,29 @@
 {
   "1.0.0": {
-    "en": "Initial release of Wasp in a Box - Virtual presence detection system",
-    "nl": "Eerste versie van Wasp in a Box - Virtueel aanwezigheidsdetectiesysteem"
+    "en": "Initial release of Wasp in a Box - Virtual presence detection system"
   },
   "1.0.1": {
     "en": "Removed Homey Cloud platform support (Homey Pro only)"
   },
   "1.0.2": {
-    "en": "Added GitHub support URLs for issue tracking and public support",
-    "nl": "GitHub ondersteunings-URLs toegevoegd voor issue tracking en publieke ondersteuning"
+    "en": "Added GitHub support URLs for issue tracking and public support"
+  },
+  "1.0.3": {
+    "en": "Documentation updates"
+  },
+  "1.0.4": {
+    "en": "Added translations"
+  },
+  "1.0.5": {
+    "en": "Release process updates"
+  },
+  "1.0.6": {
+    "en": "Release process updates"
+  },
+  "1.0.7": {
+    "en": "Release process updates"
+  },
+  "1.0.8": {
+    "en": "Release process updates"
   }
 }
