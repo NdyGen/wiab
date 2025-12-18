@@ -21,7 +21,11 @@
     "sv": "Smart rumsnärvaro som förblir aktiv även när du sitter stilla"
   },
   "category": [
-    "security"
+    "tools",
+    "climate",
+    "energy",
+    "security",
+    "lights"
   ],
   "permissions": [
     "homey:manager:api"
