@@ -530,9 +530,27 @@ jobs:
 
       - name: Create git tag
         run: |
-          # Fetch the merged commit
+          # Pull the latest main branch (which includes the merge commit)
           git fetch origin main
-          git checkout ${{ env.MERGE_SHA }}
+          git checkout main
+          git pull origin main
+
+          # Verify we have the correct merge commit
+          CURRENT_SHA=$(git rev-parse HEAD)
+          if [ "$CURRENT_SHA" != "${{ env.MERGE_SHA }}" ]; then
+            echo "::error::Current SHA $CURRENT_SHA doesn't match merge SHA ${{ env.MERGE_SHA }}"
+            exit 1
+          fi
+
+          # Verify changelog entry exists
+          if ! grep -q '"${{ env.VERSION }}"' .homeychangelog.json; then
+            echo "::error::Changelog entry for ${{ env.VERSION }} not found in .homeychangelog.json"
+            echo "Contents of .homeychangelog.json:"
+            cat .homeychangelog.json
+            exit 1
+          fi
+
+          echo "✅ Verified merge commit and changelog entry"
 
           # Create annotated tag
           git tag -a "${{ env.TAG }}" -m "Release ${{ env.TAG }}
