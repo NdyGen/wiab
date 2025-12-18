@@ -1,12 +1,27 @@
 # Wasp in a Box (WIAB)
 
-A Homey app that creates virtual occupancy sensors based on physical sensor triggers. Perfect for creating sophisticated presence detection systems by combining multiple sensors into a single, intelligent occupancy indicator.
+A Homey app that creates smart virtual occupancy sensors by combining motion sensors with door contacts. Unlike traditional PIR sensors that only detect movement, WIAB maintains room occupancy state even when people sit still - providing reliable presence detection for home automation.
 
-## What is "Wasp in a Box"?
+## The Problem
 
-The "Wasp in a Box" concept is inspired by the behavior of wasps trapped in a container - they remain active and buzzing until they escape. Similarly, this app creates a virtual occupancy sensor that activates when motion or other triggers are detected, and only resets when specific "exit" conditions are met (like opening a door).
+Motion sensors detect movement, not occupancy. When you're sitting still reading, working at a desk, or sleeping, motion sensors timeout and trigger automations incorrectly - lights turn off, heating shuts down, security activates.
 
-This approach provides more reliable presence detection than individual motion sensors, which may timeout prematurely in rooms where people remain still for extended periods.
+## The Solution
+
+WIAB combines motion sensors (entry detection) with door contacts (exit detection) to track actual room occupancy:
+- **Motion detected** → Room becomes occupied
+- **Room stays occupied** → Even when sitting perfectly still for hours
+- **Door opens** → Room becomes unoccupied (exit detected)
+
+This state-based approach provides true occupancy detection, not just motion detection.
+
+## Use Cases
+
+Perfect for:
+- **Offices**: Keep lights/heating on while working at your desk
+- **Living rooms**: Maintain comfort while reading or watching TV
+- **Bedrooms**: Proper occupancy state during sleep
+- **Any space**: Where people spend time sitting still
 
 ## Features
 

@@ -1,0 +1,12 @@
+{
+  "pair": {
+    "select_trigger_sensors": {
+      "title": "Välj Rörelsesensorer",
+      "intro": "Välj rörelsesensorerna som kommer att utlösa närvarodetektering."
+    },
+    "select_reset_sensors": {
+      "title": "Välj Dörr-/Fönsterkontakter",
+      "intro": "Välj dörr- eller fönsterkontakterna som kommer att återställa närvaro när de öppnas."
+    }
+  }
+}

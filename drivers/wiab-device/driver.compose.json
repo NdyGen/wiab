@@ -1,7 +1,10 @@
 {
   "name": {
     "en": "WIAB Device",
-    "nl": "WIAB Apparaat"
+    "nl": "WIAB Apparaat",
+    "de": "WIAB Gerät",
+    "no": "WIAB Enhet",
+    "sv": "WIAB Enhet"
   },
   "class": "sensor",
   "capabilities": [

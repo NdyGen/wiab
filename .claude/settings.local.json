@@ -59,7 +59,13 @@
       "Bash(npm run validate:*)",
       "Bash(npm run homey:build:*)",
       "Bash(homey app install:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(/tmp/publish_homey.exp:*)",
+      "Bash(gh pr list:*)",
+      "WebFetch(domain:homey.app)",
+      "WebFetch(domain:community.homey.app)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []
