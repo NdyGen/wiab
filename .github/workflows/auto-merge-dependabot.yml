@@ -1,0 +1,58 @@
+name: Auto-merge Dependabot Patch Updates
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge-patch:
+    # Only run for Dependabot PRs
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Auto-approve patch updates
+        # Only auto-approve patch updates (0.0.x)
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: |
+          gh pr review --approve "$PR_URL"
+          echo "✅ Auto-approved patch update: ${{ steps.metadata.outputs.dependency-names }}"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge for patch updates
+        # Auto-merge will wait for CI to pass before merging
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: |
+          gh pr merge --auto --squash "$PR_URL"
+          echo "✅ Enabled auto-merge for patch update (will merge after CI passes)"
+          echo "📦 Dependency: ${{ steps.metadata.outputs.dependency-names }}"
+          echo "📈 Update: ${{ steps.metadata.outputs.previous-version }} → ${{ steps.metadata.outputs.new-version }}"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Comment on non-patch updates
+        # Inform user about minor/major updates that need manual review
+        if: steps.metadata.outputs.update-type != 'version-update:semver-patch'
+        run: |
+          gh pr comment "$PR_URL" --body "⚠️ This is a **${{ steps.metadata.outputs.update-type }}** update and requires manual review.
+
+          📦 Dependency: ${{ steps.metadata.outputs.dependency-names }}
+          📈 Update: ${{ steps.metadata.outputs.previous-version }} → ${{ steps.metadata.outputs.new-version }}
+
+          Please review and merge manually after CI passes."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
