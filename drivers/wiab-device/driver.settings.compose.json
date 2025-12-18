@@ -88,6 +88,50 @@
         "min": 60,
         "max": 3600,
         "step": 60
+      },
+      {
+        "id": "stalePirMinutes",
+        "type": "number",
+        "label": {
+          "en": "PIR stale timeout (minutes)",
+          "nl": "PIR verlopen timeout (minuten)",
+          "de": "PIR-Veraltungstimeout (Minuten)",
+          "no": "PIR foreldet timeout (minutter)",
+          "sv": "PIR föråldrad timeout (minuter)"
+        },
+        "hint": {
+          "en": "Ignore PIR sensors stuck reporting motion for longer than this when initializing. Prevents false occupancy from stuck sensors. Typical: 30 minutes.",
+          "nl": "Negeer PIR-sensoren die langer dan dit beweging blijven melden bij initialisatie. Voorkomt valse aanwezigheid van vastgelopen sensoren. Typisch: 30 minuten.",
+          "de": "Ignorieren Sie PIR-Sensoren, die länger als dies Bewegung melden, bei der Initialisierung. Verhindert falsche Belegung durch festgefahrene Sensoren. Typisch: 30 Minuten.",
+          "no": "Ignorer PIR-sensorer som rapporterer bevegelse lenger enn dette ved initialisering. Forhindrer falsk tilstedeværelse fra fastlåste sensorer. Typisk: 30 minutter.",
+          "sv": "Ignorera PIR-sensorer som rapporterar rörelse längre än detta vid initialisering. Förhindrar falsk närvaro från fastnade sensorer. Typiskt: 30 minuter."
+        },
+        "value": 30,
+        "min": 5,
+        "max": 120,
+        "step": 1
+      },
+      {
+        "id": "staleDoorMinutes",
+        "type": "number",
+        "label": {
+          "en": "Door stale timeout (minutes)",
+          "nl": "Deur verlopen timeout (minuten)",
+          "de": "Tür-Veraltungstimeout (Minuten)",
+          "no": "Dør foreldet timeout (minutter)",
+          "sv": "Dörr föråldrad timeout (minuter)"
+        },
+        "hint": {
+          "en": "Ignore door sensors stuck reporting open for longer than this when initializing. Prevents false occupancy from stuck sensors. Typical: 30 minutes.",
+          "nl": "Negeer deursensoren die langer dan dit open blijven melden bij initialisatie. Voorkomt valse aanwezigheid van vastgelopen sensoren. Typisch: 30 minuten.",
+          "de": "Ignorieren Sie Türsensoren, die länger als dies offen melden, bei der Initialisierung. Verhindert falsche Belegung durch festgefahrene Sensoren. Typisch: 30 Minuten.",
+          "no": "Ignorer dørsensorer som rapporterer åpne lenger enn dette ved initialisering. Forhindrer falsk tilstedeværelse fra fastlåste sensorer. Typisk: 30 minutter.",
+          "sv": "Ignorera dörrsensorer som rapporterar öppen längre än detta vid initialisering. Förhindrar falsk närvaro från fastnade sensorer. Typiskt: 30 minuter."
+        },
+        "value": 30,
+        "min": 5,
+        "max": 120,
+        "step": 1
       }
     ]
   }

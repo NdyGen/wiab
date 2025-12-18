@@ -95,7 +95,9 @@ describe('WIABDevice', () => {
           onTriggered: expect.any(Function),
           onReset: expect.any(Function),
           onPirCleared: expect.any(Function),
-        })
+        }),
+        1800000, // stalePirTimeoutMs (30 minutes)
+        1800000  // staleDoorTimeoutMs (30 minutes)
       );
       expect(mockSensorMonitor.start).toHaveBeenCalled();
     });
@@ -122,7 +124,9 @@ describe('WIABDevice', () => {
           onTriggered: expect.any(Function),
           onReset: expect.any(Function),
           onPirCleared: expect.any(Function),
-        })
+        }),
+        1800000, // stalePirTimeoutMs (30 minutes)
+        1800000  // staleDoorTimeoutMs (30 minutes)
       );
       expect(mockSensorMonitor.start).toHaveBeenCalled();
     });
@@ -210,7 +214,7 @@ describe('WIABDevice', () => {
         'WIAB device settings changed:', ['triggerSensors']
       );
       expect(device.log).toHaveBeenCalledWith(
-        'Sensor configuration changed, reinitializing monitoring'
+        'Sensor configuration or stale timeout settings changed, reinitializing monitoring'
       );
       expect(mockSensorMonitor.stop).toHaveBeenCalled();
       expect(SensorMonitor).toHaveBeenCalledTimes(1);
@@ -247,7 +251,7 @@ describe('WIABDevice', () => {
       });
 
       expect(device.log).toHaveBeenCalledWith(
-        'Sensor configuration changed, reinitializing monitoring'
+        'Sensor configuration or stale timeout settings changed, reinitializing monitoring'
       );
       expect(mockSensorMonitor.stop).toHaveBeenCalled();
     });
@@ -278,7 +282,7 @@ describe('WIABDevice', () => {
       );
       // Should not log sensor reconfiguration
       expect(device.log).not.toHaveBeenCalledWith(
-        expect.stringContaining('Sensor configuration changed')
+        expect.stringContaining('Sensor configuration or stale timeout settings changed')
       );
       expect(mockSensorMonitor.stop).not.toHaveBeenCalled();
     });
@@ -606,7 +610,9 @@ describe('WIABDevice', () => {
           onTriggered: expect.any(Function),
           onReset: expect.any(Function),
           onPirCleared: expect.any(Function),
-        })
+        }),
+        1800000, // stalePirTimeoutMs (30 minutes)
+        1800000  // staleDoorTimeoutMs (30 minutes)
       );
     });
   });

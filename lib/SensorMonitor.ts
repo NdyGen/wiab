@@ -27,6 +27,10 @@ interface ExtendedHomeyAPIDevice extends HomeyAPIDevice {
   makeCapabilityInstance?(capability: string, callback: (value: boolean) => void): unknown;
   hasCapability?(capability: string): boolean;
   getCapabilityValue?(capability: string): unknown;
+  capabilitiesObj: Record<string, {
+    value: unknown;
+    lastUpdated?: number;
+  }>;
 }
 
 /**
@@ -57,6 +61,9 @@ export class SensorMonitor {
   private deviceCache: Record<string, ExtendedHomeyAPIDevice> = {};
   private deviceRefs: Map<string, ExtendedHomeyAPIDevice> = new Map(); // Live device references from HomeyAPI
   private capabilityInstances: Map<string, unknown> = new Map(); // DeviceCapability instances for cleanup
+  private stalePirTimeoutMs: number;
+  private staleDoorTimeoutMs: number;
+  private staleSensors: Set<string> = new Set(); // Track which sensors are stale at initialization
 
   /**
    * Creates a new SensorMonitor instance
@@ -66,19 +73,25 @@ export class SensorMonitor {
    * @param {SensorConfig[]} triggerSensors - Sensors that activate occupancy when triggered
    * @param {SensorConfig[]} resetSensors - Sensors that deactivate occupancy when triggered (priority over trigger sensors)
    * @param {SensorCallbacks} callbacks - Callback functions for sensor state changes
+   * @param {number} stalePirTimeoutMs - Timeout in ms for PIR sensors to be considered stale (default: 30 minutes)
+   * @param {number} staleDoorTimeoutMs - Timeout in ms for door sensors to be considered stale (default: 30 minutes)
    */
   constructor(
     homeyApi: HomeyAPI,
     logger: Logger,
     triggerSensors: SensorConfig[],
     resetSensors: SensorConfig[],
-    callbacks: SensorCallbacks
+    callbacks: SensorCallbacks,
+    stalePirTimeoutMs: number = 30 * 60 * 1000,
+    staleDoorTimeoutMs: number = 30 * 60 * 1000
   ) {
     this.homeyApi = homeyApi;
     this.logger = logger;
     this.triggerSensors = triggerSensors;
     this.resetSensors = resetSensors;
     this.callbacks = callbacks;
+    this.stalePirTimeoutMs = stalePirTimeoutMs;
+    this.staleDoorTimeoutMs = staleDoorTimeoutMs;
   }
 
   /**
@@ -161,6 +174,7 @@ export class SensorMonitor {
    *
    * This prevents false positives on the first poll by establishing baseline values.
    * If a sensor cannot be read, it is initialized with false.
+   * Also checks if sensors are stale (stuck TRUE for too long) at initialization.
    *
    * @private
    * @returns {void}
@@ -172,7 +186,25 @@ export class SensorMonitor {
       const key = this.getSensorKey(sensor);
       const value = await this.getSensorValue(sensor);
       this.lastValues.set(key, value ?? false);
-      this.logger.log(`[INIT] ${sensor.deviceName || sensor.deviceId} (${sensor.capability}): ${value}`);
+
+      // Check if sensor is stale at initialization
+      if (value === true) {
+        const isStale = await this.checkSensorStaleAtInit(sensor);
+        if (isStale) {
+          this.staleSensors.add(key);
+          this.logger.log(
+            `[INIT] Sensor is STALE (stuck TRUE too long): ${sensor.deviceName || sensor.deviceId}`
+          );
+        } else {
+          this.logger.log(
+            `[INIT] ${sensor.deviceName || sensor.deviceId} (${sensor.capability}): ${value} (FRESH)`
+          );
+        }
+      } else {
+        this.logger.log(
+          `[INIT] ${sensor.deviceName || sensor.deviceId} (${sensor.capability}): ${value}`
+        );
+      }
     }
   }
 
@@ -202,6 +234,14 @@ export class SensorMonitor {
       const key = this.getSensorKey(sensor);
       const value = this.lastValues.get(key) ?? false;
 
+      // Skip stale sensors - they should not affect initial occupancy
+      if (value && this.staleSensors.has(key)) {
+        this.logger.log(
+          `[INITIAL STATE] Ignoring STALE reset sensor: ${sensor.deviceName || sensor.deviceId}`
+        );
+        continue;
+      }
+
       if (value) {
         // A door/window is OPEN (reset sensor = true) - cannot be occupied
         this.logger.log(
@@ -226,6 +266,14 @@ export class SensorMonitor {
     for (const sensor of this.triggerSensors) {
       const key = this.getSensorKey(sensor);
       const value = this.lastValues.get(key) ?? false;
+
+      // Skip stale sensors - they should not affect initial occupancy
+      if (value && this.staleSensors.has(key)) {
+        this.logger.log(
+          `[INITIAL STATE] Ignoring STALE trigger sensor: ${sensor.deviceName || sensor.deviceId}`
+        );
+        continue;
+      }
 
       if (value) {
         // Motion detected
@@ -452,6 +500,66 @@ export class SensorMonitor {
     } catch (error) {
       this.logger.error(`Error reading sensor ${sensor.deviceId}:`, error);
       return null;
+    }
+  }
+
+  /**
+   * Checks if a sensor is stale at initialization.
+   *
+   * Uses HomeyAPI capability lastUpdated timestamp if available.
+   * If timestamp is older than stale timeout, sensor is stale.
+   * If no timestamp available, treat as non-stale (conservative approach).
+   *
+   * @private
+   * @param {SensorConfig} sensor - The sensor to check
+   * @returns {Promise<boolean>} true if sensor is stale, false otherwise
+   */
+  private async checkSensorStaleAtInit(sensor: SensorConfig): Promise<boolean> {
+    try {
+      const device = this.deviceRefs.get(sensor.deviceId);
+      if (!device) {
+        return false; // No device = treat as non-stale
+      }
+
+      const capabilitiesObj = device.capabilitiesObj;
+      if (!capabilitiesObj || !(sensor.capability in capabilitiesObj)) {
+        return false; // No capability = treat as non-stale
+      }
+
+      const capabilityObj = capabilitiesObj[sensor.capability];
+
+      // Check if lastUpdated timestamp is available
+      const lastUpdated = capabilityObj?.lastUpdated;
+      if (!lastUpdated || typeof lastUpdated !== 'number') {
+        // No timestamp available - treat as non-stale (conservative)
+        this.logger.log(
+          `[INIT] No lastUpdated timestamp for ${sensor.deviceName || sensor.deviceId}, treating as fresh`
+        );
+        return false;
+      }
+
+      // Calculate time since last update
+      const now = Date.now();
+      const elapsed = now - lastUpdated;
+
+      // Determine timeout based on sensor type
+      const isResetSensor = this.resetSensors.some(s => s.deviceId === sensor.deviceId);
+      const timeout = isResetSensor ? this.staleDoorTimeoutMs : this.stalePirTimeoutMs;
+
+      // Sensor is stale if it hasn't updated in longer than timeout
+      const isStale = elapsed > timeout;
+
+      if (isStale) {
+        this.logger.log(
+          `[INIT] Sensor stale: ${sensor.deviceName || sensor.deviceId} - ` +
+          `last updated ${Math.floor(elapsed / 60000)} minutes ago (timeout: ${Math.floor(timeout / 60000)} minutes)`
+        );
+      }
+
+      return isStale;
+    } catch (error) {
+      this.logger.error(`Error checking sensor staleness at init: ${sensor.deviceId}`, error);
+      return false; // Error = treat as non-stale (conservative)
     }
   }
 
