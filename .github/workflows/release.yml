@@ -1,127 +1,570 @@
-name: Release to Homey App Store
+name: Publish App to App store
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'  # Triggers on version tags like v1.0.3
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (X.Y.Z format, e.g., 1.0.3)'
+        required: true
+        type: string
+      changelog:
+        description: 'Changelog entry for this release'
+        required: true
+        type: string
+
+# Prevent concurrent releases
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '20'
 
 jobs:
-  release:
-    name: Build, Test, and Release
+  # ==========================================================================
+  # Phase 1: Input Validation (Fail Fast)
+  # ==========================================================================
+  validate:
+    name: 'Phase 1: Validate Inputs'
     runs-on: ubuntu-latest
-
+    outputs:
+      version: ${{ steps.validate-version.outputs.version }}
+      tag: ${{ steps.validate-version.outputs.tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0  # Fetch all history for changelog generation
-
-      - name: Validate tag format
-        run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          if [[ ! $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "❌ Invalid tag format: $TAG"
-            echo "Tag must be in format: vX.Y.Z (e.g., v1.0.3)"
-            exit 1
-          fi
-          echo "✅ Valid tag format: $TAG"
-          echo "TAG=$TAG" >> $GITHUB_ENV
-          echo "VERSION=${TAG#v}" >> $GITHUB_ENV
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Validate version format
+        id: validate-version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+
+          # Validate semver format
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::❌ Invalid version format: $VERSION"
+            echo "Version must be in X.Y.Z format (e.g., 1.0.3)"
+            exit 1
+          fi
+
+          echo "✅ Valid version format: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TAG=v$VERSION" >> $GITHUB_ENV
+
+      - name: Validate changelog
+        run: |
+          CHANGELOG="${{ github.event.inputs.changelog }}"
+
+          if [ -z "$CHANGELOG" ]; then
+            echo "::error::❌ Changelog cannot be empty"
+            exit 1
+          fi
+
+          if [ ${#CHANGELOG} -lt 10 ]; then
+            echo "::warning::⚠️ Changelog is very short (${#CHANGELOG} characters)"
+            echo "Consider providing a more detailed description"
+          fi
+
+          echo "✅ Changelog provided: ${#CHANGELOG} characters"
+
+      - name: Check version uniqueness
+        run: |
+          if grep -q '"${{ env.VERSION }}"' .homeychangelog.json; then
+            echo "::error::❌ Version ${{ env.VERSION }} already exists in changelog"
+            echo "Please use a different version number"
+            exit 1
+          fi
+
+          echo "✅ Version ${{ env.VERSION }} is unique"
+
+      - name: Compare with current version
+        run: |
+          # Install dependencies to read package.json
+          npm ci
+
+          CURRENT_VERSION=$(node -e "console.log(require('./package.json').version)")
+          echo "Current version: $CURRENT_VERSION"
+          echo "New version: ${{ env.VERSION }}"
+
+          # Simple version comparison (splits on '.' and compares numerically)
+          IFS='.' read -r -a NEW <<< "${{ env.VERSION }}"
+          IFS='.' read -r -a CURR <<< "$CURRENT_VERSION"
+
+          if [[ ${NEW[0]} -lt ${CURR[0]} ]] || \
+             [[ ${NEW[0]} -eq ${CURR[0]} && ${NEW[1]} -lt ${CURR[1]} ]] || \
+             [[ ${NEW[0]} -eq ${CURR[0]} && ${NEW[1]} -eq ${CURR[1]} && ${NEW[2]} -le ${CURR[2]} ]]; then
+            echo "::error::❌ Version ${{ env.VERSION }} is not greater than current version $CURRENT_VERSION"
+            exit 1
+          fi
+
+          echo "✅ Version ${{ env.VERSION }} > $CURRENT_VERSION"
+
+      - name: Verify branch is main
+        run: |
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$BRANCH" != "main" ]; then
+            echo "::error::❌ Must run release from main branch (current: $BRANCH)"
+            exit 1
+          fi
+
+          echo "✅ Running from main branch"
+
+      - name: Validation summary
+        run: |
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## ✅ Phase 1: Validation Passed
+
+          - **Version**: ${{ env.VERSION }}
+          - **Tag**: ${{ env.TAG }}
+          - **Changelog**: ${{ github.event.inputs.changelog }}
+          - **Branch**: main
+          - **Status**: All validation checks passed
+          EOF
+
+  # ==========================================================================
+  # Phase 2: Quality Assurance (Build & Test)
+  # ==========================================================================
+  quality-assurance:
+    name: 'Phase 2: Quality Assurance'
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          echo "✅ Dependencies installed"
+
+      - name: Build TypeScript
+        run: |
+          npm run build
+          echo "✅ TypeScript build successful"
+
+      - name: Run linter
+        run: |
+          npm run lint
+          echo "✅ Linting passed"
+
+      - name: Run tests
+        run: |
+          npm test
+          echo "✅ Tests passed"
+
+      - name: Build Homey app
+        run: |
+          npm run homey:build
+          echo "✅ Homey app.json generated"
+
+      - name: Validate Homey app
+        run: |
+          npx homey app validate
+          echo "✅ Homey app validation passed"
+
+      - name: Quality assurance summary
+        run: |
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## ✅ Phase 2: Quality Assurance Passed
+
+          - **Build**: ✅ Success
+          - **Linter**: ✅ Passed
+          - **Tests**: ✅ Passed
+          - **Homey Validation**: ✅ Passed
+          - **Ready for release**: Yes
+          EOF
+
+  # ==========================================================================
+  # Phase 3: Version Update (Atomic)
+  # ==========================================================================
+  update-version:
+    name: 'Phase 3: Update Version Files'
+    runs-on: ubuntu-latest
+    needs: [validate, quality-assurance]
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      TAG: ${{ needs.validate.outputs.tag }}
+    outputs:
+      backup-path: ${{ steps.backup.outputs.backup-path }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build TypeScript
-        run: npm run build
-
-      - name: Run tests
-        run: npm test
-
-      - name: Run linter
-        run: npm run lint
-
-      - name: Update version in app.json and package.json
+      - name: Create backup
+        id: backup
         run: |
-          # Update package.json version
-          npm version ${{ env.VERSION }} --no-git-tag-version --allow-same-version
+          TIMESTAMP=$(date +%s)
+          BACKUP_DIR=".backup-${TIMESTAMP}"
+          mkdir -p "${BACKUP_DIR}"
 
-          # Update .homeycompose/app.json version
+          echo "Creating backup in ${BACKUP_DIR}..."
+          cp package.json "${BACKUP_DIR}/package.json"
+          cp .homeycompose/app.json "${BACKUP_DIR}/app.json"
+          cp .homeychangelog.json "${BACKUP_DIR}/changelog.json"
+
+          echo "backup-path=${BACKUP_DIR}" >> $GITHUB_OUTPUT
+          echo "BACKUP_PATH=${BACKUP_DIR}" >> $GITHUB_ENV
+          echo "✅ Backup created: ${BACKUP_DIR}"
+
+      - name: Update package.json
+        run: |
+          npm version ${{ env.VERSION }} --no-git-tag-version --allow-same-version
+          echo "✅ Updated package.json to ${{ env.VERSION }}"
+
+      - name: Update .homeycompose/app.json
+        run: |
           node -e "
             const fs = require('fs');
             const appJson = JSON.parse(fs.readFileSync('.homeycompose/app.json', 'utf8'));
             appJson.version = '${{ env.VERSION }}';
             fs.writeFileSync('.homeycompose/app.json', JSON.stringify(appJson, null, 2) + '\n');
           "
+          echo "✅ Updated .homeycompose/app.json to ${{ env.VERSION }}"
 
-          echo "✅ Updated version to ${{ env.VERSION }}"
-
-      - name: Build Homey app
-        run: npm run homey:build
-
-      - name: Validate Homey app
-        run: npx homey app validate
-
-      - name: Generate and update changelog
+      - name: Update .homeychangelog.json
         run: |
-          # Get the previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 ${{ env.TAG }}^ 2>/dev/null || echo "")
-
-          if [ -z "$PREV_TAG" ]; then
-            CHANGELOG_TEXT="Initial release"
-          else
-            # Generate changelog from commits since previous tag
-            CHANGELOG_TEXT=$(git log $PREV_TAG..${{ env.TAG }} --pretty=format:"%s" --no-merges | head -1)
-
-            # If no commits found, use default message
-            if [ -z "$CHANGELOG_TEXT" ]; then
-              CHANGELOG_TEXT="Bug fixes and improvements"
-            fi
-          fi
-
-          echo "Generated changelog: $CHANGELOG_TEXT"
-
-          # Update .homeychangelog.json with new version entry
           node -e "
             const fs = require('fs');
             const changelog = JSON.parse(fs.readFileSync('.homeychangelog.json', 'utf8'));
             changelog['${{ env.VERSION }}'] = {
-              'en': '$CHANGELOG_TEXT'
+              'en': \`${{ github.event.inputs.changelog }}\`
             };
             fs.writeFileSync('.homeychangelog.json', JSON.stringify(changelog, null, 2) + '\n');
-            console.log('✅ Updated .homeychangelog.json with version ${{ env.VERSION }}');
           "
+          echo "✅ Updated .homeychangelog.json with new entry"
+
+      - name: Rebuild Homey app.json
+        run: |
+          npm run homey:build
+          echo "✅ Rebuilt app.json with updated version"
+
+      - name: Validate updated files
+        run: |
+          # Verify package.json
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PKG_VERSION" != "${{ env.VERSION }}" ]; then
+            echo "::error::❌ package.json version mismatch: $PKG_VERSION"
+            exit 1
+          fi
+
+          # Verify .homeycompose/app.json
+          APP_VERSION=$(node -p "require('./.homeycompose/app.json').version")
+          if [ "$APP_VERSION" != "${{ env.VERSION }}" ]; then
+            echo "::error::❌ app.json version mismatch: $APP_VERSION"
+            exit 1
+          fi
+
+          # Verify .homeychangelog.json
+          CHANGELOG_EXISTS=$(node -p "Object.keys(require('./.homeychangelog.json')).includes('${{ env.VERSION }}')")
+          if [ "$CHANGELOG_EXISTS" != "true" ]; then
+            echo "::error::❌ Changelog entry missing for ${{ env.VERSION }}"
+            exit 1
+          fi
+
+          echo "✅ All version updates validated successfully"
+
+      - name: Upload updated files as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: version-files
+          path: |
+            package.json
+            package-lock.json
+            .homeycompose/app.json
+            .homeychangelog.json
+            app.json
+          retention-days: 7
+
+      - name: Version update summary
+        run: |
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## ✅ Phase 3: Version Update Completed
+
+          - **Version**: ${{ env.VERSION }}
+          - **Files Updated**:
+            - package.json
+            - package-lock.json
+            - .homeycompose/app.json
+            - .homeychangelog.json
+            - app.json (generated)
+          - **Backup Location**: ${{ env.BACKUP_PATH }}
+          - **Validation**: All checks passed
+          EOF
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "❌ Version update failed - rolling back..."
+
+          if [ -d "${{ env.BACKUP_PATH }}" ]; then
+            cp ${{ env.BACKUP_PATH }}/package.json package.json || true
+            cp ${{ env.BACKUP_PATH }}/app.json .homeycompose/app.json || true
+            cp ${{ env.BACKUP_PATH }}/changelog.json .homeychangelog.json || true
+
+            echo "✅ Files restored from backup"
+          else
+            echo "⚠️ Backup not found - manual restoration may be needed"
+          fi
+
+  # ==========================================================================
+  # Phase 4: Commit & Tag Creation (Git Operations)
+  # ==========================================================================
+  commit-and-tag:
+    name: 'Phase 4: Commit and Tag'
+    runs-on: ubuntu-latest
+    needs: [validate, update-version]
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      TAG: ${{ needs.validate.outputs.tag }}
+    outputs:
+      commit-sha: ${{ steps.commit.outputs.commit-sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download updated files
+        uses: actions/download-artifact@v4
+        with:
+          name: version-files
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Stage files
+        run: |
+          git add package.json package-lock.json .homeycompose/app.json .homeychangelog.json
+          git status
+
+      - name: Commit changes
+        id: commit
+        run: |
+          git commit -m "chore(release): v${{ env.VERSION }}
+
+          ${{ github.event.inputs.changelog }}
+
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+          Co-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>"
+
+          COMMIT_SHA=$(git rev-parse HEAD)
+          echo "commit-sha=${COMMIT_SHA}" >> $GITHUB_OUTPUT
+          echo "COMMIT_SHA=${COMMIT_SHA}" >> $GITHUB_ENV
+          echo "✅ Committed version updates"
+          echo "Commit SHA: ${COMMIT_SHA}"
+
+      - name: Create annotated tag
+        run: |
+          git tag -a "${{ env.TAG }}" -m "Release ${{ env.TAG }}
+
+          ${{ github.event.inputs.changelog }}"
+
+          echo "✅ Created tag ${{ env.TAG }}"
+
+      - name: Push commit and tag
+        run: |
+          git push origin main
+          git push origin ${{ env.TAG }}
+          echo "✅ Pushed commit and tag to origin"
+
+      - name: Git operations summary
+        run: |
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## ✅ Phase 4: Git Operations Completed
+
+          - **Commit SHA**: ${{ env.COMMIT_SHA }}
+          - **Tag**: ${{ env.TAG }}
+          - **Files Committed**:
+            - package.json
+            - package-lock.json
+            - .homeycompose/app.json
+            - .homeychangelog.json
+          - **Status**: Pushed to origin/main
+          EOF
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "❌ Git operations failed - attempting rollback..."
+
+          # Delete tag if created
+          if git rev-parse "${{ env.TAG }}" >/dev/null 2>&1; then
+            git tag -d "${{ env.TAG }}"
+            git push origin ":refs/tags/${{ env.TAG }}" || true
+            echo "✅ Deleted tag ${{ env.TAG }}"
+          fi
+
+          # Reset commit if created
+          if [ -n "${{ env.COMMIT_SHA }}" ]; then
+            git reset --hard HEAD~1
+            git push --force origin main || true
+            echo "✅ Reset commit"
+          fi
+
+  # ==========================================================================
+  # Phase 5: Homey App Store Publish (External Service)
+  # ==========================================================================
+  publish-homey:
+    name: 'Phase 5: Publish to Homey App Store'
+    runs-on: ubuntu-latest
+    needs: [validate, commit-and-tag]
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build for publishing
+        run: |
+          npm run build
+          npm run homey:build
+
+      - name: Validate before publish
+        run: |
+          npx homey app validate
+          echo "✅ Pre-publish validation passed"
 
       - name: Publish to Homey App Store
-        uses: athombv/github-action-homey-app-publish@master
         id: publish
+        uses: athombv/github-action-homey-app-publish@master
         with:
           personal_access_token: ${{ secrets.HOMEY_BEARER_TOKEN }}
 
-      - name: Generate changelog
-        id: changelog
+      - name: Verify publish success
         run: |
-          # Get the previous tag
-          PREV_TAG=$(git describe --tags --abbrev=0 ${{ env.TAG }}^ 2>/dev/null || echo "")
-
-          if [ -z "$PREV_TAG" ]; then
-            echo "First release - no previous tag found"
-            CHANGELOG="Initial release"
-          else
-            echo "Generating changelog from $PREV_TAG to ${{ env.TAG }}"
-            CHANGELOG=$(git log $PREV_TAG..${{ env.TAG }} --pretty=format:"- %s (%h)" --no-merges)
+          if [ "${{ steps.publish.outcome }}" != "success" ]; then
+            echo "::error::❌ Homey App Store publish failed"
+            exit 1
           fi
 
-          # Save changelog to file for GitHub release
-          echo "$CHANGELOG" > CHANGELOG.txt
-          echo "changelog<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "✅ Published to Homey App Store"
+
+      - name: Publish summary
+        run: |
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## ✅ Phase 5: Homey App Store Publish Completed
+
+          - **Version**: ${{ env.VERSION }}
+          - **Status**: Published Successfully
+          - **App Store Link**: https://homey.app/nl-nl/app/net.dongen.wiab/Wasp-in-a-Box/
+          - **Publish Time**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          EOF
+
+      - name: Document failure state
+        if: failure()
+        run: |
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## ⚠️ Phase 5: Publish Failed - Manual Intervention Required
+
+          ### Current State
+          - Version: ${{ env.VERSION }}
+          - Commit SHA: ${{ needs.commit-and-tag.outputs.commit-sha }}
+          - Tag: ${{ env.TAG }}
+          - Git: ✅ Committed and tagged
+          - Homey App Store: ❌ Failed
+
+          ### Manual Recovery Steps
+
+          1. **Verify Git State**
+             \`\`\`bash
+             git fetch --tags
+             git checkout ${{ env.TAG }}
+             \`\`\`
+
+          2. **Manual Publish**
+             \`\`\`bash
+             npm ci
+             npm run build
+             npm run homey:build
+             npx homey app publish
+             \`\`\`
+
+          3. **If Publish Succeeds**
+             - Continue to GitHub release creation manually
+             - Mark workflow as resolved
+
+          4. **If Complete Rollback Needed**
+             \`\`\`bash
+             # Delete tag
+             git push --delete origin ${{ env.TAG }}
+             git tag -d ${{ env.TAG }}
+
+             # Reset commit
+             git reset --hard HEAD~1
+             git push --force origin main
+             \`\`\`
+
+          ### Support
+          Check logs above for detailed error information.
+          EOF
+
+  # ==========================================================================
+  # Phase 6: GitHub Release Creation
+  # ==========================================================================
+  create-release:
+    name: 'Phase 6: Create GitHub Release'
+    runs-on: ubuntu-latest
+    needs: [validate, commit-and-tag, publish-homey]
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+          fetch-depth: 0
 
       - name: Create GitHub Release
         uses: actions/create-release@v1
@@ -131,9 +574,9 @@ jobs:
           tag_name: ${{ env.TAG }}
           release_name: Release ${{ env.TAG }}
           body: |
-            ## Changes
+            ## Changelog
 
-            ${{ steps.changelog.outputs.changelog }}
+            ${{ github.event.inputs.changelog }}
 
             ## Installation
 
@@ -148,19 +591,85 @@ jobs:
           draft: false
           prerelease: false
 
-      - name: Notify success
-        if: success()
+      - name: Release summary
         run: |
-          echo "🎉 Successfully released ${{ env.TAG }} to Homey App Store!"
-          echo "✅ Build: Passed"
-          echo "✅ Tests: Passed"
-          echo "✅ Validation: Passed"
-          echo "✅ Published: ${{ steps.publish.outcome }}"
-          echo "✅ GitHub Release: Created"
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## ✅ Phase 6: GitHub Release Created
 
-      - name: Notify failure
-        if: failure()
+          - **Release**: ${{ env.TAG }}
+          - **Changelog**: ${{ github.event.inputs.changelog }}
+          - **URL**: https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG }}
+          EOF
+
+  # ==========================================================================
+  # Success Notification (All Phases Complete)
+  # ==========================================================================
+  notify-success:
+    name: 'Release Successful'
+    runs-on: ubuntu-latest
+    needs: [validate, quality-assurance, update-version, commit-and-tag, publish-homey, create-release]
+    if: success()
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+      TAG: ${{ needs.validate.outputs.tag }}
+    steps:
+      - name: Success notification
         run: |
-          echo "❌ Release failed for ${{ env.TAG }}"
-          echo "Check the logs above for details"
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          # 🎉 Release Successful!
+
+          ## Version ${{ env.VERSION }} Released
+
+          All phases completed successfully:
+          - ✅ Phase 1: Input Validation
+          - ✅ Phase 2: Quality Assurance
+          - ✅ Phase 3: Version Update
+          - ✅ Phase 4: Commit & Tag
+          - ✅ Phase 5: Homey App Store Publish
+          - ✅ Phase 6: GitHub Release
+
+          ## Links
+          - **Homey App Store**: https://homey.app/nl-nl/app/net.dongen.wiab/Wasp-in-a-Box/
+          - **GitHub Release**: https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG }}
+          - **Commit**: ${{ needs.commit-and-tag.outputs.commit-sha }}
+
+          ## Next Steps
+          - Monitor Homey App Store for live publication
+          - Announce release in community forum if needed
+          - Update documentation if required
+          EOF
+
+          echo "🎉 Successfully released ${{ env.VERSION }} to Homey App Store!"
+
+  # ==========================================================================
+  # Failure Notification
+  # ==========================================================================
+  notify-failure:
+    name: 'Release Failed'
+    runs-on: ubuntu-latest
+    needs: [validate, quality-assurance, update-version, commit-and-tag, publish-homey, create-release]
+    if: failure()
+    steps:
+      - name: Failure notification
+        run: |
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          # ❌ Release Failed
+
+          The release workflow encountered an error. Check the failed job above for details.
+
+          ## Recovery Steps
+
+          1. Review the error logs in the failed phase
+          2. If git operations succeeded but publish failed, see manual recovery steps in Phase 5
+          3. If early phases failed, fix the issue and re-run the workflow
+          4. Contact repository maintainer if assistance is needed
+
+          ## Support
+
+          - Check workflow logs for detailed error messages
+          - Review HOW_TO_RELEASE.md for guidance
+          - Open an issue if the problem persists
+          EOF
+
+          echo "❌ Release failed - check logs for details"
           exit 1
