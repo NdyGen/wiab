@@ -67,6 +67,14 @@ jobs:
       - name: Validate Homey app
         run: npx homey app validate
 
+      - name: Commit version updates
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add package.json package-lock.json .homeycompose/app.json app.json
+          git commit -m "chore: bump version to ${{ env.VERSION }}"
+          git push origin HEAD:main
+
       - name: Install Homey CLI globally
         run: npm install -g homey
 
@@ -124,14 +132,6 @@ jobs:
             - [Community Forum](https://community.homey.app/t/app-pro-wasp-in-a-box-wiab/147021)
           draft: false
           prerelease: false
-
-      - name: Commit version updates
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add package.json package-lock.json .homeycompose/app.json
-          git commit -m "chore: bump version to ${{ env.VERSION }}" || echo "No changes to commit"
-          git push origin HEAD:main || echo "Nothing to push"
 
       - name: Notify success
         if: success()
