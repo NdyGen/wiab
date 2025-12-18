@@ -76,7 +76,7 @@ jobs:
           echo '{"token":"${{ secrets.HOMEY_BEARER_TOKEN }}"}' > ~/.athom-cli.json
 
       - name: Publish to Homey App Store
-        run: homey app publish
+        run: homey app publish --skip-validate-uncommitted-changes
         continue-on-error: true  # Don't fail if already published
         id: publish
 
