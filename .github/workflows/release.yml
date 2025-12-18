@@ -190,22 +190,24 @@ jobs:
           EOF
 
   # ==========================================================================
-  # Phase 3: Version Update (Atomic)
+  # Phase 3: Update Version and Create Release (Consolidated)
   # ==========================================================================
-  update-version:
-    name: 'Phase 3: Update Version Files'
+  update-version-and-release:
+    name: 'Phase 3: Update Version and Create Release'
     runs-on: ubuntu-latest
     needs: [validate, quality-assurance]
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       TAG: ${{ needs.validate.outputs.tag }}
     outputs:
-      backup-path: ${{ steps.backup.outputs.backup-path }}
+      pr-number: ${{ steps.create-pr.outputs.pr-number }}
+      merge-sha: ${{ steps.merge-pr.outputs.merge-sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -228,7 +230,6 @@ jobs:
           cp .homeycompose/app.json "${BACKUP_DIR}/app.json"
           cp .homeychangelog.json "${BACKUP_DIR}/changelog.json"
 
-          echo "backup-path=${BACKUP_DIR}" >> $GITHUB_OUTPUT
           echo "BACKUP_PATH=${BACKUP_DIR}" >> $GITHUB_ENV
           echo "✅ Backup created: ${BACKUP_DIR}"
 
@@ -288,83 +289,6 @@ jobs:
           fi
 
           echo "✅ All version updates validated successfully"
-
-      - name: Upload updated files as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: version-files
-          path: |
-            package.json
-            package-lock.json
-            .homeycompose/app.json
-            .homeychangelog.json
-            app.json
-          retention-days: 7
-
-      - name: Version update summary
-        run: |
-          cat <<EOF >> $GITHUB_STEP_SUMMARY
-          ## ✅ Phase 3: Version Update Completed
-
-          - **Version**: ${{ env.VERSION }}
-          - **Files Updated**:
-            - package.json
-            - package-lock.json
-            - .homeycompose/app.json
-            - .homeychangelog.json
-            - app.json (generated)
-          - **Backup Location**: ${{ env.BACKUP_PATH }}
-          - **Validation**: All checks passed
-          EOF
-
-      - name: Rollback on failure
-        if: failure()
-        run: |
-          echo "❌ Version update failed - rolling back..."
-
-          if [ -d "${{ env.BACKUP_PATH }}" ]; then
-            cp ${{ env.BACKUP_PATH }}/package.json package.json || true
-            cp ${{ env.BACKUP_PATH }}/app.json .homeycompose/app.json || true
-            cp ${{ env.BACKUP_PATH }}/changelog.json .homeychangelog.json || true
-
-            echo "✅ Files restored from backup"
-          else
-            echo "⚠️ Backup not found - manual restoration may be needed"
-          fi
-
-  # ==========================================================================
-  # Phase 4: Create Release PR and Merge
-  # ==========================================================================
-  create-release-pr:
-    name: 'Phase 4: Create Release PR'
-    runs-on: ubuntu-latest
-    needs: [validate, update-version]
-    env:
-      VERSION: ${{ needs.validate.outputs.version }}
-      TAG: ${{ needs.validate.outputs.tag }}
-    outputs:
-      pr-number: ${{ steps.create-pr.outputs.pr-number }}
-      merge-sha: ${{ steps.wait-merge.outputs.merge-sha }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Download updated files
-        uses: actions/download-artifact@v4
-        with:
-          name: version-files
 
       - name: Configure git
         run: |
@@ -493,11 +417,12 @@ jobs:
           git push origin ${{ env.TAG }}
           echo "✅ Created and pushed tag ${{ env.TAG }}"
 
-      - name: PR and merge summary
+      - name: Phase 3 summary
         run: |
           cat <<EOF >> $GITHUB_STEP_SUMMARY
-          ## ✅ Phase 4: Release PR Merged
+          ## ✅ Phase 3: Version Update and Release Completed
 
+          - **Version**: ${{ env.VERSION }}
           - **Branch**: ${{ env.BRANCH_NAME }}
           - **PR Number**: #${{ env.PR_NUMBER }}
           - **Merge Commit**: ${{ env.MERGE_SHA }}
@@ -513,7 +438,15 @@ jobs:
       - name: Cleanup on failure
         if: failure()
         run: |
-          echo "❌ Release PR failed - attempting cleanup..."
+          echo "❌ Release failed - attempting cleanup..."
+
+          # Restore from backup
+          if [ -d "${{ env.BACKUP_PATH }}" ]; then
+            cp ${{ env.BACKUP_PATH }}/package.json package.json || true
+            cp ${{ env.BACKUP_PATH }}/app.json .homeycompose/app.json || true
+            cp ${{ env.BACKUP_PATH }}/changelog.json .homeychangelog.json || true
+            echo "✅ Files restored from backup"
+          fi
 
           # Close PR if it exists
           if [ -n "${{ env.PR_NUMBER }}" ]; then
@@ -536,12 +469,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ==========================================================================
-  # Phase 5: Homey App Store Publish (External Service)
+  # Phase 4: Homey App Store Publish (External Service)
   # ==========================================================================
   publish-homey:
-    name: 'Phase 5: Publish to Homey App Store'
+    name: 'Phase 4: Publish to Homey App Store'
     runs-on: ubuntu-latest
-    needs: [validate, create-release-pr]
+    needs: [validate, update-version-and-release]
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       TAG: ${{ needs.validate.outputs.tag }}
@@ -588,7 +521,7 @@ jobs:
       - name: Publish summary
         run: |
           cat <<EOF >> $GITHUB_STEP_SUMMARY
-          ## ✅ Phase 5: Homey App Store Publish Completed
+          ## ✅ Phase 4: Homey App Store Publish Completed
 
           - **Version**: ${{ env.VERSION }}
           - **Status**: Published Successfully
@@ -600,12 +533,12 @@ jobs:
         if: failure()
         run: |
           cat <<EOF >> $GITHUB_STEP_SUMMARY
-          ## ⚠️ Phase 5: Publish Failed - Manual Intervention Required
+          ## ⚠️ Phase 4: Publish Failed - Manual Intervention Required
 
           ### Current State
           - Version: ${{ env.VERSION }}
-          - Merge SHA: ${{ needs.create-release-pr.outputs.merge-sha }}
-          - PR: #${{ needs.create-release-pr.outputs.pr-number }}
+          - Merge SHA: ${{ needs.update-version-and-release.outputs.merge-sha }}
+          - PR: #${{ needs.update-version-and-release.outputs.pr-number }}
           - Tag: ${{ env.TAG }}
           - Git: ✅ Merged and tagged
           - Homey App Store: ❌ Failed
@@ -646,12 +579,12 @@ jobs:
           EOF
 
   # ==========================================================================
-  # Phase 6: GitHub Release Creation
+  # Phase 5: GitHub Release Creation
   # ==========================================================================
   create-release:
-    name: 'Phase 6: Create GitHub Release'
+    name: 'Phase 5: Create GitHub Release'
     runs-on: ubuntu-latest
-    needs: [validate, create-release-pr, publish-homey]
+    needs: [validate, update-version-and-release, publish-homey]
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       TAG: ${{ needs.validate.outputs.tag }}
@@ -690,7 +623,7 @@ jobs:
       - name: Release summary
         run: |
           cat <<EOF >> $GITHUB_STEP_SUMMARY
-          ## ✅ Phase 6: GitHub Release Created
+          ## ✅ Phase 5: GitHub Release Created
 
           - **Release**: ${{ env.TAG }}
           - **Changelog**: ${{ github.event.inputs.changelog }}
@@ -703,7 +636,7 @@ jobs:
   notify-success:
     name: 'Release Successful'
     runs-on: ubuntu-latest
-    needs: [validate, quality-assurance, update-version, create-release-pr, publish-homey, create-release]
+    needs: [validate, quality-assurance, update-version-and-release, publish-homey, create-release]
     if: success()
     env:
       VERSION: ${{ needs.validate.outputs.version }}
@@ -719,16 +652,15 @@ jobs:
           All phases completed successfully:
           - ✅ Phase 1: Input Validation
           - ✅ Phase 2: Quality Assurance
-          - ✅ Phase 3: Version Update
-          - ✅ Phase 4: Release PR & Merge
-          - ✅ Phase 5: Homey App Store Publish
-          - ✅ Phase 6: GitHub Release
+          - ✅ Phase 3: Version Update & Release
+          - ✅ Phase 4: Homey App Store Publish
+          - ✅ Phase 5: GitHub Release
 
           ## Links
           - **Homey App Store**: https://homey.app/nl-nl/app/net.dongen.wiab/Wasp-in-a-Box/
           - **GitHub Release**: https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG }}
-          - **Merge Commit**: ${{ needs.create-release-pr.outputs.merge-sha }}
-          - **Release PR**: #${{ needs.create-release-pr.outputs.pr-number }}
+          - **Merge Commit**: ${{ needs.update-version-and-release.outputs.merge-sha }}
+          - **Release PR**: #${{ needs.update-version-and-release.outputs.pr-number }}
 
           ## Next Steps
           - Monitor Homey App Store for live publication
