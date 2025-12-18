@@ -67,26 +67,11 @@ jobs:
       - name: Validate Homey app
         run: npx homey app validate
 
-      - name: Commit version updates
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add package.json package-lock.json .homeycompose/app.json
-          git commit -m "chore: bump version to ${{ env.VERSION }}"
-          git push origin HEAD:main
-
-      - name: Install Homey CLI globally
-        run: npm install -g homey
-
-      - name: Setup Homey authentication
-        run: |
-          mkdir -p ~/.athom-cli
-          echo '{"token":"${{ secrets.HOMEY_BEARER_TOKEN }}"}' > ~/.athom-cli.json
-
       - name: Publish to Homey App Store
-        run: homey app publish
-        continue-on-error: true  # Don't fail if already published
+        uses: athombv/github-action-homey-app-publish@master
         id: publish
+        with:
+          personal_access_token: ${{ secrets.HOMEY_BEARER_TOKEN }}
 
       - name: Generate changelog
         id: changelog
