@@ -333,17 +333,18 @@ jobs:
           fi
 
   # ==========================================================================
-  # Phase 4: Commit & Tag Creation (Git Operations)
+  # Phase 4: Create Release PR and Merge
   # ==========================================================================
-  commit-and-tag:
-    name: 'Phase 4: Commit and Tag'
+  create-release-pr:
+    name: 'Phase 4: Create Release PR'
     runs-on: ubuntu-latest
     needs: [validate, update-version]
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       TAG: ${{ needs.validate.outputs.tag }}
     outputs:
-      commit-sha: ${{ steps.commit.outputs.commit-sha }}
+      pr-number: ${{ steps.create-pr.outputs.pr-number }}
+      merge-sha: ${{ steps.wait-merge.outputs.merge-sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -370,6 +371,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - name: Create release branch
+        id: create-branch
+        run: |
+          BRANCH_NAME="release/v${{ env.VERSION }}"
+          echo "BRANCH_NAME=${BRANCH_NAME}" >> $GITHUB_ENV
+          echo "branch-name=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+
+          git checkout -b "${BRANCH_NAME}"
+          echo "✅ Created branch: ${BRANCH_NAME}"
+
       - name: Stage files
         run: |
           git add package.json package-lock.json .homeycompose/app.json .homeychangelog.json
@@ -392,53 +403,194 @@ jobs:
           echo "✅ Committed version updates"
           echo "Commit SHA: ${COMMIT_SHA}"
 
-      - name: Create annotated tag
+      - name: Push release branch
         run: |
+          git push origin ${{ env.BRANCH_NAME }}
+          echo "✅ Pushed branch to origin"
+
+      - name: Create pull request
+        id: create-pr
+        run: |
+          PR_BODY="## Release v${{ env.VERSION }}
+
+          This is an automated release PR created by the release workflow.
+
+          ### Changes
+          - Updated version to ${{ env.VERSION }}
+          - Added changelog entry
+
+          ### Changelog
+          ${{ github.event.inputs.changelog }}
+
+          ### Validation
+          ✅ All quality checks passed in workflow
+
+          ---
+          🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+
+          PR_NUMBER=$(gh pr create \
+            --title "chore(release): v${{ env.VERSION }}" \
+            --body "$PR_BODY" \
+            --base main \
+            --head ${{ env.BRANCH_NAME }} \
+            --label "release" \
+            | grep -oP '(?<=/pull/)\d+')
+
+          echo "pr-number=${PR_NUMBER}" >> $GITHUB_OUTPUT
+          echo "PR_NUMBER=${PR_NUMBER}" >> $GITHUB_ENV
+          echo "✅ Created PR #${PR_NUMBER}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge
+        run: |
+          gh pr merge ${{ env.PR_NUMBER }} --auto --squash
+          echo "✅ Enabled auto-merge for PR #${{ env.PR_NUMBER }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for CI checks
+        run: |
+          echo "⏳ Waiting for CI checks to pass..."
+
+          # Wait up to 10 minutes for checks
+          TIMEOUT=600
+          ELAPSED=0
+          INTERVAL=15
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            # Get check status
+            STATUS=$(gh pr view ${{ env.PR_NUMBER }} --json statusCheckRollup --jq '.statusCheckRollup[].conclusion' | sort -u)
+
+            # Check if all checks passed
+            if echo "$STATUS" | grep -q "FAILURE\|CANCELLED"; then
+              echo "::error::❌ CI checks failed"
+              gh pr view ${{ env.PR_NUMBER }} --json statusCheckRollup
+              exit 1
+            fi
+
+            # Check if all successful
+            PENDING=$(echo "$STATUS" | grep -c "PENDING\|IN_PROGRESS" || true)
+            if [ "$PENDING" -eq 0 ]; then
+              echo "✅ All CI checks passed"
+              break
+            fi
+
+            echo "⏳ Checks still running... ($ELAPSED/$TIMEOUT seconds)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          if [ $ELAPSED -ge $TIMEOUT ]; then
+            echo "::error::❌ Timeout waiting for CI checks"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for PR merge
+        id: wait-merge
+        run: |
+          echo "⏳ Waiting for PR to merge..."
+
+          # Wait up to 5 minutes for merge
+          TIMEOUT=300
+          ELAPSED=0
+          INTERVAL=10
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            # Check if PR is merged
+            MERGED=$(gh pr view ${{ env.PR_NUMBER }} --json state --jq '.state')
+
+            if [ "$MERGED" = "MERGED" ]; then
+              # Get merge commit SHA
+              MERGE_SHA=$(gh pr view ${{ env.PR_NUMBER }} --json mergeCommit --jq '.mergeCommit.oid')
+              echo "merge-sha=${MERGE_SHA}" >> $GITHUB_OUTPUT
+              echo "MERGE_SHA=${MERGE_SHA}" >> $GITHUB_ENV
+              echo "✅ PR merged successfully"
+              echo "Merge commit: ${MERGE_SHA}"
+              break
+            fi
+
+            if [ "$MERGED" = "CLOSED" ]; then
+              echo "::error::❌ PR was closed without merging"
+              exit 1
+            fi
+
+            echo "⏳ Waiting for merge... ($ELAPSED/$TIMEOUT seconds)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          if [ $ELAPSED -ge $TIMEOUT ]; then
+            echo "::error::❌ Timeout waiting for PR merge"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create git tag
+        run: |
+          # Fetch the merged commit
+          git fetch origin main
+          git checkout ${{ env.MERGE_SHA }}
+
+          # Create annotated tag
           git tag -a "${{ env.TAG }}" -m "Release ${{ env.TAG }}
 
           ${{ github.event.inputs.changelog }}"
 
-          echo "✅ Created tag ${{ env.TAG }}"
-
-      - name: Push commit and tag
-        run: |
-          git push origin main
+          # Push tag
           git push origin ${{ env.TAG }}
-          echo "✅ Pushed commit and tag to origin"
+          echo "✅ Created and pushed tag ${{ env.TAG }}"
 
-      - name: Git operations summary
+      - name: Delete release branch
+        if: success()
+        run: |
+          git push origin --delete ${{ env.BRANCH_NAME }}
+          echo "✅ Deleted release branch ${{ env.BRANCH_NAME }}"
+
+      - name: PR and merge summary
         run: |
           cat <<EOF >> $GITHUB_STEP_SUMMARY
-          ## ✅ Phase 4: Git Operations Completed
+          ## ✅ Phase 4: Release PR Merged
 
-          - **Commit SHA**: ${{ env.COMMIT_SHA }}
+          - **Branch**: ${{ env.BRANCH_NAME }}
+          - **PR Number**: #${{ env.PR_NUMBER }}
+          - **Merge Commit**: ${{ env.MERGE_SHA }}
           - **Tag**: ${{ env.TAG }}
-          - **Files Committed**:
+          - **Files Updated**:
             - package.json
             - package-lock.json
             - .homeycompose/app.json
             - .homeychangelog.json
-          - **Status**: Pushed to origin/main
+          - **Status**: Merged to main and tagged
           EOF
 
-      - name: Rollback on failure
+      - name: Cleanup on failure
         if: failure()
         run: |
-          echo "❌ Git operations failed - attempting rollback..."
+          echo "❌ Release PR failed - attempting cleanup..."
 
-          # Delete tag if created
-          if git rev-parse "${{ env.TAG }}" >/dev/null 2>&1; then
-            git tag -d "${{ env.TAG }}"
-            git push origin ":refs/tags/${{ env.TAG }}" || true
+          # Close PR if it exists
+          if [ -n "${{ env.PR_NUMBER }}" ]; then
+            gh pr close ${{ env.PR_NUMBER }} || true
+            echo "✅ Closed PR #${{ env.PR_NUMBER }}"
+          fi
+
+          # Delete release branch if it exists
+          if git ls-remote --heads origin ${{ env.BRANCH_NAME }} | grep -q ${{ env.BRANCH_NAME }}; then
+            git push origin --delete ${{ env.BRANCH_NAME }} || true
+            echo "✅ Deleted branch ${{ env.BRANCH_NAME }}"
+          fi
+
+          # Delete tag if it was created
+          if git ls-remote --tags origin ${{ env.TAG }} | grep -q ${{ env.TAG }}; then
+            git push origin --delete ${{ env.TAG }} || true
             echo "✅ Deleted tag ${{ env.TAG }}"
           fi
-
-          # Reset commit if created
-          if [ -n "${{ env.COMMIT_SHA }}" ]; then
-            git reset --hard HEAD~1
-            git push --force origin main || true
-            echo "✅ Reset commit"
-          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ==========================================================================
   # Phase 5: Homey App Store Publish (External Service)
@@ -446,7 +598,7 @@ jobs:
   publish-homey:
     name: 'Phase 5: Publish to Homey App Store'
     runs-on: ubuntu-latest
-    needs: [validate, commit-and-tag]
+    needs: [validate, create-release-pr]
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       TAG: ${{ needs.validate.outputs.tag }}
@@ -509,9 +661,10 @@ jobs:
 
           ### Current State
           - Version: ${{ env.VERSION }}
-          - Commit SHA: ${{ needs.commit-and-tag.outputs.commit-sha }}
+          - Merge SHA: ${{ needs.create-release-pr.outputs.merge-sha }}
+          - PR: #${{ needs.create-release-pr.outputs.pr-number }}
           - Tag: ${{ env.TAG }}
-          - Git: ✅ Committed and tagged
+          - Git: ✅ Merged and tagged
           - Homey App Store: ❌ Failed
 
           ### Manual Recovery Steps
@@ -555,7 +708,7 @@ jobs:
   create-release:
     name: 'Phase 6: Create GitHub Release'
     runs-on: ubuntu-latest
-    needs: [validate, commit-and-tag, publish-homey]
+    needs: [validate, create-release-pr, publish-homey]
     env:
       VERSION: ${{ needs.validate.outputs.version }}
       TAG: ${{ needs.validate.outputs.tag }}
@@ -607,7 +760,7 @@ jobs:
   notify-success:
     name: 'Release Successful'
     runs-on: ubuntu-latest
-    needs: [validate, quality-assurance, update-version, commit-and-tag, publish-homey, create-release]
+    needs: [validate, quality-assurance, update-version, create-release-pr, publish-homey, create-release]
     if: success()
     env:
       VERSION: ${{ needs.validate.outputs.version }}
@@ -624,14 +777,15 @@ jobs:
           - ✅ Phase 1: Input Validation
           - ✅ Phase 2: Quality Assurance
           - ✅ Phase 3: Version Update
-          - ✅ Phase 4: Commit & Tag
+          - ✅ Phase 4: Release PR & Merge
           - ✅ Phase 5: Homey App Store Publish
           - ✅ Phase 6: GitHub Release
 
           ## Links
           - **Homey App Store**: https://homey.app/nl-nl/app/net.dongen.wiab/Wasp-in-a-Box/
           - **GitHub Release**: https://github.com/${{ github.repository }}/releases/tag/${{ env.TAG }}
-          - **Commit**: ${{ needs.commit-and-tag.outputs.commit-sha }}
+          - **Merge Commit**: ${{ needs.create-release-pr.outputs.merge-sha }}
+          - **Release PR**: #${{ needs.create-release-pr.outputs.pr-number }}
 
           ## Next Steps
           - Monitor Homey App Store for live publication
@@ -647,7 +801,7 @@ jobs:
   notify-failure:
     name: 'Release Failed'
     runs-on: ubuntu-latest
-    needs: [validate, quality-assurance, update-version, commit-and-tag, publish-homey, create-release]
+    needs: [validate, quality-assurance, update-version, create-release-pr, publish-homey, create-release]
     if: failure()
     steps:
       - name: Failure notification
