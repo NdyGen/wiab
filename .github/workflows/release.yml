@@ -445,6 +445,7 @@ jobs:
         run: |
           gh pr merge ${{ env.PR_NUMBER }} --auto --squash
           echo "✅ Enabled auto-merge for PR #${{ env.PR_NUMBER }}"
+          echo "ℹ️ PR will auto-merge once CI checks pass (no approval required)"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
