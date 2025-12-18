@@ -1,0 +1,162 @@
+# Dependabot Configuration for WIAB
+# Four-tier update strategy optimized for single-maintainer workflow
+# See docs/DEPENDABOT.md for detailed information
+
+version: 2
+
+updates:
+  # ============================================================================
+  # TIER 1: DAILY UPDATES (Highest Priority)
+  # ============================================================================
+  # Daily updates for all dependencies to catch security patches quickly
+  # GitHub's Dependabot Security Updates feature handles critical CVEs separately
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+      time: "03:00"
+      timezone: "Europe/Amsterdam"
+    target-branch: "main"
+    open-pull-requests-limit: 5
+    allow:
+      - dependency-type: "all"
+    versioning-strategy: increase
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "security"
+      - "auto-merge-candidate"
+    reviewers:
+      - "NdyGen"
+
+  # ============================================================================
+  # TIER 2: PRODUCTION DEPENDENCIES (Manual Review)
+  # ============================================================================
+  # Weekly updates on Monday for production dependencies
+  # Requires manual review to ensure stability of core app functionality
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Amsterdam"
+    target-branch: "main"
+    open-pull-requests-limit: 3
+    allow:
+      - dependency-type: "production"
+    versioning-strategy: increase
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "production"
+      - "needs-review"
+    reviewers:
+      - "NdyGen"
+    ignore:
+      # Pin homey SDK to major version 3.x
+      - dependency-name: "homey"
+        update-types: ["version-update:semver-major"]
+
+  # ============================================================================
+  # TIER 3: DEVELOPMENT DEPENDENCIES - TESTING (Auto-merge Eligible)
+  # ============================================================================
+  # Weekly grouped updates for Jest, ts-jest, and testing types
+  # Wednesday schedule to spread workload
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+      timezone: "Europe/Amsterdam"
+    target-branch: "main"
+    open-pull-requests-limit: 2
+    allow:
+      - dependency-type: "development"
+    groups:
+      testing-dependencies:
+        patterns:
+          - "jest"
+          - "ts-jest"
+          - "@types/jest"
+          - "@playwright/test"
+          - "playwright"
+    versioning-strategy: increase
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "testing"
+      - "auto-merge-candidate"
+    reviewers:
+      - "NdyGen"
+
+  # ============================================================================
+  # TIER 3: DEVELOPMENT DEPENDENCIES - TOOLING (Auto-merge Eligible)
+  # ============================================================================
+  # Weekly grouped updates for TypeScript, ESLint, and tooling
+  # Thursday schedule to avoid conflicts with testing updates
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "09:00"
+      timezone: "Europe/Amsterdam"
+    target-branch: "main"
+    open-pull-requests-limit: 2
+    allow:
+      - dependency-type: "development"
+    groups:
+      tooling-dependencies:
+        patterns:
+          - "typescript"
+          - "eslint"
+          - "@typescript-eslint/*"
+          - "@types/node"
+          - "@types/homey"
+    versioning-strategy: increase
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "tooling"
+      - "auto-merge-candidate"
+    reviewers:
+      - "NdyGen"
+
+  # ============================================================================
+  # TIER 4: GITHUB ACTIONS (Low Priority, Auto-merge Eligible)
+  # ============================================================================
+  # Monthly updates for GitHub Actions workflows
+  # First Monday of month to minimize noise
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Amsterdam"
+    target-branch: "main"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "auto-merge-candidate"
+    reviewers:
+      - "NdyGen"
