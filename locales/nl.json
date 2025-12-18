@@ -1,0 +1,12 @@
+{
+  "pair": {
+    "select_trigger_sensors": {
+      "title": "Selecteer Bewegingssensoren",
+      "intro": "Selecteer de bewegingssensoren die aanwezigheidsdetectie activeren."
+    },
+    "select_reset_sensors": {
+      "title": "Selecteer Deur-/Raamcontacten",
+      "intro": "Selecteer de deur- of raamcontacten die aanwezigheid resetten wanneer ze geopend worden."
+    }
+  }
+}

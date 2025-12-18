@@ -4,15 +4,24 @@
       "id": "set_state",
       "title": {
         "en": "Set occupancy state",
-        "nl": "Stel aanwezigheidstatus in"
+        "nl": "Stel aanwezigheidstatus in",
+        "de": "Belegungsstatus einstellen",
+        "no": "Sett tilstedeværelsesstatus",
+        "sv": "Ställ in närvarostatus"
       },
       "description": {
         "en": "Sets the device to a specific occupancy state and pauses it",
-        "nl": "Stelt het apparaat in op een specifieke aanwezigheidsstatus en pauzeert het"
+        "nl": "Stelt het apparaat in op een specifieke aanwezigheidsstatus en pauzeert het",
+        "de": "Setzt das Gerät auf einen bestimmten Belegungsstatus und pausiert es",
+        "no": "Setter enheten til en spesifikk tilstedeværelsesstatus og pauser den",
+        "sv": "Ställer in enheten till en specifik närvarostatus och pausar den"
       },
       "titleFormatted": {
         "en": "Set occupancy [[state]]",
-        "nl": "Zet aanwezigheid [[state]]"
+        "nl": "Zet aanwezigheid [[state]]",
+        "de": "Belegung [[state]] einstellen",
+        "no": "Sett tilstedeværelse [[state]]",
+        "sv": "Ställ in närvaro [[state]]"
       },
       "args": [
         {
@@ -23,14 +32,20 @@
               "id": "occupied",
               "title": {
                 "en": "Occupied",
-                "nl": "Bezet"
+                "nl": "Bezet",
+                "de": "Belegt",
+                "no": "Opptatt",
+                "sv": "Upptagen"
               }
             },
             {
               "id": "unoccupied",
               "title": {
                 "en": "Unoccupied",
-                "nl": "Onbezet"
+                "nl": "Onbezet",
+                "de": "Leer",
+                "no": "Tom",
+                "sv": "Tom"
               }
             }
           ]
@@ -41,11 +56,17 @@
       "id": "unpause",
       "title": {
         "en": "Resume monitoring",
-        "nl": "Monitoring hervatten"
+        "nl": "Monitoring hervatten",
+        "de": "Überwachung fortsetzen",
+        "no": "Gjenoppta overvåking",
+        "sv": "Återuppta övervakning"
       },
       "description": {
         "en": "Resumes normal sensor monitoring and reinitializes the occupancy state",
-        "nl": "Hervat de normale sensormonitoring en initialiseert de aanwezigheidsstatus opnieuw"
+        "nl": "Hervat de normale sensormonitoring en initialiseert de aanwezigheidsstatus opnieuw",
+        "de": "Setzt die normale Sensorüberwachung fort und initialisiert den Belegungsstatus neu",
+        "no": "Gjenopptar normal sensorovervåking og reinitialiserer tilstedeværelsesstatus",
+        "sv": "Återupptar normal sensorövervakning och återinitierar närvarostatus"
       }
     }
   ],
@@ -54,11 +75,17 @@
       "id": "is_paused",
       "title": {
         "en": "Device is paused",
-        "nl": "Apparaat is gepauzeerd"
+        "nl": "Apparaat is gepauzeerd",
+        "de": "Gerät ist pausiert",
+        "no": "Enhet er pauset",
+        "sv": "Enhet är pausad"
       },
       "description": {
         "en": "Checks if the device is currently in paused mode",
-        "nl": "Controleert of het apparaat momenteel in pauzemodus staat"
+        "nl": "Controleert of het apparaat momenteel in pauzemodus staat",
+        "de": "Überprüft, ob das Gerät sich derzeit im Pausenmodus befindet",
+        "no": "Sjekker om enheten for øyeblikket er i pausemodus",
+        "sv": "Kontrollerar om enheten för närvarande är i pausläge"
       }
     }
   ]

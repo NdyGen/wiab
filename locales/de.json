@@ -1,0 +1,12 @@
+{
+  "pair": {
+    "select_trigger_sensors": {
+      "title": "Bewegungsmelder auswählen",
+      "intro": "Wählen Sie die Bewegungsmelder aus, die die Belegungserkennung auslösen."
+    },
+    "select_reset_sensors": {
+      "title": "Tür-/Fensterkontakte auswählen",
+      "intro": "Wählen Sie die Tür- oder Fensterkontakte aus, die die Belegung beim Öffnen zurücksetzen."
+    }
+  }
+}

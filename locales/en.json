@@ -1,0 +1,12 @@
+{
+  "pair": {
+    "select_trigger_sensors": {
+      "title": "Select Motion Sensors",
+      "intro": "Select the motion sensors that will trigger occupancy detection."
+    },
+    "select_reset_sensors": {
+      "title": "Select Door/Window Contacts",
+      "intro": "Select the door or window contacts that will reset occupancy when opened."
+    }
+  }
+}

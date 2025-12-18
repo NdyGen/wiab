@@ -8,14 +8,24 @@
   ],
   "name": {
     "en": "Wasp in a Box",
-    "nl": "Wasp in a Box"
+    "nl": "Wasp in a Box",
+    "de": "Wasp in a Box",
+    "no": "Wasp in a Box",
+    "sv": "Wasp in a Box"
   },
   "description": {
-    "en": "Virtual presence detection based on sensor triggers",
-    "nl": "Virtuele aanwezigheidsdetectie op basis van sensor triggers"
+    "en": "Smart room occupancy that stays active even when you sit still",
+    "nl": "Slimme kameraanwezigheid die actief blijft, zelfs als je stil zit",
+    "de": "Intelligente Raumbelegung, die auch dann aktiv bleibt, wenn Sie still sitzen",
+    "no": "Smart romtilstedeværelse som forblir aktiv selv når du sitter stille",
+    "sv": "Smart rumsnärvaro som förblir aktiv även när du sitter stilla"
   },
   "category": [
-    "security"
+    "tools",
+    "climate",
+    "energy",
+    "security",
+    "lights"
   ],
   "permissions": [
     "homey:manager:api"
@@ -37,6 +47,14 @@
     "url": "https://github.com/NdyGen/wiab/issues"
   },
   "support": "https://github.com/NdyGen/wiab/issues",
+  "homeyCommunityTopicId": 147021,
+  "contributing": {
+    "donate": {
+      "paypal": {
+        "username": "AndyvanDongen"
+      }
+    }
+  },
   "source": "https://github.com/NdyGen/wiab",
   "homepage": "https://github.com/NdyGen/wiab",
   "images": {

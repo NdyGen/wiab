@@ -1,0 +1,12 @@
+{
+  "pair": {
+    "select_trigger_sensors": {
+      "title": "Velg Bevegelsessensorer",
+      "intro": "Velg bevegelsessensorene som vil utløse tilstedeværelsesdeteksjon."
+    },
+    "select_reset_sensors": {
+      "title": "Velg Dør-/Vindueskontakter",
+      "intro": "Velg dør- eller vindueskontaktene som vil nullstille tilstedeværelse når de åpnes."
+    }
+  }
+}

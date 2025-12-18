@@ -4,11 +4,17 @@
     "type": "textarea",
     "label": {
       "en": "Trigger Sensors",
-      "nl": "Trigger Sensoren"
+      "nl": "Trigger Sensoren",
+      "de": "Auslösesensoren",
+      "no": "Triggsensorer",
+      "sv": "Triggsensorer"
     },
     "hint": {
       "en": "Motion sensors that activate occupancy (JSON array, configured during pairing)",
-      "nl": "Bewegingssensoren die aanwezigheid activeren (JSON array, geconfigureerd tijdens koppeling)"
+      "nl": "Bewegingssensoren die aanwezigheid activeren (JSON array, geconfigureerd tijdens koppeling)",
+      "de": "Bewegungsmelder, die Belegung aktivieren (JSON-Array, konfiguriert während der Kopplung)",
+      "no": "Bevegelsessensorer som aktiverer tilstedeværelse (JSON-array, konfigurert under paring)",
+      "sv": "Rörelsesensorer som aktiverar närvaro (JSON-array, konfigurerad vid parkoppling)"
     }
   },
   {
@@ -16,18 +22,27 @@
     "type": "textarea",
     "label": {
       "en": "Reset Sensors",
-      "nl": "Reset Sensoren"
+      "nl": "Reset Sensoren",
+      "de": "Rücksetzsensoren",
+      "no": "Nullstillingssensorer",
+      "sv": "Återställningssensorer"
     },
     "hint": {
       "en": "Contact sensors that deactivate occupancy (JSON array, configured during pairing)",
-      "nl": "Contactsensoren die aanwezigheid deactiveren (JSON array, geconfigureerd tijdens koppeling)"
+      "nl": "Contactsensoren die aanwezigheid deactiveren (JSON array, geconfigureerd tijdens koppeling)",
+      "de": "Kontaktsensoren, die Belegung deaktivieren (JSON-Array, konfiguriert während der Kopplung)",
+      "no": "Kontaktsensorer som deaktiverer tilstedeværelse (JSON-array, konfigurert under paring)",
+      "sv": "Kontaktsensorer som inaktiverar närvaro (JSON-array, konfigurerad vid parkoppling)"
     }
   },
   {
     "type": "group",
     "label": {
       "en": "Timer Settings",
-      "nl": "Timer Instellingen"
+      "nl": "Timer Instellingen",
+      "de": "Timer-Einstellungen",
+      "no": "Timer-innstillinger",
+      "sv": "Timer-inställningar"
     },
     "children": [
       {
@@ -35,11 +50,17 @@
         "type": "number",
         "label": {
           "en": "Door motion window",
-          "nl": "Deur beweging venster"
+          "nl": "Deur beweging venster",
+          "de": "Türbewegungsfenster",
+          "no": "Dørbevegelsesvindu",
+          "sv": "Dörrörelsefönster"
         },
         "hint": {
           "en": "After a door opens or closes, the system waits this long to detect motion that indicates entry or exit. If motion is detected within this window, the room is marked as occupied (entry) or empty (exit). This helps distinguish between someone passing by versus actually entering or leaving. Typical: 10-30 seconds.",
-          "nl": "Nadat een deur opent of sluit, wacht het systeem zo lang om beweging te detecteren die binnenkomst of vertrek aangeeft. Als beweging wordt gedetecteerd binnen dit venster, wordt de kamer gemarkeerd als bezet (binnenkomst) of leeg (vertrek). Dit helpt onderscheid maken tussen iemand die voorbijloopt versus daadwerkelijk binnenkomt of vertrekt. Typisch: 10-30 seconden."
+          "nl": "Nadat een deur opent of sluit, wacht het systeem zo lang om beweging te detecteren die binnenkomst of vertrek aangeeft. Als beweging wordt gedetecteerd binnen dit venster, wordt de kamer gemarkeerd als bezet (binnenkomst) of leeg (vertrek). Dit helpt onderscheid maken tussen iemand die voorbijloopt versus daadwerkelijk binnenkomt of vertrekt. Typisch: 10-30 seconden.",
+          "de": "Nachdem eine Tür geöffnet oder geschlossen wird, wartet das System so lange, um Bewegung zu erkennen, die Ein- oder Ausgang anzeigt. Wenn Bewegung innerhalb dieses Fensters erkannt wird, wird der Raum als belegt (Eintritt) oder leer (Austritt) markiert. Dies hilft, zwischen jemandem zu unterscheiden, der vorbeigeht, und jemandem, der tatsächlich eintritt oder verlässt. Typisch: 10-30 Sekunden.",
+          "no": "Etter at en dør åpnes eller lukkes, venter systemet så lenge for å oppdage bevegelse som indikerer inngang eller utgang. Hvis bevegelse oppdages innenfor dette vinduet, markeres rommet som opptatt (inngang) eller tomt (utgang). Dette hjelper med å skille mellom noen som passerer forbi versus faktisk går inn eller ut. Typisk: 10-30 sekunder.",
+          "sv": "Efter att en dörr öppnas eller stängs väntar systemet så länge för att upptäcka rörelse som indikerar inträde eller utgång. Om rörelse upptäcks inom detta fönster markeras rummet som upptaget (inträde) eller tomt (utgång). Detta hjälper till att skilja mellan någon som passerar förbi versus faktiskt går in eller ut. Typiskt: 10-30 sekunder."
         },
         "value": 20,
         "min": 5,
@@ -51,11 +72,17 @@
         "type": "number",
         "label": {
           "en": "Empty timeout",
-          "nl": "Leeg timeout"
+          "nl": "Leeg timeout",
+          "de": "Leer-Timeout",
+          "no": "Tom timeout",
+          "sv": "Tom timeout"
         },
         "hint": {
           "en": "When a door opens and no motion is detected during this period, the room is marked as empty. This prevents false negatives when someone exits but the door remains open. Only active when doors are open and no motion sensors are triggered. Typical: 300-900 seconds (5-15 minutes).",
-          "nl": "Wanneer een deur opent en er geen beweging wordt gedetecteerd gedurende deze periode, wordt de kamer als leeg gemarkeerd. Dit voorkomt valse negatieven wanneer iemand vertrekt maar de deur open blijft. Alleen actief wanneer deuren open zijn en geen bewegingssensoren worden getriggerd. Typisch: 300-900 seconden (5-15 minuten)."
+          "nl": "Wanneer een deur opent en er geen beweging wordt gedetecteerd gedurende deze periode, wordt de kamer als leeg gemarkeerd. Dit voorkomt valse negatieven wanneer iemand vertrekt maar de deur open blijft. Alleen actief wanneer deuren open zijn en geen bewegingssensoren worden getriggerd. Typisch: 300-900 seconden (5-15 minuten).",
+          "de": "Wenn eine Tür öffnet und während dieses Zeitraums keine Bewegung erkannt wird, wird der Raum als leer markiert. Dies verhindert falsche Negative, wenn jemand ausgeht, aber die Tür offen bleibt. Nur aktiv, wenn Türen offen sind und keine Bewegungsmelder ausgelöst werden. Typisch: 300-900 Sekunden (5-15 Minuten).",
+          "no": "Når en dør åpnes og ingen bevegelse oppdages i løpet av denne perioden, markeres rommet som tomt. Dette forhindrer falske negativer når noen går ut, men døren forblir åpen. Kun aktiv når dører er åpne og ingen bevegelsessensorer utløses. Typisk: 300-900 sekunder (5-15 minutter).",
+          "sv": "När en dörr öppnas och ingen rörelse upptäcks under denna period markeras rummet som tomt. Detta förhindrar falska negativ när någon går ut men dörren förblir öppen. Endast aktiv när dörrar är öppna och inga rörelsesensorer utlöses. Typiskt: 300-900 sekunder (5-15 minuter)."
         },
         "value": 600,
         "min": 60,
