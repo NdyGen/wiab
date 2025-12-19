@@ -87,56 +87,15 @@ class WIABApp extends Homey.App {
     const devices: DeviceResponse[] = [];
 
     try {
-      // Get all drivers in the system
       const drivers = this.homey.drivers.getDrivers();
 
-      // Iterate through each driver
       for (const driver of Object.values(drivers)) {
-        try {
-          // Get all devices for this driver
-          const driverDevices = driver.getDevices();
-
-          // Filter and map devices with the requested capability
-          for (const device of driverDevices) {
-            try {
-              // Check if device has the requested capability
-              if (device.hasCapability(capability)) {
-                // Get zone name if available
-                let zoneName: string | undefined;
-                try {
-                  // Type assertion needed as getZone may not be in all device types
-                  const deviceWithZone = device as unknown as { getZone?: () => Promise<{ name?: string }> };
-                  const zone = await deviceWithZone.getZone?.();
-                  zoneName = zone?.name;
-                } catch (error) {
-                  // Zone information is optional, continue without it
-                  this.log(
-                    `Could not retrieve zone for device ${device.getName()}:`,
-                    error
-                  );
-                }
-
-                // Add device to results
-                devices.push({
-                  id: device.getData().id,
-                  name: device.getName(),
-                  class: device.getClass(),
-                  capability: capability,
-                  zoneName: zoneName,
-                });
-              }
-            } catch (error) {
-              // Log error but continue processing other devices
-              this.error(
-                `Error processing device ${device.getName ? device.getName() : 'unknown'}:`,
-                error
-              );
-            }
-          }
-        } catch (error) {
-          // Log error but continue processing other drivers
-          this.error(`Error processing driver ${driver.id}:`, error);
-        }
+        const driverDevices = await this.getDevicesFromDriver(driver);
+        const matchingDevices = await this.filterDevicesByCapability(
+          driverDevices,
+          capability
+        );
+        devices.push(...matchingDevices);
       }
     } catch (error) {
       this.error('Error retrieving devices with capability:', error);
@@ -147,6 +106,80 @@ class WIABApp extends Homey.App {
       `Found ${devices.length} devices with capability ${capability}`
     );
     return devices;
+  }
+
+  /**
+   * Retrieves all devices from a driver.
+   *
+   * @param driver - The driver to retrieve devices from
+   * @returns Array of devices, or empty array if error occurs
+   */
+  private async getDevicesFromDriver(driver: Homey.Driver): Promise<Homey.Device[]> {
+    try {
+      return driver.getDevices();
+    } catch (error) {
+      this.error(`Error accessing devices for driver ${driver.id}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Filters devices by capability and maps them to DeviceResponse format.
+   *
+   * @param devices - Array of devices to filter
+   * @param capability - The capability to filter by
+   * @returns Array of DeviceResponse objects for matching devices
+   */
+  private async filterDevicesByCapability(
+    devices: Homey.Device[],
+    capability: string
+  ): Promise<DeviceResponse[]> {
+    const matchingDevices: DeviceResponse[] = [];
+
+    for (const device of devices) {
+      try {
+        if (!device.hasCapability(capability)) {
+          continue;
+        }
+
+        const zoneName = await this.getDeviceZoneName(device);
+
+        matchingDevices.push({
+          id: device.getData().id,
+          name: device.getName(),
+          class: device.getClass(),
+          capability: capability,
+          zoneName: zoneName,
+        });
+      } catch (error) {
+        this.error(
+          `Error processing device ${device.getName ? device.getName() : 'unknown'}:`,
+          error
+        );
+      }
+    }
+
+    return matchingDevices;
+  }
+
+  /**
+   * Retrieves the zone name for a device.
+   *
+   * @param device - The device to get zone information for
+   * @returns Zone name or undefined if not available
+   */
+  private async getDeviceZoneName(device: Homey.Device): Promise<string | undefined> {
+    try {
+      const deviceWithZone = device as unknown as { getZone?: () => Promise<{ name?: string }> };
+      const zone = await deviceWithZone.getZone?.();
+      return zone?.name;
+    } catch (error) {
+      this.log(
+        `Could not retrieve zone for device ${device.getName()}:`,
+        error
+      );
+      return undefined;
+    }
   }
 }
 
