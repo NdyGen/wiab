@@ -90,7 +90,7 @@ class WIABApp extends Homey.App {
       const drivers = this.homey.drivers.getDrivers();
 
       for (const driver of Object.values(drivers)) {
-        const driverDevices = await this.getDevicesFromDriver(driver);
+        const driverDevices = this.getDevicesFromDriver(driver);
         const matchingDevices = await this.filterDevicesByCapability(
           driverDevices,
           capability
@@ -114,7 +114,7 @@ class WIABApp extends Homey.App {
    * @param driver - The driver to retrieve devices from
    * @returns Array of devices, or empty array if error occurs
    */
-  private async getDevicesFromDriver(driver: Homey.Driver): Promise<Homey.Device[]> {
+  private getDevicesFromDriver(driver: Homey.Driver): Homey.Device[] {
     try {
       return driver.getDevices();
     } catch (error) {

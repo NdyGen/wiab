@@ -11,6 +11,7 @@ import {
   isAnyDoorOpen,
 } from '../../lib/OccupancyState';
 import { classifySensors } from '../../lib/SensorClassifier';
+import { DeviceErrorId } from '../../constants/errorIds';
 
 /**
  * Extended HomeyAPIDevice with runtime methods
@@ -263,7 +264,10 @@ class WIABDevice extends Homey.Device {
 
       this.log('Sensor monitoring initialized successfully');
     } catch (error) {
-      this.error('Failed to setup sensor monitoring:', error);
+      this.error(
+        `[${DeviceErrorId.SENSOR_MONITORING_SETUP_FAILED}] Failed to setup sensor monitoring:`,
+        error
+      );
       // Don't throw - allow device to function in degraded mode
     }
   }
@@ -355,7 +359,10 @@ class WIABDevice extends Homey.Device {
         `State after door event: ${this.occupancyState}, stable: ${this.lastStableOccupancy}, doors: ${allClosed ? 'all closed' : 'some open'}`
       );
     } catch (error) {
-      this.error('Failed to handle door event:', error);
+      this.error(
+        `[${DeviceErrorId.DOOR_EVENT_HANDLER_FAILED}] Failed to handle door event:`,
+        error
+      );
     }
   }
 
@@ -421,7 +428,10 @@ class WIABDevice extends Homey.Device {
         `State after PIR: ${this.occupancyState}, stable: ${this.lastStableOccupancy}`
       );
     } catch (error) {
-      this.error('Failed to handle PIR motion:', error);
+      this.error(
+        `[${DeviceErrorId.PIR_MOTION_HANDLER_FAILED}] Failed to handle PIR motion:`,
+        error
+      );
     }
   }
 
@@ -460,7 +470,10 @@ class WIABDevice extends Homey.Device {
         `PIR cleared after door event - T_ENTER timer started to detect return`
       );
     } catch (error) {
-      this.error('Failed to handle PIR cleared:', error);
+      this.error(
+        `[${DeviceErrorId.PIR_CLEARED_HANDLER_FAILED}] Failed to handle PIR cleared:`,
+        error
+      );
     }
   }
 
@@ -675,52 +688,6 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
-   * Reads the current value of a door sensor.
-   *
-   * @param doorId - The device ID of the door sensor
-   * @returns true if open, false if closed, null if unavailable
-   */
-  private async getDoorSensorValue(doorId: string): Promise<boolean | null> {
-    try {
-      const app = this.homey.app as WIABApp;
-      if (!app || !app.homeyApi) {
-        this.error('Homey API not available');
-        return null;
-      }
-
-      const devices = app.homeyApi.devices;
-      if (!devices || !devices[doorId]) {
-        this.error(`Door sensor device not found: ${doorId}`);
-        return null;
-      }
-
-      const device = devices[doorId];
-      const capabilitiesObj = device.capabilitiesObj;
-
-      // Find the door capability (could be alarm_contact, alarm_door, etc.)
-      const resetSensorsJson = this.getSetting('resetSensors') as string;
-      const resetSensors = this.validateSensorSettings(resetSensorsJson);
-      const sensor = resetSensors.find(s => s.deviceId === doorId);
-
-      if (!sensor) {
-        this.error(`Door sensor configuration not found: ${doorId}`);
-        return null;
-      }
-
-      if (!capabilitiesObj || !(sensor.capability in capabilitiesObj)) {
-        this.error(`Device ${doorId} does not have capability: ${sensor.capability}`);
-        return null;
-      }
-
-      const value = capabilitiesObj[sensor.capability]?.value;
-      return typeof value === 'boolean' ? value : false;
-    } catch (error) {
-      this.error(`Error reading door sensor ${doorId}:`, error);
-      return null;
-    }
-  }
-
-  /**
    * Checks if any trigger sensor (PIR) is currently inactive (FALSE).
    *
    * This is used to determine if we should start T_ENTER immediately on door event.
@@ -861,11 +828,11 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
-   * Checks if the device is currently paused.
+   * Gets the current paused state of the device.
    *
    * @returns true if device is paused, false otherwise
    */
-  private isPausedCheck(): boolean {
+  private getIsPaused(): boolean {
     return this.isPaused;
   }
 
@@ -946,7 +913,7 @@ class WIABDevice extends Homey.Device {
       isPausedCard.registerRunListener(
         async (args: { device: WIABDevice }): Promise<boolean> => {
           try {
-            const paused = args.device.isPausedCheck();
+            const paused = args.device.getIsPaused();
             args.device.log(`Is paused condition evaluated: ${paused}`);
             return paused;
           } catch (error) {

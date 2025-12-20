@@ -509,6 +509,15 @@ export class SensorMonitor {
     isResetSensor: boolean,
     value: boolean
   ): void {
+    // Validate value type before logging
+    if (typeof value !== 'boolean') {
+      this.logger.error(
+        `[CAPABILITY] Unexpected value type for ${sensor.deviceName || sensor.deviceId}: ` +
+        `expected boolean, got ${typeof value} (${value})`
+      );
+      return;
+    }
+
     const lastValue = this.lastValues.get(key) ?? false;
 
     this.logger.log(
@@ -517,9 +526,8 @@ export class SensorMonitor {
       `from ${lastValue} to ${value}`
     );
 
-    if (!this.validateAndUpdateSensorValue(sensor, key, value)) {
-      return;
-    }
+    // Update stored value after validation and logging
+    this.lastValues.set(key, value);
 
     if (value === lastValue) {
       this.logger.log(
@@ -537,32 +545,6 @@ export class SensorMonitor {
   }
 
   /**
-   * Validates and updates sensor value.
-   *
-   * @private
-   * @param sensor - The sensor configuration
-   * @param key - The sensor key
-   * @param value - The new value
-   * @returns true if valid and updated, false otherwise
-   */
-  private validateAndUpdateSensorValue(
-    sensor: SensorConfig,
-    key: string,
-    value: unknown
-  ): boolean {
-    if (typeof value !== 'boolean') {
-      this.logger.error(
-        `[CAPABILITY] Unexpected value type for ${sensor.deviceName || sensor.deviceId}: ` +
-        `expected boolean, got ${typeof value} (${value})`
-      );
-      return false;
-    }
-
-    this.lastValues.set(key, value);
-    return true;
-  }
-
-  /**
    * Handles reset sensor (door) state changes.
    *
    * @private
@@ -575,21 +557,23 @@ export class SensorMonitor {
     lastValue: boolean,
     value: boolean
   ): void {
-    if (value && !lastValue) {
-      this.logger.log(
-        `[CAPABILITY] ✅ Reset sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
-        `(${sensor.capability}) changed from ${lastValue} to ${value} - DOOR OPENED - ` +
-        `Calling onReset() callback with sensorId: ${sensor.deviceId}`
-      );
-      this.callbacks.onReset(sensor.deviceId, value);
-    } else if (!value && lastValue) {
-      this.logger.log(
-        `[CAPABILITY] ✅ Reset sensor FALLING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
-        `(${sensor.capability}) changed from ${lastValue} to ${value} - DOOR CLOSED - ` +
-        `Calling onReset() callback with sensorId: ${sensor.deviceId}`
-      );
-      this.callbacks.onReset(sensor.deviceId, value);
+    const isRisingEdge = value && !lastValue;
+    const isFallingEdge = !value && lastValue;
+
+    if (!isRisingEdge && !isFallingEdge) {
+      return; // No edge detected
     }
+
+    const edgeType = isRisingEdge ? 'RISING EDGE' : 'FALLING EDGE';
+    const action = isRisingEdge ? 'DOOR OPENED' : 'DOOR CLOSED';
+
+    this.logger.log(
+      `[CAPABILITY] ✅ Reset sensor ${edgeType}: ${sensor.deviceName || sensor.deviceId} ` +
+      `(${sensor.capability}) changed from ${lastValue} to ${value} - ${action} - ` +
+      `Calling onReset() callback with sensorId: ${sensor.deviceId}`
+    );
+
+    this.callbacks.onReset(sensor.deviceId, value);
   }
 
   /**

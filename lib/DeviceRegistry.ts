@@ -11,6 +11,7 @@
  */
 
 import { DeviceInfo } from './types';
+import { RegistryErrorId } from '../constants/errorIds';
 
 /**
  * Interface for Homey instance with drivers
@@ -167,15 +168,26 @@ export class DeviceRegistry {
                 });
               }
             } catch (deviceError) {
-              this.homey.error(`Error processing device:`, deviceError);
+              // Attempt to get device name for better logging (may fail if device is corrupted)
+              const deviceName = device.getName ? device.getName() : 'unknown';
+              this.homey.error(
+                `[${RegistryErrorId.DEVICE_PROCESSING_FAILED}] Error processing device ${deviceName}:`,
+                deviceError
+              );
             }
           }
         } catch (driverError) {
-          this.homey.error(`Error accessing devices for driver ${driverName}:`, driverError);
+          this.homey.error(
+            `[${RegistryErrorId.DRIVER_ACCESS_FAILED}] Error accessing devices for driver ${driverName}:`,
+            driverError
+          );
         }
       }
     } catch (error) {
-      this.homey.error('Error retrieving devices:', error);
+      this.homey.error(
+        `[${RegistryErrorId.DEVICE_RETRIEVAL_FAILED}] Error retrieving devices:`,
+        error
+      );
     }
 
     return matchingDevices;
@@ -200,34 +212,14 @@ export class DeviceRegistry {
    * ```
    */
   public getDeviceById(deviceId: string): DeviceInfo | null {
-    try {
-      const drivers = this.homey.drivers.getDrivers();
+    const devices = this.iterateDevices((device: HomeyDevice) => device.getData().id === deviceId);
 
-      for (const [driverName, driver] of Object.entries(drivers)) {
-        try {
-          const driverWithDevices = driver as HomeyDriver;
-          const devices = driverWithDevices.getDevices?.() || [];
-          const device = devices.find((d: HomeyDevice) => d.getData().id === deviceId);
-
-          if (device) {
-            return {
-              id: deviceId,
-              name: device.getName(),
-              driverName: driverName,
-              capabilities: device.getCapabilities(),
-            };
-          }
-        } catch (driverError) {
-          this.homey.error(`Error accessing driver ${driverName}:`, driverError);
-        }
-      }
-
+    if (devices.length === 0) {
       this.homey.log(`Device not found: ${deviceId}`);
       return null;
-    } catch (error) {
-      this.homey.error(`Error finding device ${deviceId}:`, error);
-      return null;
     }
+
+    return devices[0];
   }
 
   /**
