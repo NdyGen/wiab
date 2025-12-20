@@ -145,8 +145,13 @@ class WIABDevice extends Homey.Device {
       event.changedKeys.includes('t_enter') ||
       event.changedKeys.includes('t_clear');
 
-    if (sensorSettingsChanged) {
-      this.log('Sensor configuration changed, reinitializing monitoring');
+    // Check if stale timeout settings changed
+    const staleTimeoutChanged =
+      event.changedKeys.includes('stalePirMinutes') ||
+      event.changedKeys.includes('staleDoorMinutes');
+
+    if (sensorSettingsChanged || staleTimeoutChanged) {
+      this.log('Sensor configuration or stale timeout settings changed, reinitializing monitoring');
 
       // Teardown existing monitoring
       this.teardownSensorMonitoring();
@@ -232,6 +237,16 @@ class WIABDevice extends Homey.Device {
         throw new Error('Homey API not available');
       }
 
+      // Get stale timeout settings
+      const stalePirMinutes = (this.getSetting('stalePirMinutes') as number) || 30;
+      const staleDoorMinutes = (this.getSetting('staleDoorMinutes') as number) || 30;
+
+      // Convert to milliseconds with validation
+      const stalePirTimeoutMs = Math.max(5, Math.min(120, stalePirMinutes)) * 60 * 1000;
+      const staleDoorTimeoutMs = Math.max(5, Math.min(120, staleDoorMinutes)) * 60 * 1000;
+
+      this.log(`Stale timeouts: PIR=${stalePirMinutes}min, Door=${staleDoorMinutes}min`);
+
       // Create and start sensor monitor
       // Note: SensorMonitor now treats triggerSensors as PIRs and resetSensors as doors
       this.sensorMonitor = new SensorMonitor(
@@ -239,7 +254,9 @@ class WIABDevice extends Homey.Device {
         this.homey,
         triggerSensors, // PIR sensors
         resetSensors,   // Door sensors
-        callbacks
+        callbacks,
+        stalePirTimeoutMs,   // Stale timeout for PIR sensors
+        staleDoorTimeoutMs   // Stale timeout for door sensors
       );
 
       await this.sensorMonitor.start();
