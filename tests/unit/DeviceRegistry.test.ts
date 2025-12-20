@@ -539,7 +539,7 @@ describe('DeviceRegistry', () => {
 
       expect(devices).toEqual([]);
       expect(homey.error).toHaveBeenCalledWith(
-        'Error retrieving devices:',
+        '[REGISTRY_003] Error retrieving devices:',
         expect.any(Error)
       );
     });
@@ -566,7 +566,7 @@ describe('DeviceRegistry', () => {
 
       expect(result).toBeNull();
       expect(homey.error).toHaveBeenCalledWith(
-        expect.stringContaining('Error accessing driver'),
+        expect.stringContaining('[REGISTRY_001] Error processing device'),
         expect.any(Error)
       );
     });
@@ -601,7 +601,7 @@ describe('DeviceRegistry', () => {
       expect(allDevices).toHaveLength(1);
       expect(allDevices[0].id).toBe('good-device');
       expect(homey.error).toHaveBeenCalledWith(
-        'Error processing device:',
+        expect.stringContaining('[REGISTRY_001] Error processing device'),
         expect.any(Error)
       );
     });

@@ -166,7 +166,7 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       expect(device.error).toHaveBeenCalledWith(
-        'Failed to setup sensor monitoring:',
+        '[DEVICE_001] Failed to setup sensor monitoring:',
         expect.any(Error)
       );
       // Device should still complete initialization
@@ -1026,7 +1026,7 @@ describe('WIABDevice', () => {
         'Device resumed, sensor monitoring reinitialized'
       );
       // Verify unpause properly reset state
-      const isPaused = (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      const isPaused = (device as unknown as { getIsPaused: () => boolean }).getIsPaused();
       expect(isPaused).toBe(false);
     });
 
@@ -1087,7 +1087,7 @@ describe('WIABDevice', () => {
     });
 
     /**
-     * Test isPausedCheck condition
+     * Test getIsPaused method
      */
     it('should correctly report paused state', async () => {
       // Setup device
@@ -1098,14 +1098,14 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       // Initially not paused
-      let isPaused = await (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      let isPaused = await (device as unknown as { getIsPaused: () => boolean }).getIsPaused();
       expect(isPaused).toBe(false);
 
       // Pause device
       await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
 
       // Now paused
-      isPaused = await (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      isPaused = await (device as unknown as { getIsPaused: () => boolean }).getIsPaused();
       expect(isPaused).toBe(true);
 
       // Unpause device
@@ -1116,7 +1116,7 @@ describe('WIABDevice', () => {
       await (device as unknown as { unpauseDevice: () => Promise<void> }).unpauseDevice();
 
       // No longer paused
-      isPaused = await (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      isPaused = await (device as unknown as { getIsPaused: () => boolean }).getIsPaused();
       expect(isPaused).toBe(false);
     });
 
@@ -1183,8 +1183,8 @@ describe('WIABDevice', () => {
       jest.clearAllMocks();
 
       // Step 5: Test that device is responsive again after unpausing
-      // We verify this by checking that isPausedCheck returns false
-      const isPaused = (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      // We verify this by checking that getIsPaused returns false
+      const isPaused = (device as unknown as { getIsPaused: () => boolean }).getIsPaused();
       expect(isPaused).toBe(false);
     });
 
@@ -1316,7 +1316,7 @@ describe('WIABDevice', () => {
       jest.clearAllMocks();
 
       // Setup device is now paused
-      let isPaused = (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      let isPaused = (device as unknown as { getIsPaused: () => boolean }).getIsPaused();
       expect(isPaused).toBe(true);
 
       // Mock getSetting to return invalid data to cause sensor monitoring setup to fail gracefully
@@ -1329,7 +1329,7 @@ describe('WIABDevice', () => {
       await (device as unknown as { unpauseDevice: () => Promise<void> }).unpauseDevice();
 
       // Device should be unpaused (isPaused = false)
-      isPaused = (device as unknown as { isPausedCheck: () => boolean }).isPausedCheck();
+      isPaused = (device as unknown as { getIsPaused: () => boolean }).getIsPaused();
       expect(isPaused).toBe(false);
 
       // Verify unpause was logged

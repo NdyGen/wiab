@@ -11,6 +11,7 @@ import {
   isAnyDoorOpen,
 } from '../../lib/OccupancyState';
 import { classifySensors } from '../../lib/SensorClassifier';
+import { DeviceErrorId } from '../../constants/errorIds';
 
 /**
  * Extended HomeyAPIDevice with runtime methods
@@ -263,7 +264,10 @@ class WIABDevice extends Homey.Device {
 
       this.log('Sensor monitoring initialized successfully');
     } catch (error) {
-      this.error('Failed to setup sensor monitoring:', error);
+      this.error(
+        `[${DeviceErrorId.SENSOR_MONITORING_SETUP_FAILED}] Failed to setup sensor monitoring:`,
+        error
+      );
       // Don't throw - allow device to function in degraded mode
     }
   }
@@ -355,7 +359,10 @@ class WIABDevice extends Homey.Device {
         `State after door event: ${this.occupancyState}, stable: ${this.lastStableOccupancy}, doors: ${allClosed ? 'all closed' : 'some open'}`
       );
     } catch (error) {
-      this.error('Failed to handle door event:', error);
+      this.error(
+        `[${DeviceErrorId.DOOR_EVENT_HANDLER_FAILED}] Failed to handle door event:`,
+        error
+      );
     }
   }
 
@@ -421,7 +428,10 @@ class WIABDevice extends Homey.Device {
         `State after PIR: ${this.occupancyState}, stable: ${this.lastStableOccupancy}`
       );
     } catch (error) {
-      this.error('Failed to handle PIR motion:', error);
+      this.error(
+        `[${DeviceErrorId.PIR_MOTION_HANDLER_FAILED}] Failed to handle PIR motion:`,
+        error
+      );
     }
   }
 
@@ -460,7 +470,10 @@ class WIABDevice extends Homey.Device {
         `PIR cleared after door event - T_ENTER timer started to detect return`
       );
     } catch (error) {
-      this.error('Failed to handle PIR cleared:', error);
+      this.error(
+        `[${DeviceErrorId.PIR_CLEARED_HANDLER_FAILED}] Failed to handle PIR cleared:`,
+        error
+      );
     }
   }
 
@@ -472,26 +485,20 @@ class WIABDevice extends Homey.Device {
    * - Resolves UNKNOWN state to OCCUPIED or UNOCCUPIED based on PIR activity
    */
   private startEnterTimer(): void {
-    // Stop existing timer if running
     this.stopEnterTimer();
 
-    // Get T_ENTER setting with validation
-    const tEnterSeconds = this.getSetting('t_enter') as number || TimerDefaults.T_ENTER_SECONDS;
-    const validatedTimeout = Math.max(
+    const timeoutSeconds = this.getValidatedTimerSetting(
+      't_enter',
+      TimerDefaults.T_ENTER_SECONDS,
       TimerDefaults.T_ENTER_MIN_SECONDS,
-      Math.min(TimerDefaults.T_ENTER_MAX_SECONDS, tEnterSeconds)
+      TimerDefaults.T_ENTER_MAX_SECONDS
     );
-    const timeoutMs = validatedTimeout * 1000;
+    const timeoutMs = timeoutSeconds * 1000;
 
-    // Set deadline
     this.enterTimerDeadline = Date.now() + timeoutMs;
+    this.enterTimer = setTimeout(() => this.handleEnterTimerExpiry(), timeoutMs);
 
-    // Start timer
-    this.enterTimer = setTimeout(() => {
-      this.handleEnterTimerExpiry();
-    }, timeoutMs);
-
-    this.log(`T_ENTER timer started: ${validatedTimeout}s`);
+    this.log(`T_ENTER timer started: ${timeoutSeconds}s`);
   }
 
   /**
@@ -570,28 +577,23 @@ class WIABDevice extends Homey.Device {
    * - Resolves to UNOCCUPIED if no PIR since timer start
    */
   private startClearTimer(): void {
-    // Stop existing timer if running
     this.stopClearTimer();
 
-    // Get T_CLEAR setting with validation
-    const tClearSeconds = this.getSetting('t_clear') as number || TimerDefaults.T_CLEAR_SECONDS;
-    const validatedTimeout = Math.max(
+    const timeoutSeconds = this.getValidatedTimerSetting(
+      't_clear',
+      TimerDefaults.T_CLEAR_SECONDS,
       TimerDefaults.T_CLEAR_MIN_SECONDS,
-      Math.min(TimerDefaults.T_CLEAR_MAX_SECONDS, tClearSeconds)
+      TimerDefaults.T_CLEAR_MAX_SECONDS
     );
-    const timeoutMs = validatedTimeout * 1000;
+    const timeoutMs = timeoutSeconds * 1000;
 
-    // Set deadline and anchor
     const now = Date.now();
     this.clearTimerDeadline = now + timeoutMs;
     this.clearTimerAnchor = now;
 
-    // Start timer
-    this.clearTimer = setTimeout(() => {
-      this.handleClearTimerExpiry();
-    }, timeoutMs);
+    this.clearTimer = setTimeout(() => this.handleClearTimerExpiry(), timeoutMs);
 
-    this.log(`T_CLEAR timer started: ${validatedTimeout}s`);
+    this.log(`T_CLEAR timer started: ${timeoutSeconds}s`);
   }
 
   /**
@@ -682,52 +684,6 @@ class WIABDevice extends Homey.Device {
     } catch (error) {
       this.error('Failed to update occupancy output:', error);
       throw error;
-    }
-  }
-
-  /**
-   * Reads the current value of a door sensor.
-   *
-   * @param doorId - The device ID of the door sensor
-   * @returns true if open, false if closed, null if unavailable
-   */
-  private async getDoorSensorValue(doorId: string): Promise<boolean | null> {
-    try {
-      const app = this.homey.app as WIABApp;
-      if (!app || !app.homeyApi) {
-        this.error('Homey API not available');
-        return null;
-      }
-
-      const devices = app.homeyApi.devices;
-      if (!devices || !devices[doorId]) {
-        this.error(`Door sensor device not found: ${doorId}`);
-        return null;
-      }
-
-      const device = devices[doorId];
-      const capabilitiesObj = device.capabilitiesObj;
-
-      // Find the door capability (could be alarm_contact, alarm_door, etc.)
-      const resetSensorsJson = this.getSetting('resetSensors') as string;
-      const resetSensors = this.validateSensorSettings(resetSensorsJson);
-      const sensor = resetSensors.find(s => s.deviceId === doorId);
-
-      if (!sensor) {
-        this.error(`Door sensor configuration not found: ${doorId}`);
-        return null;
-      }
-
-      if (!capabilitiesObj || !(sensor.capability in capabilitiesObj)) {
-        this.error(`Device ${doorId} does not have capability: ${sensor.capability}`);
-        return null;
-      }
-
-      const value = capabilitiesObj[sensor.capability]?.value;
-      return typeof value === 'boolean' ? value : false;
-    } catch (error) {
-      this.error(`Error reading door sensor ${doorId}:`, error);
-      return null;
     }
   }
 
@@ -872,11 +828,11 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
-   * Checks if the device is currently paused.
+   * Gets the current paused state of the device.
    *
    * @returns true if device is paused, false otherwise
    */
-  private isPausedCheck(): boolean {
+  private getIsPaused(): boolean {
     return this.isPaused;
   }
 
@@ -957,7 +913,7 @@ class WIABDevice extends Homey.Device {
       isPausedCard.registerRunListener(
         async (args: { device: WIABDevice }): Promise<boolean> => {
           try {
-            const paused = args.device.isPausedCheck();
+            const paused = args.device.getIsPaused();
             args.device.log(`Is paused condition evaluated: ${paused}`);
             return paused;
           } catch (error) {
@@ -972,6 +928,25 @@ class WIABDevice extends Homey.Device {
       this.error('Failed to register condition handlers:', error);
       throw error;
     }
+  }
+
+  /**
+   * Gets and validates a timer setting value.
+   *
+   * @param settingName - Name of the timer setting
+   * @param defaultValue - Default value if setting is not configured
+   * @param minValue - Minimum allowed value
+   * @param maxValue - Maximum allowed value
+   * @returns Validated timer value in seconds
+   */
+  private getValidatedTimerSetting(
+    settingName: string,
+    defaultValue: number,
+    minValue: number,
+    maxValue: number
+  ): number {
+    const settingValue = this.getSetting(settingName) as number || defaultValue;
+    return Math.max(minValue, Math.min(maxValue, settingValue));
   }
 
   /**

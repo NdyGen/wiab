@@ -31,3 +31,51 @@ export enum SensorMonitorErrorId {
   /** Capability not found on device */
   CAPABILITY_NOT_FOUND = 'SENSOR_MONITOR_006',
 }
+
+/**
+ * Error ID constants for tracking and monitoring device-related errors.
+ *
+ * These IDs enable error aggregation, filtering, and analysis in logs.
+ * Each error should be logged with its corresponding ID for traceability.
+ *
+ * @example
+ * ```typescript
+ * this.error(
+ *   `[${DeviceErrorId.SENSOR_MONITORING_SETUP_FAILED}] Failed to setup sensor monitoring`,
+ *   error
+ * );
+ * ```
+ */
+export enum DeviceErrorId {
+  /** Failed to setup sensor monitoring during device initialization */
+  SENSOR_MONITORING_SETUP_FAILED = 'DEVICE_001',
+
+  /** Event handler failed to process door event */
+  DOOR_EVENT_HANDLER_FAILED = 'DEVICE_002',
+
+  /** Event handler failed to process PIR motion event */
+  PIR_MOTION_HANDLER_FAILED = 'DEVICE_003',
+
+  /** Event handler failed to process PIR cleared event */
+  PIR_CLEARED_HANDLER_FAILED = 'DEVICE_004',
+
+  /** Failed to update occupancy output capabilities */
+  OCCUPANCY_UPDATE_FAILED = 'DEVICE_005',
+}
+
+/**
+ * Error ID constants for tracking and monitoring registry-related errors.
+ *
+ * These IDs enable error aggregation, filtering, and analysis in logs.
+ * Each error should be logged with its corresponding ID for traceability.
+ */
+export enum RegistryErrorId {
+  /** Error processing individual device during iteration */
+  DEVICE_PROCESSING_FAILED = 'REGISTRY_001',
+
+  /** Error accessing devices from driver */
+  DRIVER_ACCESS_FAILED = 'REGISTRY_002',
+
+  /** Error retrieving all devices */
+  DEVICE_RETRIEVAL_FAILED = 'REGISTRY_003',
+}

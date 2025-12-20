@@ -474,77 +474,10 @@ export class SensorMonitor {
       );
 
       // Create real-time capability listener using makeCapabilityInstance()
-      // This returns a DeviceCapability object and invokes the callback with value changes
-      const capabilityInstance = device.makeCapabilityInstance?.(sensor.capability, (value: boolean) => {
-        const lastValue = this.lastValues.get(key) ?? false;
-
-        this.logger.log(
-          `[CAPABILITY] ${isResetSensor ? 'Reset' : 'Trigger'} sensor value changed: ` +
-          `${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
-          `from ${lastValue} to ${value}`
-        );
-
-        // Update stored value
-        if (typeof value === 'boolean') {
-          this.lastValues.set(key, value);
-        } else {
-          this.logger.error(
-            `[CAPABILITY] Unexpected value type for ${sensor.deviceName || sensor.deviceId}: ` +
-            `expected boolean, got ${typeof value} (${value})`
-          );
-          return;
-        }
-
-        // Handle state changes based on sensor type
-        if (value !== lastValue) {
-          // Door sensors (reset sensors): trigger on BOTH edges (open and close are both events)
-          if (isResetSensor) {
-            if (value && !lastValue) {
-              // Rising edge: door opened
-              this.logger.log(
-                `[CAPABILITY] ✅ Reset sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
-                `(${sensor.capability}) changed from ${lastValue} to ${value} - DOOR OPENED - ` +
-                `Calling onReset() callback with sensorId: ${sensor.deviceId}`
-              );
-              this.callbacks.onReset(sensor.deviceId, value);
-            } else if (!value && lastValue) {
-              // Falling edge: door closed
-              this.logger.log(
-                `[CAPABILITY] ✅ Reset sensor FALLING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
-                `(${sensor.capability}) changed from ${lastValue} to ${value} - DOOR CLOSED - ` +
-                `Calling onReset() callback with sensorId: ${sensor.deviceId}`
-              );
-              this.callbacks.onReset(sensor.deviceId, value);
-            }
-          } else {
-            // PIR sensors (trigger sensors): trigger on rising edge (motion detected) and falling edge (motion cleared)
-            if (value && !lastValue) {
-              this.logger.log(
-                `[CAPABILITY] ✅ Trigger sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
-                `(${sensor.capability}) changed from ${lastValue} to ${value} - MOTION DETECTED - ` +
-                `Calling onTriggered() callback with sensorId: ${sensor.deviceId}`
-              );
-              this.callbacks.onTriggered(sensor.deviceId, value);
-            } else if (!value && lastValue) {
-              // Falling edge: motion cleared
-              this.logger.log(
-                `[CAPABILITY] ⬇️ Trigger sensor FALLING EDGE: ` +
-                `${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
-                `from ${lastValue} to ${value} - MOTION CLEARED - ` +
-                `Calling onPirCleared() callback with sensorId: ${sensor.deviceId}`
-              );
-              if (this.callbacks.onPirCleared) {
-                this.callbacks.onPirCleared(sensor.deviceId);
-              }
-            }
-          }
-        } else {
-          this.logger.log(
-            `[CAPABILITY] No change: ${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
-            `stayed at ${value} - IGNORED`
-          );
-        }
-      });
+      const capabilityInstance = device.makeCapabilityInstance?.(
+        sensor.capability,
+        (value: boolean) => this.handleCapabilityValueChange(sensor, key, isResetSensor, value)
+      );
 
       // Store the capability instance for cleanup
       this.capabilityInstances.set(key, capabilityInstance);
@@ -558,6 +491,121 @@ export class SensorMonitor {
         `[${SensorMonitorErrorId.CAPABILITY_LISTENER_FAILED}] Failed to setup capability listener for ${sensor.deviceId}:`,
         error
       );
+    }
+  }
+
+  /**
+   * Handles capability value changes for sensors.
+   *
+   * @private
+   * @param sensor - The sensor configuration
+   * @param key - The sensor key (deviceId:capability)
+   * @param isResetSensor - Whether this is a reset sensor
+   * @param value - The new value
+   */
+  private handleCapabilityValueChange(
+    sensor: SensorConfig,
+    key: string,
+    isResetSensor: boolean,
+    value: boolean
+  ): void {
+    // Validate value type before logging
+    if (typeof value !== 'boolean') {
+      this.logger.error(
+        `[CAPABILITY] Unexpected value type for ${sensor.deviceName || sensor.deviceId}: ` +
+        `expected boolean, got ${typeof value} (${value})`
+      );
+      return;
+    }
+
+    const lastValue = this.lastValues.get(key) ?? false;
+
+    this.logger.log(
+      `[CAPABILITY] ${isResetSensor ? 'Reset' : 'Trigger'} sensor value changed: ` +
+      `${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
+      `from ${lastValue} to ${value}`
+    );
+
+    // Update stored value after validation and logging
+    this.lastValues.set(key, value);
+
+    if (value === lastValue) {
+      this.logger.log(
+        `[CAPABILITY] No change: ${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
+        `stayed at ${value} - IGNORED`
+      );
+      return;
+    }
+
+    if (isResetSensor) {
+      this.handleResetSensorChange(sensor, lastValue, value);
+    } else {
+      this.handleTriggerSensorChange(sensor, lastValue, value);
+    }
+  }
+
+  /**
+   * Handles reset sensor (door) state changes.
+   *
+   * @private
+   * @param sensor - The sensor configuration
+   * @param lastValue - Previous value
+   * @param value - Current value
+   */
+  private handleResetSensorChange(
+    sensor: SensorConfig,
+    lastValue: boolean,
+    value: boolean
+  ): void {
+    const isRisingEdge = value && !lastValue;
+    const isFallingEdge = !value && lastValue;
+
+    if (!isRisingEdge && !isFallingEdge) {
+      return; // No edge detected
+    }
+
+    const edgeType = isRisingEdge ? 'RISING EDGE' : 'FALLING EDGE';
+    const action = isRisingEdge ? 'DOOR OPENED' : 'DOOR CLOSED';
+
+    this.logger.log(
+      `[CAPABILITY] ✅ Reset sensor ${edgeType}: ${sensor.deviceName || sensor.deviceId} ` +
+      `(${sensor.capability}) changed from ${lastValue} to ${value} - ${action} - ` +
+      `Calling onReset() callback with sensorId: ${sensor.deviceId}`
+    );
+
+    this.callbacks.onReset(sensor.deviceId, value);
+  }
+
+  /**
+   * Handles trigger sensor (PIR) state changes.
+   *
+   * @private
+   * @param sensor - The sensor configuration
+   * @param lastValue - Previous value
+   * @param value - Current value
+   */
+  private handleTriggerSensorChange(
+    sensor: SensorConfig,
+    lastValue: boolean,
+    value: boolean
+  ): void {
+    if (value && !lastValue) {
+      this.logger.log(
+        `[CAPABILITY] ✅ Trigger sensor RISING EDGE: ${sensor.deviceName || sensor.deviceId} ` +
+        `(${sensor.capability}) changed from ${lastValue} to ${value} - MOTION DETECTED - ` +
+        `Calling onTriggered() callback with sensorId: ${sensor.deviceId}`
+      );
+      this.callbacks.onTriggered(sensor.deviceId, value);
+    } else if (!value && lastValue) {
+      this.logger.log(
+        `[CAPABILITY] ⬇️ Trigger sensor FALLING EDGE: ` +
+        `${sensor.deviceName || sensor.deviceId} (${sensor.capability}) ` +
+        `from ${lastValue} to ${value} - MOTION CLEARED - ` +
+        `Calling onPirCleared() callback with sensorId: ${sensor.deviceId}`
+      );
+      if (this.callbacks.onPirCleared) {
+        this.callbacks.onPirCleared(sensor.deviceId);
+      }
     }
   }
 
