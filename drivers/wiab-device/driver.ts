@@ -1,5 +1,6 @@
 import Homey from 'homey';
 import { HomeyAPI, HomeyAPIDevice, PairingDeviceConfig } from '../../lib/types';
+import { TimerValues } from '../../lib/RoomTemplates';
 
 /**
  * Interface for WIABApp with HomeyAPI
@@ -110,9 +111,26 @@ class WIABDriver extends Homey.Driver {
   async onPair(session: Homey.Driver.PairSession): Promise<void> {
     this.log('WIAB pairing session started');
 
-    // Store selected sensors during pairing flow
+    // Store selected sensors and template timers during pairing flow
     let triggerSensors: PairingDeviceConfig[] = [];
     let resetSensors: PairingDeviceConfig[] = [];
+    let pairingTimers: TimerValues | null = null;
+
+    /**
+     * Handler for room template selection.
+     * Stores timer values from the selected template.
+     * If null is passed (user skipped), default values will be used.
+     */
+    session.setHandler('select_room_type', async (timerValues: TimerValues | null) => {
+      if (timerValues) {
+        this.log('Room template selected with timers:', timerValues);
+        pairingTimers = timerValues;
+      } else {
+        this.log('Room template selection skipped, using default timer values');
+        pairingTimers = null;
+      }
+      return { success: true };
+    });
 
     /**
      * Handler for fetching motion devices.
@@ -161,22 +179,37 @@ class WIABDriver extends Homey.Driver {
     /**
      * Handler for device listing.
      * Creates a virtual device with the selected sensor configuration.
+     * Applies room template timer values if a template was selected.
      */
     session.setHandler('list_devices', async () => {
       this.log('Creating WIAB device with selected sensors');
       this.log(`Trigger sensors: ${triggerSensors.length}, Reset sensors: ${resetSensors.length}`);
 
-      // Return a single virtual device instance with configured sensors
+      // Base settings with sensor configuration
+      const settings: Record<string, unknown> = {
+        triggerSensors: JSON.stringify(triggerSensors),
+        resetSensors: JSON.stringify(resetSensors),
+      };
+
+      // Apply template timer values if a template was selected
+      if (pairingTimers) {
+        settings.t_enter = pairingTimers.t_enter;
+        settings.t_clear = pairingTimers.t_clear;
+        settings.stalePirMinutes = pairingTimers.stalePirMinutes;
+        settings.staleDoorMinutes = pairingTimers.staleDoorMinutes;
+        this.log('Applying template timer values:', pairingTimers);
+      } else {
+        this.log('No template selected, device will use default timer values');
+      }
+
+      // Return a single virtual device instance with configured sensors and timers
       const devices = [
         {
           name: 'Wasp in a Box',
           data: {
             id: `wiab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           },
-          settings: {
-            triggerSensors: JSON.stringify(triggerSensors),
-            resetSensors: JSON.stringify(resetSensors),
-          },
+          settings,
         },
       ];
 

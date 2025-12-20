@@ -11,6 +11,7 @@ import {
   isAnyDoorOpen,
 } from '../../lib/OccupancyState';
 import { classifySensors } from '../../lib/SensorClassifier';
+import { getTemplateTimers } from '../../lib/RoomTemplates';
 import { DeviceErrorId } from '../../constants/errorIds';
 
 /**
@@ -135,6 +136,37 @@ class WIABDevice extends Homey.Device {
     changedKeys: string[];
   }): Promise<void> {
     this.log('WIAB device settings changed:', event.changedKeys);
+
+    // Handle room template selection
+    if (event.changedKeys.includes('room_template_selector')) {
+      const templateId = event.newSettings.room_template_selector as string;
+
+      if (templateId && templateId !== '') {
+        this.log(`Room template selected: ${templateId}`);
+
+        // Get template timer values
+        const timers = getTemplateTimers(templateId);
+
+        if (timers) {
+          // Apply template timers and reset selector
+          await this.setSettings({
+            t_enter: timers.t_enter,
+            t_clear: timers.t_clear,
+            stalePirMinutes: timers.stalePirMinutes,
+            staleDoorMinutes: timers.staleDoorMinutes,
+            room_template_selector: '', // Reset dropdown to empty
+          });
+
+          this.log(`Applied ${templateId} template: t_enter=${timers.t_enter}s, t_clear=${timers.t_clear}s, stalePir=${timers.stalePirMinutes}min, staleDoor=${timers.staleDoorMinutes}min`);
+
+          // Settings change will trigger another onSettings call with actual timer changes
+          // No need to do anything else here
+          return;
+        } else {
+          this.error(`Unknown room template ID: ${templateId}`);
+        }
+      }
+    }
 
     // Check if sensor configuration changed
     const sensorSettingsChanged =

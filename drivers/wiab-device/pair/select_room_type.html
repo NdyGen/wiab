@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .intro {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .template-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .template-item {
+            padding: 16px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: white;
+        }
+
+        .template-item:hover {
+            border-color: #2196F3;
+            background-color: #f5f9ff;
+        }
+
+        .template-item.selected {
+            border-color: #2196F3;
+            background-color: #e3f2fd;
+        }
+
+        .template-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 6px;
+            color: #333;
+        }
+
+        .template-description {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+
+        .template-values {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.03);
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .template-value {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+        }
+
+        .value-label {
+            color: #666;
+        }
+
+        .value-number {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .skip-button {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .skip-button:hover {
+            background: #f5f5f5;
+            border-color: #999;
+        }
+
+        .selected-indicator {
+            float: right;
+            color: #2196F3;
+            font-weight: 600;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+    <script type="text/javascript" src="/homey.js" data-origin="pair"></script>
+</head>
+<body>
+    <h1>Select Room Type (Optional)</h1>
+    <p class="intro">
+        Choose a room type to automatically configure timer values with recommended settings for that room.
+        You can still adjust these values later in device settings, or skip this step to configure manually.
+    </p>
+
+    <div id="templateList" class="template-list">
+        <!-- Templates will be inserted here by JavaScript -->
+    </div>
+
+    <button id="skipButton" class="skip-button">
+        Skip - Configure Manually
+    </button>
+
+    <script>
+        // Room templates data (matches lib/RoomTemplates.ts)
+        const ROOM_TEMPLATES = [
+            {
+                id: 'bedroom',
+                name: 'Bedroom',
+                description: 'Long occupancy periods with minimal motion (sleeping, reading in bed)',
+                timerValues: {
+                    t_enter: 30,
+                    t_clear: 1200,
+                    stalePirMinutes: 60,
+                    staleDoorMinutes: 60
+                }
+            },
+            {
+                id: 'bathroom',
+                name: 'Bathroom',
+                description: 'Quick entry/exit, short occupancy (shower steam may affect sensors)',
+                timerValues: {
+                    t_enter: 10,
+                    t_clear: 300,
+                    stalePirMinutes: 15,
+                    staleDoorMinutes: 15
+                }
+            },
+            {
+                id: 'home_office',
+                name: 'Home Office',
+                description: 'Minimal desk movement, focused work periods',
+                timerValues: {
+                    t_enter: 15,
+                    t_clear: 900,
+                    stalePirMinutes: 30,
+                    staleDoorMinutes: 30
+                }
+            },
+            {
+                id: 'kitchen',
+                name: 'Kitchen',
+                description: 'Cooking activities with intermittent motion',
+                timerValues: {
+                    t_enter: 15,
+                    t_clear: 600,
+                    stalePirMinutes: 30,
+                    staleDoorMinutes: 30
+                }
+            },
+            {
+                id: 'living_room',
+                name: 'Living Room',
+                description: 'Watching TV or relaxing with minimal motion',
+                timerValues: {
+                    t_enter: 20,
+                    t_clear: 900,
+                    stalePirMinutes: 30,
+                    staleDoorMinutes: 30
+                }
+            },
+            {
+                id: 'hallway',
+                name: 'Hallway / Corridor',
+                description: 'Passing through only, very short occupancy',
+                timerValues: {
+                    t_enter: 5,
+                    t_clear: 60,
+                    stalePirMinutes: 15,
+                    staleDoorMinutes: 15
+                }
+            },
+            {
+                id: 'storage',
+                name: 'Storage / Garage',
+                description: 'Grab items and leave, short visits',
+                timerValues: {
+                    t_enter: 10,
+                    t_clear: 180,
+                    stalePirMinutes: 30,
+                    staleDoorMinutes: 30
+                }
+            }
+        ];
+
+        let selectedTemplateId = null;
+
+        function onHomeyReady(Homey) {
+            renderTemplates();
+
+            // Skip button handler
+            document.getElementById('skipButton').addEventListener('click', function() {
+                // Send null to indicate no template selected
+                Homey.emit('select_room_type', null);
+                Homey.nextView();
+            });
+
+            Homey.ready();
+        }
+
+        function renderTemplates() {
+            const container = document.getElementById('templateList');
+            container.innerHTML = '';
+
+            ROOM_TEMPLATES.forEach(function(template) {
+                const item = document.createElement('div');
+                item.className = 'template-item';
+                item.setAttribute('data-template-id', template.id);
+
+                const nameEl = document.createElement('div');
+                nameEl.className = 'template-name';
+                nameEl.textContent = template.name;
+
+                const descEl = document.createElement('div');
+                descEl.className = 'template-description';
+                descEl.textContent = template.description;
+
+                const valuesEl = document.createElement('div');
+                valuesEl.className = 'template-values';
+                valuesEl.innerHTML =
+                    '<div class="template-value">' +
+                    '    <span class="value-label">Door motion window:</span>' +
+                    '    <span class="value-number">' + template.timerValues.t_enter + 's</span>' +
+                    '</div>' +
+                    '<div class="template-value">' +
+                    '    <span class="value-label">Empty timeout:</span>' +
+                    '    <span class="value-number">' + template.timerValues.t_clear + 's</span>' +
+                    '</div>' +
+                    '<div class="template-value">' +
+                    '    <span class="value-label">PIR stale timeout:</span>' +
+                    '    <span class="value-number">' + template.timerValues.stalePirMinutes + 'min</span>' +
+                    '</div>' +
+                    '<div class="template-value">' +
+                    '    <span class="value-label">Door stale timeout:</span>' +
+                    '    <span class="value-number">' + template.timerValues.staleDoorMinutes + 'min</span>' +
+                    '</div>';
+
+                item.appendChild(nameEl);
+                item.appendChild(descEl);
+                item.appendChild(valuesEl);
+
+                item.addEventListener('click', function() {
+                    selectTemplate(template.id);
+                });
+
+                container.appendChild(item);
+            });
+        }
+
+        function selectTemplate(templateId) {
+            selectedTemplateId = templateId;
+
+            // Update visual selection
+            const items = document.querySelectorAll('.template-item');
+            items.forEach(function(item) {
+                if (item.getAttribute('data-template-id') === templateId) {
+                    item.classList.add('selected');
+                } else {
+                    item.classList.remove('selected');
+                }
+            });
+
+            // Find the selected template
+            const template = ROOM_TEMPLATES.find(function(t) {
+                return t.id === templateId;
+            });
+
+            if (template) {
+                // Send template timer values to driver
+                if (typeof Homey !== 'undefined') {
+                    Homey.emit('select_room_type', template.timerValues);
+                    Homey.nextView();
+                }
+            }
+        }
+
+        // Initialize when Homey is ready
+        if (typeof Homey !== 'undefined') {
+            onHomeyReady(Homey);
+        }
+    </script>
+</body>
+</html>
