@@ -143,11 +143,12 @@ export function createMockDevice(config: {
   } = config;
 
   // Create capabilitiesObj structure for HomeyAPI compatibility
-  const capabilitiesObj: Record<string, { value: unknown; id: string }> = {};
+  const capabilitiesObj: Record<string, { value: unknown; id: string; lastUpdated?: number }> = {};
   capabilities.forEach((cap: string) => {
     capabilitiesObj[cap] = {
       value: capabilityValues[cap],
       id: cap,
+      lastUpdated: Date.now(), // Initialize with current timestamp
     };
   });
 
@@ -273,7 +274,7 @@ interface MockDevice {
   log: jest.Mock<void>;
   error: jest.Mock<void>;
   name: string;
-  capabilitiesObj: Record<string, { value: unknown; id?: string }>;
+  capabilitiesObj: Record<string, { value: unknown; id?: string; lastUpdated?: number }>;
   on: (event: string, handler: (update: CapabilityUpdate) => void) => void;
   removeListener: (event: string, handler: (update: CapabilityUpdate) => void) => void;
   makeCapabilityInstance?: (capability: string, callback: (value: boolean) => void) => unknown;
