@@ -455,20 +455,26 @@ class WIABDevice extends Homey.Device {
    * - Resolves UNKNOWN state to OCCUPIED or UNOCCUPIED based on PIR activity
    */
   private startEnterTimer(): void {
+    // Stop existing timer if running
     this.stopEnterTimer();
 
-    const timeoutSeconds = this.getValidatedTimerSetting(
-      't_enter',
-      TimerDefaults.T_ENTER_SECONDS,
+    // Get T_ENTER setting with validation
+    const tEnterSeconds = this.getSetting('t_enter') as number || TimerDefaults.T_ENTER_SECONDS;
+    const validatedTimeout = Math.max(
       TimerDefaults.T_ENTER_MIN_SECONDS,
-      TimerDefaults.T_ENTER_MAX_SECONDS
+      Math.min(TimerDefaults.T_ENTER_MAX_SECONDS, tEnterSeconds)
     );
-    const timeoutMs = timeoutSeconds * 1000;
+    const timeoutMs = validatedTimeout * 1000;
 
+    // Set deadline
     this.enterTimerDeadline = Date.now() + timeoutMs;
-    this.enterTimer = setTimeout(() => this.handleEnterTimerExpiry(), timeoutMs);
 
-    this.log(`T_ENTER timer started: ${timeoutSeconds}s`);
+    // Start timer
+    this.enterTimer = setTimeout(() => {
+      this.handleEnterTimerExpiry();
+    }, timeoutMs);
+
+    this.log(`T_ENTER timer started: ${validatedTimeout}s`);
   }
 
   /**
@@ -547,23 +553,28 @@ class WIABDevice extends Homey.Device {
    * - Resolves to UNOCCUPIED if no PIR since timer start
    */
   private startClearTimer(): void {
+    // Stop existing timer if running
     this.stopClearTimer();
 
-    const timeoutSeconds = this.getValidatedTimerSetting(
-      't_clear',
-      TimerDefaults.T_CLEAR_SECONDS,
+    // Get T_CLEAR setting with validation
+    const tClearSeconds = this.getSetting('t_clear') as number || TimerDefaults.T_CLEAR_SECONDS;
+    const validatedTimeout = Math.max(
       TimerDefaults.T_CLEAR_MIN_SECONDS,
-      TimerDefaults.T_CLEAR_MAX_SECONDS
+      Math.min(TimerDefaults.T_CLEAR_MAX_SECONDS, tClearSeconds)
     );
-    const timeoutMs = timeoutSeconds * 1000;
+    const timeoutMs = validatedTimeout * 1000;
 
+    // Set deadline and anchor
     const now = Date.now();
     this.clearTimerDeadline = now + timeoutMs;
     this.clearTimerAnchor = now;
 
-    this.clearTimer = setTimeout(() => this.handleClearTimerExpiry(), timeoutMs);
+    // Start timer
+    this.clearTimer = setTimeout(() => {
+      this.handleClearTimerExpiry();
+    }, timeoutMs);
 
-    this.log(`T_CLEAR timer started: ${timeoutSeconds}s`);
+    this.log(`T_CLEAR timer started: ${validatedTimeout}s`);
   }
 
   /**
@@ -944,25 +955,6 @@ class WIABDevice extends Homey.Device {
       this.error('Failed to register condition handlers:', error);
       throw error;
     }
-  }
-
-  /**
-   * Gets and validates a timer setting value.
-   *
-   * @param settingName - Name of the timer setting
-   * @param defaultValue - Default value if setting is not configured
-   * @param minValue - Minimum allowed value
-   * @param maxValue - Maximum allowed value
-   * @returns Validated timer value in seconds
-   */
-  private getValidatedTimerSetting(
-    settingName: string,
-    defaultValue: number,
-    minValue: number,
-    maxValue: number
-  ): number {
-    const settingValue = this.getSetting(settingName) as number || defaultValue;
-    return Math.max(minValue, Math.min(maxValue, settingValue));
   }
 
   /**
