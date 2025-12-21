@@ -213,8 +213,19 @@
                 // Skip button handler
                 document.getElementById('skipButton').addEventListener('click', function() {
                     console.log('Skip button clicked');
-                    Homey.emit('select_room_type', null);
-                    Homey.nextView();
+                    try {
+                        Homey.emit('select_room_type', null, function(err, result) {
+                            if (err) {
+                                console.error('Failed to skip template selection:', err);
+                                alert('Failed to proceed. Please try again.');
+                                return;
+                            }
+                            Homey.nextView();
+                        });
+                    } catch (error) {
+                        console.error('Exception during skip:', error);
+                        alert('An error occurred. Please restart pairing.');
+                    }
                 });
             }
 
@@ -288,15 +299,51 @@
 
                 if (template) {
                     console.log('Sending template timer values:', template.timerValues);
-                    // Send template timer values to driver and proceed to next view
-                    Homey.emit('select_room_type', template.timerValues);
-                    Homey.nextView();
+                    try {
+                        // Send template timer values to driver and proceed to next view
+                        Homey.emit('select_room_type', template.timerValues, function(err, result) {
+                            if (err) {
+                                console.error('Failed to send template to driver:', err);
+                                alert('Failed to apply template. Please try again or skip this step.');
+                                return;
+                            }
+
+                            if (!result || !result.success) {
+                                console.error('Driver rejected template:', result);
+                                alert('Template could not be applied. Continuing with default values.');
+                            }
+
+                            Homey.nextView();
+                        });
+                    } catch (error) {
+                        console.error('Exception during template selection:', error);
+                        alert('An error occurred. Please skip this step and configure manually.');
+                    }
+                } else {
+                    console.error('Template not found:', templateId);
+                    alert('Template not found. Please select another template or skip.');
                 }
             }
 
             // Wait for Homey to be ready, then initialize
             if (typeof Homey !== 'undefined') {
-                onHomeyReady(Homey);
+                try {
+                    onHomeyReady(Homey);
+                } catch (error) {
+                    console.error('Failed to initialize pairing page:', error);
+                    document.body.innerHTML = '<div style="padding: 20px; color: red;">' +
+                        '<h1>Error</h1>' +
+                        '<p>Pairing framework failed to load. Please restart the Homey app and try again.</p>' +
+                        '<p>If this persists, contact support with error code: HOMEY_INIT_FAILED</p>' +
+                        '</div>';
+                }
+            } else {
+                console.error('CRITICAL: Homey API not available in pairing context');
+                document.body.innerHTML = '<div style="padding: 20px; color: red;">' +
+                    '<h1>Error</h1>' +
+                    '<p>Homey SDK not available. Please restart pairing.</p>' +
+                    '<p>If this persists, contact support with error code: HOMEY_API_MISSING</p>' +
+                    '</div>';
             }
         })();
     </script>

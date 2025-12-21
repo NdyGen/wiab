@@ -151,16 +151,7 @@ Room templates automatically configure four critical timer settings:
 
 **Note:** Template selection is optional. You can skip this step and configure timer values manually in device settings.
 
-### In Device Settings
-
-1. Open your WIAB device settings
-2. At the top, find "Room Type Templates" section
-3. Select a room type from the "Apply Room Template" dropdown
-4. Timer values update automatically
-5. The dropdown resets to empty (ready for future template applications)
-6. Click "Save" to apply the changes (if using custom settings page)
-
-**Tip:** You can apply a template and then fine-tune the values manually. Template selection doesn't lock you into those values.
+**Important:** Templates can only be applied during the initial pairing process. After the device is created, you can manually adjust individual timer values in device settings, but you cannot re-apply a template. To use a different template, you would need to delete and re-pair the device.
 
 ---
 
@@ -302,7 +293,7 @@ The device uses built-in default values:
 - Door stale timeout: 30 minutes
 
 ### Do templates work with existing devices?
-**Yes!** You can apply templates to existing WIAB devices through device settings. No need to delete and re-pair.
+**No.** Templates are only available during the initial pairing flow. To use a template with an existing device, you must delete and re-pair the device. However, you can manually configure the same timer values by copying them from the template reference table above.
 
 ### Can I create custom templates?
 Not through the UI, but you can create your own "template" by:
@@ -338,8 +329,8 @@ Each template contains:
 To add custom templates to the codebase:
 1. Edit `/lib/RoomTemplates.ts`
 2. Add new template object to `ROOM_TEMPLATES` array
-3. Update `driver.settings.compose.json` with new dropdown option
-4. Update `pair/select_room_type.html` with new template
+3. Update `pair/select_room_type.html` with new template (template data is currently hardcoded in HTML)
+4. Add tests in `tests/unit/RoomTemplates.test.ts` to verify the new template
 5. Rebuild app: `homey app build`
 
 ### Internationalization

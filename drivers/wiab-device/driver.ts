@@ -36,6 +36,38 @@ class WIABDriver extends Homey.Driver {
   }
 
   /**
+   * Validates timer values from room template selection.
+   * Ensures all required properties exist and are within acceptable ranges.
+   *
+   * @private
+   * @param {unknown} timers - The timer values to validate
+   * @returns {boolean} True if valid, false otherwise
+   */
+  private isValidTimerValues(timers: unknown): timers is TimerValues {
+    if (!timers || typeof timers !== 'object') {
+      return false;
+    }
+
+    const t = timers as Record<string, unknown>;
+
+    // Check all required properties exist and are numbers
+    if (typeof t.t_enter !== 'number' ||
+        typeof t.t_clear !== 'number' ||
+        typeof t.stalePirMinutes !== 'number' ||
+        typeof t.staleDoorMinutes !== 'number') {
+      return false;
+    }
+
+    // Validate ranges (same as device settings validation)
+    if (t.t_enter < 5 || t.t_enter > 60) return false;
+    if (t.t_clear < 60 || t.t_clear > 3600) return false;
+    if (t.stalePirMinutes < 5 || t.stalePirMinutes > 120) return false;
+    if (t.staleDoorMinutes < 5 || t.staleDoorMinutes > 120) return false;
+
+    return true;
+  }
+
+  /**
    * Fetches devices with a specific capability from HomeyAPI.
    *
    * This private helper method eliminates code duplication by providing a
@@ -123,6 +155,12 @@ class WIABDriver extends Homey.Driver {
      */
     session.setHandler('select_room_type', async (timerValues: TimerValues | null) => {
       if (timerValues) {
+        // Validate timer values structure and ranges
+        if (!this.isValidTimerValues(timerValues)) {
+          this.error('Invalid timer values received from pairing:', timerValues);
+          return { success: false, error: 'Invalid timer configuration' };
+        }
+
         this.log('Room template selected with timers:', timerValues);
         pairingTimers = timerValues;
       } else {
@@ -207,7 +245,7 @@ class WIABDriver extends Homey.Driver {
         {
           name: 'Wasp in a Box',
           data: {
-            id: `wiab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: `wiab-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
           },
           settings,
         },
