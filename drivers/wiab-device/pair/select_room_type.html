@@ -123,92 +123,25 @@
         (function() {
             'use strict';
 
-            // Room templates data (matches lib/RoomTemplates.ts)
-            const ROOM_TEMPLATES = [
-                {
-                    id: 'bedroom',
-                    name: 'Bedroom',
-                    description: 'Long occupancy periods with minimal motion (sleeping, reading in bed)',
-                    timerValues: {
-                        t_enter: 30,
-                        t_clear: 1200,
-                        stalePirMinutes: 60,
-                        staleDoorMinutes: 60
-                    }
-                },
-                {
-                    id: 'bathroom',
-                    name: 'Bathroom',
-                    description: 'Quick entry/exit, short occupancy (shower steam may affect sensors)',
-                    timerValues: {
-                        t_enter: 10,
-                        t_clear: 300,
-                        stalePirMinutes: 15,
-                        staleDoorMinutes: 15
-                    }
-                },
-                {
-                    id: 'home_office',
-                    name: 'Home Office',
-                    description: 'Minimal desk movement, focused work periods',
-                    timerValues: {
-                        t_enter: 15,
-                        t_clear: 900,
-                        stalePirMinutes: 30,
-                        staleDoorMinutes: 30
-                    }
-                },
-                {
-                    id: 'kitchen',
-                    name: 'Kitchen',
-                    description: 'Cooking activities with intermittent motion',
-                    timerValues: {
-                        t_enter: 15,
-                        t_clear: 600,
-                        stalePirMinutes: 30,
-                        staleDoorMinutes: 30
-                    }
-                },
-                {
-                    id: 'living_room',
-                    name: 'Living Room',
-                    description: 'Watching TV or relaxing with minimal motion',
-                    timerValues: {
-                        t_enter: 20,
-                        t_clear: 900,
-                        stalePirMinutes: 30,
-                        staleDoorMinutes: 30
-                    }
-                },
-                {
-                    id: 'hallway',
-                    name: 'Hallway / Corridor',
-                    description: 'Passing through only, very short occupancy',
-                    timerValues: {
-                        t_enter: 5,
-                        t_clear: 60,
-                        stalePirMinutes: 15,
-                        staleDoorMinutes: 15
-                    }
-                },
-                {
-                    id: 'storage',
-                    name: 'Storage / Garage',
-                    description: 'Grab items and leave, short visits',
-                    timerValues: {
-                        t_enter: 10,
-                        t_clear: 180,
-                        stalePirMinutes: 30,
-                        staleDoorMinutes: 30
-                    }
-                }
-            ];
-
+            // Room templates - fetched dynamically from driver
+            let ROOM_TEMPLATES = [];
             let selectedTemplateId = null;
 
             function onHomeyReady(Homey) {
-                console.log('Homey ready, rendering room templates...');
-                renderTemplates();
+                console.log('Homey ready, fetching room templates...');
+
+                // Fetch templates from driver
+                Homey.emit('get_room_templates', null, function(err, templates) {
+                    if (err) {
+                        console.error('Failed to fetch templates:', err);
+                        showError('Failed to load room templates: ' + (err.message || err));
+                        return;
+                    }
+
+                    ROOM_TEMPLATES = templates;
+                    console.log('Loaded ' + templates.length + ' room templates');
+                    renderTemplates();
+                });
 
                 // Skip button handler
                 document.getElementById('skipButton').addEventListener('click', function() {
@@ -227,6 +160,13 @@
                         alert('An error occurred. Please restart pairing.');
                     }
                 });
+            }
+
+            function showError(message) {
+                const container = document.getElementById('templateList');
+                container.innerHTML = '<div style="padding: 20px; color: red; text-align: center;">' +
+                    '<strong>Error:</strong> ' + message +
+                    '</div>';
             }
 
             function renderTemplates() {

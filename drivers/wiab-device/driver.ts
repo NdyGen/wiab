@@ -149,6 +149,29 @@ class WIABDriver extends Homey.Driver {
     let pairingTimers: TimerValues | null = null;
 
     /**
+     * Handler for fetching room templates.
+     * Returns all available room type templates from RoomTemplates.ts.
+     * Templates include localized names, descriptions, and pre-configured timer values.
+     */
+    session.setHandler('get_room_templates', async () => {
+      try {
+        const { getAllTemplates } = await import('../../lib/RoomTemplates');
+        const templates = getAllTemplates();
+
+        // Return simplified template data for frontend (English only for now)
+        return templates.map(t => ({
+          id: t.id,
+          name: t.name.en,
+          description: t.description.en,
+          timerValues: t.timerValues,
+        }));
+      } catch (error) {
+        this.error('[PAIRING_TEMPLATES_FAILED] Error loading room templates:', error);
+        throw new Error('Failed to load room templates. Please restart pairing.');
+      }
+    });
+
+    /**
      * Handler for room template selection.
      * Stores timer values from the selected template.
      * If null is passed (user skipped), default values will be used.
@@ -178,8 +201,25 @@ class WIABDriver extends Homey.Driver {
       try {
         return await this.getDevicesWithCapability('alarm_motion');
       } catch (error) {
-        this.error('Error fetching motion devices:', error);
-        throw new Error('Failed to fetch motion devices');
+        this.error('[PAIRING_MOTION_DEVICES_FAILED] Error fetching motion devices:', error);
+
+        let userMessage = 'Failed to fetch motion devices. ';
+
+        if (error instanceof Error) {
+          if (error.message.includes('Homey API not available')) {
+            userMessage += 'The app is still initializing. Please wait a moment and try again.';
+          } else if (error.message.includes('timeout')) {
+            userMessage += 'Request timed out. Please check your network connection and try again.';
+          } else if (error.message.includes('permission')) {
+            userMessage += 'Permission denied. Please check app permissions in Homey settings.';
+          } else {
+            userMessage += `Error: ${error.message}`;
+          }
+        } else {
+          userMessage += 'An unknown error occurred. Please try again or restart the Homey app.';
+        }
+
+        throw new Error(userMessage);
       }
     });
 
@@ -191,8 +231,25 @@ class WIABDriver extends Homey.Driver {
       try {
         return await this.getDevicesWithCapability('alarm_contact');
       } catch (error) {
-        this.error('Error fetching contact devices:', error);
-        throw new Error('Failed to fetch contact devices');
+        this.error('[PAIRING_CONTACT_DEVICES_FAILED] Error fetching contact devices:', error);
+
+        let userMessage = 'Failed to fetch contact devices. ';
+
+        if (error instanceof Error) {
+          if (error.message.includes('Homey API not available')) {
+            userMessage += 'The app is still initializing. Please wait a moment and try again.';
+          } else if (error.message.includes('timeout')) {
+            userMessage += 'Request timed out. Please check your network connection and try again.';
+          } else if (error.message.includes('permission')) {
+            userMessage += 'Permission denied. Please check app permissions in Homey settings.';
+          } else {
+            userMessage += `Error: ${error.message}`;
+          }
+        } else {
+          userMessage += 'An unknown error occurred. Please try again or restart the Homey app.';
+        }
+
+        throw new Error(userMessage);
       }
     });
 
@@ -257,4 +314,5 @@ class WIABDriver extends Homey.Driver {
   }
 }
 
+export default WIABDriver;
 module.exports = WIABDriver;

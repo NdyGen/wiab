@@ -17,6 +17,11 @@ export default {
     hasCapability = jest.fn();
     addCapability = jest.fn();
   },
+  Driver: class MockDriver {
+    homey: MockHomey = {};
+    log = jest.fn();
+    error = jest.fn();
+  },
   App: class MockApp {
     homey: MockHomey = {};
     log = jest.fn();
