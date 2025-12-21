@@ -102,18 +102,7 @@
             background: #f5f5f5;
             border-color: #999;
         }
-
-        .selected-indicator {
-            float: right;
-            color: #2196F3;
-            font-weight: 600;
-        }
-
-        .hidden {
-            display: none;
-        }
     </style>
-    <script type="text/javascript" src="/homey.js" data-origin="pair"></script>
 </head>
 <body>
     <h1>Select Room Type (Optional)</h1>
@@ -130,183 +119,186 @@
         Skip - Configure Manually
     </button>
 
-    <script>
-        // Room templates data (matches lib/RoomTemplates.ts)
-        const ROOM_TEMPLATES = [
-            {
-                id: 'bedroom',
-                name: 'Bedroom',
-                description: 'Long occupancy periods with minimal motion (sleeping, reading in bed)',
-                timerValues: {
-                    t_enter: 30,
-                    t_clear: 1200,
-                    stalePirMinutes: 60,
-                    staleDoorMinutes: 60
+    <script type="application/javascript">
+        (function() {
+            'use strict';
+
+            // Room templates data (matches lib/RoomTemplates.ts)
+            const ROOM_TEMPLATES = [
+                {
+                    id: 'bedroom',
+                    name: 'Bedroom',
+                    description: 'Long occupancy periods with minimal motion (sleeping, reading in bed)',
+                    timerValues: {
+                        t_enter: 30,
+                        t_clear: 1200,
+                        stalePirMinutes: 60,
+                        staleDoorMinutes: 60
+                    }
+                },
+                {
+                    id: 'bathroom',
+                    name: 'Bathroom',
+                    description: 'Quick entry/exit, short occupancy (shower steam may affect sensors)',
+                    timerValues: {
+                        t_enter: 10,
+                        t_clear: 300,
+                        stalePirMinutes: 15,
+                        staleDoorMinutes: 15
+                    }
+                },
+                {
+                    id: 'home_office',
+                    name: 'Home Office',
+                    description: 'Minimal desk movement, focused work periods',
+                    timerValues: {
+                        t_enter: 15,
+                        t_clear: 900,
+                        stalePirMinutes: 30,
+                        staleDoorMinutes: 30
+                    }
+                },
+                {
+                    id: 'kitchen',
+                    name: 'Kitchen',
+                    description: 'Cooking activities with intermittent motion',
+                    timerValues: {
+                        t_enter: 15,
+                        t_clear: 600,
+                        stalePirMinutes: 30,
+                        staleDoorMinutes: 30
+                    }
+                },
+                {
+                    id: 'living_room',
+                    name: 'Living Room',
+                    description: 'Watching TV or relaxing with minimal motion',
+                    timerValues: {
+                        t_enter: 20,
+                        t_clear: 900,
+                        stalePirMinutes: 30,
+                        staleDoorMinutes: 30
+                    }
+                },
+                {
+                    id: 'hallway',
+                    name: 'Hallway / Corridor',
+                    description: 'Passing through only, very short occupancy',
+                    timerValues: {
+                        t_enter: 5,
+                        t_clear: 60,
+                        stalePirMinutes: 15,
+                        staleDoorMinutes: 15
+                    }
+                },
+                {
+                    id: 'storage',
+                    name: 'Storage / Garage',
+                    description: 'Grab items and leave, short visits',
+                    timerValues: {
+                        t_enter: 10,
+                        t_clear: 180,
+                        stalePirMinutes: 30,
+                        staleDoorMinutes: 30
+                    }
                 }
-            },
-            {
-                id: 'bathroom',
-                name: 'Bathroom',
-                description: 'Quick entry/exit, short occupancy (shower steam may affect sensors)',
-                timerValues: {
-                    t_enter: 10,
-                    t_clear: 300,
-                    stalePirMinutes: 15,
-                    staleDoorMinutes: 15
-                }
-            },
-            {
-                id: 'home_office',
-                name: 'Home Office',
-                description: 'Minimal desk movement, focused work periods',
-                timerValues: {
-                    t_enter: 15,
-                    t_clear: 900,
-                    stalePirMinutes: 30,
-                    staleDoorMinutes: 30
-                }
-            },
-            {
-                id: 'kitchen',
-                name: 'Kitchen',
-                description: 'Cooking activities with intermittent motion',
-                timerValues: {
-                    t_enter: 15,
-                    t_clear: 600,
-                    stalePirMinutes: 30,
-                    staleDoorMinutes: 30
-                }
-            },
-            {
-                id: 'living_room',
-                name: 'Living Room',
-                description: 'Watching TV or relaxing with minimal motion',
-                timerValues: {
-                    t_enter: 20,
-                    t_clear: 900,
-                    stalePirMinutes: 30,
-                    staleDoorMinutes: 30
-                }
-            },
-            {
-                id: 'hallway',
-                name: 'Hallway / Corridor',
-                description: 'Passing through only, very short occupancy',
-                timerValues: {
-                    t_enter: 5,
-                    t_clear: 60,
-                    stalePirMinutes: 15,
-                    staleDoorMinutes: 15
-                }
-            },
-            {
-                id: 'storage',
-                name: 'Storage / Garage',
-                description: 'Grab items and leave, short visits',
-                timerValues: {
-                    t_enter: 10,
-                    t_clear: 180,
-                    stalePirMinutes: 30,
-                    staleDoorMinutes: 30
-                }
+            ];
+
+            let selectedTemplateId = null;
+
+            function onHomeyReady(Homey) {
+                console.log('Homey ready, rendering room templates...');
+                renderTemplates();
+
+                // Skip button handler
+                document.getElementById('skipButton').addEventListener('click', function() {
+                    console.log('Skip button clicked');
+                    Homey.emit('select_room_type', null);
+                    Homey.nextView();
+                });
             }
-        ];
 
-        let selectedTemplateId = null;
+            function renderTemplates() {
+                const container = document.getElementById('templateList');
+                container.innerHTML = '';
 
-        function onHomeyReady(Homey) {
-            renderTemplates();
+                ROOM_TEMPLATES.forEach(function(template) {
+                    const item = document.createElement('div');
+                    item.className = 'template-item';
+                    item.setAttribute('data-template-id', template.id);
 
-            // Skip button handler
-            document.getElementById('skipButton').addEventListener('click', function() {
-                // Send null to indicate no template selected
-                Homey.emit('select_room_type', null);
-                Homey.nextView();
-            });
+                    const nameEl = document.createElement('div');
+                    nameEl.className = 'template-name';
+                    nameEl.textContent = template.name;
 
-            Homey.ready();
-        }
+                    const descEl = document.createElement('div');
+                    descEl.className = 'template-description';
+                    descEl.textContent = template.description;
 
-        function renderTemplates() {
-            const container = document.getElementById('templateList');
-            container.innerHTML = '';
+                    const valuesEl = document.createElement('div');
+                    valuesEl.className = 'template-values';
+                    valuesEl.innerHTML =
+                        '<div class="template-value">' +
+                        '    <span class="value-label">Door motion window:</span>' +
+                        '    <span class="value-number">' + template.timerValues.t_enter + 's</span>' +
+                        '</div>' +
+                        '<div class="template-value">' +
+                        '    <span class="value-label">Empty timeout:</span>' +
+                        '    <span class="value-number">' + template.timerValues.t_clear + 's</span>' +
+                        '</div>' +
+                        '<div class="template-value">' +
+                        '    <span class="value-label">PIR stale timeout:</span>' +
+                        '    <span class="value-number">' + template.timerValues.stalePirMinutes + 'min</span>' +
+                        '</div>' +
+                        '<div class="template-value">' +
+                        '    <span class="value-label">Door stale timeout:</span>' +
+                        '    <span class="value-number">' + template.timerValues.staleDoorMinutes + 'min</span>' +
+                        '</div>';
 
-            ROOM_TEMPLATES.forEach(function(template) {
-                const item = document.createElement('div');
-                item.className = 'template-item';
-                item.setAttribute('data-template-id', template.id);
+                    item.appendChild(nameEl);
+                    item.appendChild(descEl);
+                    item.appendChild(valuesEl);
 
-                const nameEl = document.createElement('div');
-                nameEl.className = 'template-name';
-                nameEl.textContent = template.name;
+                    item.addEventListener('click', function() {
+                        selectTemplate(template.id);
+                    });
 
-                const descEl = document.createElement('div');
-                descEl.className = 'template-description';
-                descEl.textContent = template.description;
+                    container.appendChild(item);
+                });
+            }
 
-                const valuesEl = document.createElement('div');
-                valuesEl.className = 'template-values';
-                valuesEl.innerHTML =
-                    '<div class="template-value">' +
-                    '    <span class="value-label">Door motion window:</span>' +
-                    '    <span class="value-number">' + template.timerValues.t_enter + 's</span>' +
-                    '</div>' +
-                    '<div class="template-value">' +
-                    '    <span class="value-label">Empty timeout:</span>' +
-                    '    <span class="value-number">' + template.timerValues.t_clear + 's</span>' +
-                    '</div>' +
-                    '<div class="template-value">' +
-                    '    <span class="value-label">PIR stale timeout:</span>' +
-                    '    <span class="value-number">' + template.timerValues.stalePirMinutes + 'min</span>' +
-                    '</div>' +
-                    '<div class="template-value">' +
-                    '    <span class="value-label">Door stale timeout:</span>' +
-                    '    <span class="value-number">' + template.timerValues.staleDoorMinutes + 'min</span>' +
-                    '</div>';
+            function selectTemplate(templateId) {
+                selectedTemplateId = templateId;
+                console.log('Template selected:', templateId);
 
-                item.appendChild(nameEl);
-                item.appendChild(descEl);
-                item.appendChild(valuesEl);
-
-                item.addEventListener('click', function() {
-                    selectTemplate(template.id);
+                // Update visual selection
+                const items = document.querySelectorAll('.template-item');
+                items.forEach(function(item) {
+                    if (item.getAttribute('data-template-id') === templateId) {
+                        item.classList.add('selected');
+                    } else {
+                        item.classList.remove('selected');
+                    }
                 });
 
-                container.appendChild(item);
-            });
-        }
+                // Find the selected template
+                const template = ROOM_TEMPLATES.find(function(t) {
+                    return t.id === templateId;
+                });
 
-        function selectTemplate(templateId) {
-            selectedTemplateId = templateId;
-
-            // Update visual selection
-            const items = document.querySelectorAll('.template-item');
-            items.forEach(function(item) {
-                if (item.getAttribute('data-template-id') === templateId) {
-                    item.classList.add('selected');
-                } else {
-                    item.classList.remove('selected');
-                }
-            });
-
-            // Find the selected template
-            const template = ROOM_TEMPLATES.find(function(t) {
-                return t.id === templateId;
-            });
-
-            if (template) {
-                // Send template timer values to driver
-                if (typeof Homey !== 'undefined') {
+                if (template) {
+                    console.log('Sending template timer values:', template.timerValues);
+                    // Send template timer values to driver and proceed to next view
                     Homey.emit('select_room_type', template.timerValues);
                     Homey.nextView();
                 }
             }
-        }
 
-        // Initialize when Homey is ready
-        if (typeof Homey !== 'undefined') {
-            onHomeyReady(Homey);
-        }
+            // Wait for Homey to be ready, then initialize
+            if (typeof Homey !== 'undefined') {
+                onHomeyReady(Homey);
+            }
+        })();
     </script>
 </body>
 </html>

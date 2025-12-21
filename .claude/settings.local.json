@@ -65,7 +65,11 @@
       "WebFetch(domain:homey.app)",
       "WebFetch(domain:community.homey.app)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh pr comment:*)",
+      "Skill(github:create-issues)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue comment:*)"
     ],
     "deny": [],
     "ask": []
