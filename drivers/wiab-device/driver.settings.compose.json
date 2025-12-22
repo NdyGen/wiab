@@ -49,11 +49,11 @@
         "id": "t_enter",
         "type": "number",
         "label": {
-          "en": "Door motion window",
-          "nl": "Deur beweging venster",
-          "de": "Türbewegungsfenster",
-          "no": "Dørbevegelsesvindu",
-          "sv": "Dörrörelsefönster"
+          "en": "Door motion window (seconds)",
+          "nl": "Deur beweging venster (seconden)",
+          "de": "Türbewegungsfenster (Sekunden)",
+          "no": "Dørbevegelsesvindu (sekunder)",
+          "sv": "Dörrörelsefönster (sekunder)"
         },
         "hint": {
           "en": "After a door opens or closes, the system waits this long to detect motion that indicates entry or exit. If motion is detected within this window, the room is marked as occupied (entry) or empty (exit). This helps distinguish between someone passing by versus actually entering or leaving. Typical: 10-30 seconds.",
@@ -71,11 +71,11 @@
         "id": "t_clear",
         "type": "number",
         "label": {
-          "en": "Empty timeout",
-          "nl": "Leeg timeout",
-          "de": "Leer-Timeout",
-          "no": "Tom timeout",
-          "sv": "Tom timeout"
+          "en": "Empty timeout (seconds)",
+          "nl": "Leeg timeout (seconden)",
+          "de": "Leer-Timeout (Sekunden)",
+          "no": "Tom timeout (sekunder)",
+          "sv": "Tom timeout (sekunder)"
         },
         "hint": {
           "en": "When a door opens and no motion is detected during this period, the room is marked as empty. This prevents false negatives when someone exits but the door remains open. Only active when doors are open and no motion sensors are triggered. Typical: 300-900 seconds (5-15 minutes).",

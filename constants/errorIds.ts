@@ -81,6 +81,34 @@ export enum RegistryErrorId {
 }
 
 /**
+ * Error ID constants for tracking and monitoring pairing-related errors.
+ *
+ * These IDs enable error aggregation, filtering, and analysis in logs.
+ * Each error should be logged with its corresponding ID for traceability.
+ *
+ * @example
+ * ```typescript
+ * this.error(
+ *   `[${PairingErrorId.TEMPLATES_LOAD_FAILED}] Failed to load room templates`,
+ *   error
+ * );
+ * ```
+ */
+export enum PairingErrorId {
+  /** Failed to load room templates during pairing */
+  TEMPLATES_LOAD_FAILED = 'PAIRING_001',
+
+  /** Failed to fetch motion devices during pairing */
+  MOTION_DEVICES_FETCH_FAILED = 'PAIRING_002',
+
+  /** Failed to fetch contact devices during pairing */
+  CONTACT_DEVICES_FETCH_FAILED = 'PAIRING_003',
+
+  /** Invalid timer values received during pairing */
+  INVALID_TIMER_VALUES = 'PAIRING_004',
+}
+
+/**
  * Error ID constants for tracking and monitoring room state manager errors.
  *
  * These IDs enable error aggregation, filtering, and analysis in logs.

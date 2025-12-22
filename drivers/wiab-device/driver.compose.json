@@ -22,8 +22,15 @@
   },
   "pair": [
     {
+      "id": "select_room_type",
+      "navigation": {
+        "next": "select_trigger_sensors"
+      }
+    },
+    {
       "id": "select_trigger_sensors",
       "navigation": {
+        "prev": "select_room_type",
         "next": "select_reset_sensors"
       }
     },
