@@ -1,0 +1,63 @@
+{
+  "type": "enum",
+  "title": {
+    "en": "Room State",
+    "nl": "Kamerstatus",
+    "de": "Raumzustand",
+    "no": "Romtilstand",
+    "sv": "Rumstatus"
+  },
+  "desc": {
+    "en": "Current state of the room",
+    "nl": "Huidige status van de kamer",
+    "de": "Aktueller Zustand des Raums",
+    "no": "Nåværende tilstand for rommet",
+    "sv": "Aktuellt tillstånd för rummet"
+  },
+  "values": [
+    {
+      "id": "idle",
+      "title": {
+        "en": "idle",
+        "nl": "vrij",
+        "de": "inaktiv",
+        "no": "ledig",
+        "sv": "ledig"
+      }
+    },
+    {
+      "id": "extended_idle",
+      "title": {
+        "en": "extended idle",
+        "nl": "verlengd vrij",
+        "de": "erweitert inaktiv",
+        "no": "utvidet ledig",
+        "sv": "utökad ledig"
+      }
+    },
+    {
+      "id": "occupied",
+      "title": {
+        "en": "occupied",
+        "nl": "bezet",
+        "de": "besetzt",
+        "no": "opptatt",
+        "sv": "upptagen"
+      }
+    },
+    {
+      "id": "extended_occupied",
+      "title": {
+        "en": "extended occupied",
+        "nl": "verlengd bezet",
+        "de": "erweitert besetzt",
+        "no": "utvidet opptatt",
+        "sv": "utökad upptagen"
+      }
+    }
+  ],
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "icon": "/assets/room_state.svg"
+}

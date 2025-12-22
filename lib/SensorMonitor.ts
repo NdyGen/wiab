@@ -100,8 +100,9 @@ export class SensorMonitor {
   private staleSensors: Set<string> = new Set(); // Track which sensors are stale at initialization
 
   // Retry configuration for device cache loading
-  private readonly CACHE_RETRY_ATTEMPTS = 3;
-  private readonly CACHE_RETRY_BASE_DELAY_MS = 1000; // 1 second
+  private static readonly CACHE_RETRY_ATTEMPTS = 3;
+  private static readonly CACHE_RETRY_BASE_DELAY_MS = 1000;
+  private static readonly MILLISECONDS_PER_MINUTE = 60000;
 
   /**
    * Creates a new SensorMonitor instance with stale sensor detection.
@@ -228,9 +229,9 @@ export class SensorMonitor {
   private async loadDeviceCacheWithRetry(): Promise<void> {
     let lastError: Error | undefined;
 
-    for (let attempt = 1; attempt <= this.CACHE_RETRY_ATTEMPTS; attempt++) {
+    for (let attempt = 1; attempt <= SensorMonitor.CACHE_RETRY_ATTEMPTS; attempt++) {
       try {
-        this.logger.log(`Loading device cache (attempt ${attempt}/${this.CACHE_RETRY_ATTEMPTS})...`);
+        this.logger.log(`Loading device cache (attempt ${attempt}/${SensorMonitor.CACHE_RETRY_ATTEMPTS})...`);
         const allDevices = await this.homeyApi.devices.getDevices();
         this.deviceCache = allDevices;
         this.logger.log(`Device cache loaded with ${Object.keys(this.deviceCache).length} devices`);
@@ -254,13 +255,13 @@ export class SensorMonitor {
         lastError = error as Error;
         this.logger.error(
           `[${SensorMonitorErrorId.DEVICE_CACHE_LOAD_FAILED}] ` +
-          `Failed to load device cache (attempt ${attempt}/${this.CACHE_RETRY_ATTEMPTS}):`,
+          `Failed to load device cache (attempt ${attempt}/${SensorMonitor.CACHE_RETRY_ATTEMPTS}):`,
           error
         );
 
         // Don't wait after last attempt
-        if (attempt < this.CACHE_RETRY_ATTEMPTS) {
-          const delayMs = this.CACHE_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+        if (attempt < SensorMonitor.CACHE_RETRY_ATTEMPTS) {
+          const delayMs = SensorMonitor.CACHE_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
           this.logger.log(`Retrying in ${delayMs}ms...`);
           await new Promise(resolve => setTimeout(resolve, delayMs));
         }
@@ -270,7 +271,7 @@ export class SensorMonitor {
     // All attempts failed - log and continue (graceful degradation)
     this.logger.error(
       `[${SensorMonitorErrorId.DEVICE_CACHE_LOAD_FAILED}] ` +
-      `Failed to load device cache after ${this.CACHE_RETRY_ATTEMPTS} attempts. Continuing with degraded monitoring.`,
+      `Failed to load device cache after ${SensorMonitor.CACHE_RETRY_ATTEMPTS} attempts. Continuing with degraded monitoring.`,
       lastError
     );
   }
@@ -729,7 +730,7 @@ export class SensorMonitor {
       if (isStale) {
         this.logger.log(
           `[INIT] Sensor stale: ${sensor.deviceName || sensor.deviceId} - ` +
-          `last updated ${Math.floor(elapsed / 60000)} minutes ago (timeout: ${Math.floor(timeout / 60000)} minutes)`
+          `last updated ${Math.floor(elapsed / SensorMonitor.MILLISECONDS_PER_MINUTE)} minutes ago (timeout: ${Math.floor(timeout / SensorMonitor.MILLISECONDS_PER_MINUTE)} minutes)`
         );
       }
 

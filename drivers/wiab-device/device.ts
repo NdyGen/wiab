@@ -302,68 +302,82 @@ class WIABDevice extends Homey.Device {
    * @param doorValue - The current value of the door sensor (true = open, false = closed)
    */
   private async handleDoorEvent(doorId: string, doorValue: boolean): Promise<void> {
-    // Ignore sensor events if device is paused
     if (this.isPaused) {
       return;
     }
 
     try {
-      const newDoorState = doorValue ? DoorState.OPEN : DoorState.CLOSED;
-      const oldDoorState = this.doorStates.get(doorId);
-
-      this.doorStates.set(doorId, newDoorState);
-
-      this.log(
-        `Door event: ${doorId} ${oldDoorState} → ${newDoorState}`
-      );
-
-      // Update derived door status
-      const allClosed = areAllDoorsClosed(this.doorStates);
-      const anyOpen = isAnyDoorOpen(this.doorStates);
-
-      // Set transitional occupancy (spec 8.1, 8.2)
+      this.updateDoorState(doorId, doorValue);
       this.occupancyState = OccupancyState.UNKNOWN;
 
-      // Determine if we should start T_ENTER immediately or wait for PIR falling edge
-      // Single PIR or all PIRs active: wait for falling edge
-      // Multiple PIRs with any inactive: start T_ENTER immediately (can detect re-entry through other active PIRs)
-      const anyPirInactive = await this.isAnyPirInactive();
-      this.lastDoorEventTimestamp = Date.now();
+      await this.configureEnterTimer();
+      this.configureClearTimer();
 
-      if (anyPirInactive) {
-        // At least one PIR is inactive - start T_ENTER immediately
-        // We can detect return motion through other active PIRs
-        this.log('Door event: at least one PIR inactive - starting T_ENTER immediately');
-        this.startEnterTimer();
-        this.waitingForPirFallingEdge = false;
-      } else {
-        // All PIRs are active - wait for falling edge before starting T_ENTER
-        // This prevents false negatives when someone stays active (e.g., bedroom scenario)
-        this.log('Door event: all PIRs active - waiting for PIR falling edge to start T_ENTER');
-        this.waitingForPirFallingEdge = true;
-      }
-
-      // Manage T_CLEAR timer
-      if (allClosed) {
-        // All doors closed: stop T_CLEAR (spec 8.2)
-        this.stopClearTimer();
-      } else if (anyOpen && this.lastStableOccupancy === StableOccupancyState.OCCUPIED) {
-        // At least one door open and room was occupied: start/restart T_CLEAR (spec 8.1)
-        this.startClearTimer();
-      }
-
-      // Update output (will retain last stable state during UNKNOWN)
       await this.updateOccupancyOutput();
-
-      this.log(
-        `State after door event: ${this.occupancyState}, stable: ${this.lastStableOccupancy}, doors: ${allClosed ? 'all closed' : 'some open'}`
-      );
+      this.logDoorEventState();
     } catch (error) {
       this.error(
         `[${DeviceErrorId.DOOR_EVENT_HANDLER_FAILED}] Failed to handle door event:`,
         error
       );
     }
+  }
+
+  /**
+   * Updates the door state and logs the transition.
+   *
+   * @param doorId - The device ID of the door sensor
+   * @param doorValue - The current value (true = open, false = closed)
+   */
+  private updateDoorState(doorId: string, doorValue: boolean): void {
+    const newDoorState = doorValue ? DoorState.OPEN : DoorState.CLOSED;
+    const oldDoorState = this.doorStates.get(doorId);
+    this.doorStates.set(doorId, newDoorState);
+    this.log(`Door event: ${doorId} ${oldDoorState} → ${newDoorState}`);
+  }
+
+  /**
+   * Configures the enter timer based on PIR activity.
+   * Determines whether to start T_ENTER immediately or wait for PIR falling edge.
+   */
+  private async configureEnterTimer(): Promise<void> {
+    const anyPirInactive = await this.isAnyPirInactive();
+    this.lastDoorEventTimestamp = Date.now();
+
+    if (anyPirInactive) {
+      this.log('Door event: at least one PIR inactive - starting T_ENTER immediately');
+      this.startEnterTimer();
+      this.waitingForPirFallingEdge = false;
+    } else {
+      this.log('Door event: all PIRs active - waiting for PIR falling edge to start T_ENTER');
+      this.waitingForPirFallingEdge = true;
+    }
+  }
+
+  /**
+   * Configures the clear timer based on door states and occupancy.
+   * Manages T_CLEAR timer according to spec sections 8.1 and 8.2.
+   */
+  private configureClearTimer(): void {
+    const allClosed = areAllDoorsClosed(this.doorStates);
+    const anyOpen = isAnyDoorOpen(this.doorStates);
+
+    if (allClosed) {
+      this.stopClearTimer();
+    } else if (anyOpen && this.lastStableOccupancy === StableOccupancyState.OCCUPIED) {
+      this.startClearTimer();
+    }
+  }
+
+  /**
+   * Logs the current state after a door event.
+   */
+  private logDoorEventState(): void {
+    const allClosed = areAllDoorsClosed(this.doorStates);
+    const doorStatus = allClosed ? 'all closed' : 'some open';
+    this.log(
+      `State after door event: ${this.occupancyState}, stable: ${this.lastStableOccupancy}, doors: ${doorStatus}`
+    );
   }
 
   /**
@@ -380,59 +394,69 @@ class WIABDevice extends Homey.Device {
    * @param pirId - The device ID of the PIR sensor that detected motion
    */
   private async handlePirMotion(pirId: string): Promise<void> {
-    // Ignore sensor events if device is paused
     if (this.isPaused) {
       return;
     }
 
     try {
       this.log(`PIR motion detected: ${pirId}`);
-
-      // Update PIR tracking (spec 8.3)
-      this.lastPirTimestamp = Date.now();
-      // Clear the waiting flag since we have new motion (someone is back or never left)
-      this.waitingForPirFallingEdge = false;
-
-      // Stop any pending T_ENTER timer since motion confirms occupancy
+      this.updatePirTracking();
       this.stopEnterTimer();
 
-      // Check door status
       const allClosed = areAllDoorsClosed(this.doorStates);
+      this.applyPirOccupancyLogic(allClosed);
 
-      if (allClosed) {
-        // Spec 8.3.1: All doors closed - sealed room
-        this.log('PIR with all doors closed: room is sealed, setting OCCUPIED');
-
-        this.occupancyState = OccupancyState.OCCUPIED;
-        this.lastStableOccupancy = StableOccupancyState.OCCUPIED;
-
-        // Stop T_CLEAR (not needed when sealed)
-        this.stopClearTimer();
-      } else {
-        // Spec 8.3.2: At least one door open - leaky room
-        this.log('PIR with doors open: room is leaky, state stays UNKNOWN, stable = OCCUPIED, starting T_CLEAR');
-
-        // Tri-state must be UNKNOWN (we know someone was there, but don't know if they're still there)
-        this.occupancyState = OccupancyState.UNKNOWN;
-        // But stable occupancy is OCCUPIED (for the boolean output)
-        this.lastStableOccupancy = StableOccupancyState.OCCUPIED;
-
-        // Start/restart T_CLEAR (room might empty through open doors)
-        this.startClearTimer();
-      }
-
-      // Update output
       await this.updateOccupancyOutput();
-
-      this.log(
-        `State after PIR: ${this.occupancyState}, stable: ${this.lastStableOccupancy}`
-      );
+      this.log(`State after PIR: ${this.occupancyState}, stable: ${this.lastStableOccupancy}`);
     } catch (error) {
       this.error(
         `[${DeviceErrorId.PIR_MOTION_HANDLER_FAILED}] Failed to handle PIR motion:`,
         error
       );
     }
+  }
+
+  /**
+   * Updates PIR tracking state when motion is detected.
+   */
+  private updatePirTracking(): void {
+    this.lastPirTimestamp = Date.now();
+    this.waitingForPirFallingEdge = false;
+  }
+
+  /**
+   * Applies occupancy logic based on PIR motion and door states.
+   *
+   * @param allClosed - Whether all doors are currently closed
+   */
+  private applyPirOccupancyLogic(allClosed: boolean): void {
+    if (allClosed) {
+      this.handleSealedRoomMotion();
+    } else {
+      this.handleLeakyRoomMotion();
+    }
+  }
+
+  /**
+   * Handles motion detection in a sealed room (all doors closed).
+   * Per spec 8.3.1: immediate OCCUPIED, stop T_CLEAR.
+   */
+  private handleSealedRoomMotion(): void {
+    this.log('PIR with all doors closed: room is sealed, setting OCCUPIED');
+    this.occupancyState = OccupancyState.OCCUPIED;
+    this.lastStableOccupancy = StableOccupancyState.OCCUPIED;
+    this.stopClearTimer();
+  }
+
+  /**
+   * Handles motion detection in a leaky room (at least one door open).
+   * Per spec 8.3.2: state stays UNKNOWN, stable = OCCUPIED, start T_CLEAR.
+   */
+  private handleLeakyRoomMotion(): void {
+    this.log('PIR with doors open: room is leaky, state stays UNKNOWN, stable = OCCUPIED, starting T_CLEAR');
+    this.occupancyState = OccupancyState.UNKNOWN;
+    this.lastStableOccupancy = StableOccupancyState.OCCUPIED;
+    this.startClearTimer();
   }
 
   /**

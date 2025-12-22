@@ -1,0 +1,80 @@
+[
+  {
+    "type": "group",
+    "label": {
+      "en": "Room States",
+      "nl": "Kamerstatussen",
+      "de": "Raumzustände",
+      "no": "Romtilstander",
+      "sv": "Rumstatus"
+    },
+    "children": [
+      {
+        "id": "room_states_info",
+        "type": "label",
+        "label": {
+          "en": "This device uses a fixed 4-state model: idle → extended_idle (when inactive) and occupied → extended_occupied (when active). Assign this device to a zone to monitor its activity.",
+          "nl": "Dit apparaat gebruikt een vast 4-statusmodel: idle → extended_idle (bij inactiviteit) en occupied → extended_occupied (bij activiteit). Wijs dit apparaat toe aan een zone om de activiteit te monitoren.",
+          "de": "Dieses Gerät verwendet ein festes 4-Zustands-Modell: idle → extended_idle (bei Inaktivität) und occupied → extended_occupied (bei Aktivität). Weisen Sie dieses Gerät einer Zone zu, um deren Aktivität zu überwachen.",
+          "no": "Denne enheten bruker en fast 4-tilstandsmodell: ledig → utvidet ledig (når inaktiv) og opptatt → utvidet opptatt (når aktiv). Tildel denne enheten til en sone for å overvåke dens aktivitet.",
+          "sv": "Denna enhet använder en fast 4-statusmodell: ledig → utökad ledig (när inaktiv) och upptagen → utökad upptagen (när aktiv). Tilldela denna enhet till en zon för att övervaka dess aktivitet."
+        },
+        "value": ""
+      }
+    ]
+  },
+  {
+    "type": "group",
+    "label": {
+      "en": "Timer Configuration",
+      "nl": "Timer Configuratie",
+      "de": "Timer-Konfiguration",
+      "no": "Timer Konfigurasjon",
+      "sv": "Timer Konfiguration"
+    },
+    "children": [
+      {
+        "id": "idleTimeout",
+        "type": "number",
+        "label": {
+          "en": "Extended Idle Timeout (minutes)",
+          "nl": "Verlengde Inactieve Timeout (minuten)",
+          "de": "Erweiterte Inaktivitäts-Timeout (Minuten)",
+          "no": "Utvidet Ledig Tidsavbrudd (minutter)",
+          "sv": "Utökad Ledig Timeout (minuter)"
+        },
+        "value": 0,
+        "min": 0,
+        "max": 1440,
+        "hint": {
+          "en": "Minutes of inactivity before transitioning to extended_idle state. Set to 0 to disable.",
+          "nl": "Minuten inactiviteit voordat wordt overgeschakeld naar extended_idle status. Stel in op 0 om uit te schakelen.",
+          "de": "Minuten der Inaktivität, bevor in den extended_idle-Zustand gewechselt wird. Auf 0 setzen zum Deaktivieren.",
+          "no": "Minutter med inaktivitet før overgang til utvidet ledig tilstand. Sett til 0 for å deaktivere.",
+          "sv": "Minuter av inaktivitet innan övergång till utökad ledig status. Sätt till 0 för att inaktivera."
+        }
+      },
+      {
+        "id": "occupiedTimeout",
+        "type": "number",
+        "label": {
+          "en": "Extended Occupied Timeout (minutes)",
+          "nl": "Verlengde Bezette Timeout (minuten)",
+          "de": "Erweiterte Besetzt-Timeout (Minuten)",
+          "no": "Utvidet Opptatt Tidsavbrudd (minutter)",
+          "sv": "Utökad Upptagen Timeout (minuter)"
+        },
+        "value": 0,
+        "min": 0,
+        "max": 1440,
+        "hint": {
+          "en": "Minutes of activity before transitioning to extended_occupied state. Set to 0 to disable.",
+          "nl": "Minuten activiteit voordat wordt overgeschakeld naar extended_occupied status. Stel in op 0 om uit te schakelen.",
+          "de": "Minuten der Aktivität, bevor in den extended_occupied-Zustand gewechselt wird. Auf 0 setzen zum Deaktivieren.",
+          "no": "Minutter med aktivitet før overgang til utvidet opptatt tilstand. Sett til 0 for å deaktivere.",
+          "sv": "Minuter av aktivitet innan övergång till utökad upptagen status. Sätt till 0 för att inaktivera."
+        }
+      }
+    ]
+  }
+]

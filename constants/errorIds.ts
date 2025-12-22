@@ -107,3 +107,43 @@ export enum PairingErrorId {
   /** Invalid timer values received during pairing */
   INVALID_TIMER_VALUES = 'PAIRING_004',
 }
+
+/**
+ * Error ID constants for tracking and monitoring room state manager errors.
+ *
+ * These IDs enable error aggregation, filtering, and analysis in logs.
+ * Each error should be logged with its corresponding ID for traceability.
+ *
+ * @example
+ * ```typescript
+ * this.error(
+ *   `[${RoomStateErrorId.STATE_ENGINE_VALIDATION_FAILED}] Invalid state configuration`,
+ *   error
+ * );
+ * ```
+ */
+export enum RoomStateErrorId {
+  /** State hierarchy validation failed (cycles, depth, duplicates) */
+  STATE_ENGINE_VALIDATION_FAILED = 'ROOM_STATE_001',
+
+  /** Failed to setup zone activity monitoring */
+  ZONE_MONITOR_SETUP_FAILED = 'ROOM_STATE_002',
+
+  /** Zone activity event handler failed */
+  ZONE_ACTIVITY_HANDLER_FAILED = 'ROOM_STATE_003',
+
+  /** State transition failed */
+  STATE_TRANSITION_FAILED = 'ROOM_STATE_004',
+
+  /** Timer management failed */
+  TIMER_MANAGEMENT_FAILED = 'ROOM_STATE_005',
+
+  /** Failed to update device capabilities */
+  CAPABILITY_UPDATE_FAILED = 'ROOM_STATE_006',
+
+  /** Zone not found in Homey */
+  ZONE_NOT_FOUND = 'ROOM_STATE_007',
+
+  /** Invalid state configuration in settings */
+  INVALID_STATE_CONFIG = 'ROOM_STATE_008',
+}

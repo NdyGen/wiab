@@ -1,0 +1,53 @@
+{
+  "name": {
+    "en": "Room State Manager",
+    "nl": "Kamer Status Manager",
+    "de": "Raumzustandsverwaltung",
+    "no": "Romtilstandsbehandler",
+    "sv": "Rumstatus Hanterare"
+  },
+  "class": "sensor",
+  "capabilities": [
+    "room_state"
+  ],
+  "capabilitiesOptions": {
+    "room_state": {
+      "title": {
+        "en": "State",
+        "nl": "Status",
+        "de": "Zustand",
+        "no": "Tilstand",
+        "sv": "Tillstånd"
+      }
+    }
+  },
+  "platforms": [
+    "local"
+  ],
+  "connectivity": [],
+  "images": {
+    "small": "/drivers/wiab-room-state/assets/images/small.png",
+    "large": "/drivers/wiab-room-state/assets/images/large.png",
+    "xlarge": "/drivers/wiab-room-state/assets/images/xlarge.png"
+  },
+  "pair": [
+    {
+      "id": "define_states",
+      "navigation": {
+        "next": "list_devices"
+      }
+    },
+    {
+      "id": "list_devices",
+      "template": "list_devices",
+      "navigation": {
+        "prev": "define_states",
+        "next": "add_devices"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ]
+}
