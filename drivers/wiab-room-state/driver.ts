@@ -140,15 +140,29 @@ class RoomStateDriver extends Homey.Driver {
    * - occupied: Room is active
    * - extended_occupied: Room has been active for extended period
    *
-   * @returns {Array} Array of autocomplete options with id and name
+   * Returns localized state names using Homey's i18n system.
+   *
+   * @returns {Array} Array of autocomplete options with id and localized name
    * @private
    */
   private getAvailableStates(): Array<{ id: string; name: string }> {
     return [
-      { id: 'idle', name: 'Idle' },
-      { id: 'extended_idle', name: 'Extended Idle' },
-      { id: 'occupied', name: 'Occupied' },
-      { id: 'extended_occupied', name: 'Extended Occupied' }
+      {
+        id: 'idle',
+        name: this.homey.__('capabilities.room_state.values.idle.title')
+      },
+      {
+        id: 'extended_idle',
+        name: this.homey.__('capabilities.room_state.values.extended_idle.title')
+      },
+      {
+        id: 'occupied',
+        name: this.homey.__('capabilities.room_state.values.occupied.title')
+      },
+      {
+        id: 'extended_occupied',
+        name: this.homey.__('capabilities.room_state.values.extended_occupied.title')
+      }
     ];
   }
 
