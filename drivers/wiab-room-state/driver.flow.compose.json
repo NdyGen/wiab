@@ -1,0 +1,130 @@
+{
+  "triggers": [
+    {
+      "id": "room_state_changed",
+      "title": {
+        "en": "Room state changed",
+        "nl": "Kamerstatus gewijzigd",
+        "de": "Raumzustand geändert"
+      },
+      "tokens": [
+        {
+          "name": "state",
+          "type": "string",
+          "title": {
+            "en": "Current state",
+            "nl": "Huidige status",
+            "de": "Aktueller Zustand"
+          },
+          "example": {
+            "en": "occupied"
+          }
+        },
+        {
+          "name": "previous_state",
+          "type": "string",
+          "title": {
+            "en": "Previous state",
+            "nl": "Vorige status",
+            "de": "Vorheriger Zustand"
+          },
+          "example": {
+            "en": "unoccupied"
+          }
+        }
+      ]
+    }
+  ],
+  "conditions": [
+    {
+      "id": "is_in_state",
+      "title": {
+        "en": "Is in state !{{or child of state}}",
+        "nl": "Is in status !{{of kind van status}}",
+        "de": "Ist im Zustand !{{oder Kind des Zustands}}"
+      },
+      "titleFormatted": {
+        "en": "Is in state [[state]] !{{or child of state [[state]]}}",
+        "nl": "Is in status [[state]] !{{of kind van status [[state]]}}",
+        "de": "Ist im Zustand [[state]] !{{oder Kind des Zustands [[state]]}}"
+      },
+      "args": [
+        {
+          "name": "state",
+          "type": "text",
+          "placeholder": {
+            "en": "State ID",
+            "nl": "Status ID",
+            "de": "Zustands-ID"
+          }
+        }
+      ]
+    },
+    {
+      "id": "is_exactly_state",
+      "title": {
+        "en": "Is exactly in state !{{(not parent)}}",
+        "nl": "Is exact in status !{{(niet ouder)}}",
+        "de": "Ist genau im Zustand !{{(nicht Elternteil)}}"
+      },
+      "titleFormatted": {
+        "en": "Is exactly in state [[state]] !{{(not parent state)}}",
+        "nl": "Is exact in status [[state]] !{{(niet ouderstatus)}}",
+        "de": "Ist genau im Zustand [[state]] !{{(nicht Elternzustand)}}"
+      },
+      "args": [
+        {
+          "name": "state",
+          "type": "text",
+          "placeholder": {
+            "en": "State ID",
+            "nl": "Status ID",
+            "de": "Zustands-ID"
+          }
+        }
+      ]
+    },
+    {
+      "id": "is_manual_override",
+      "title": {
+        "en": "Manual override is !{{active|inactive}}",
+        "nl": "Handmatige overschrijving is !{{actief|inactief}}",
+        "de": "Manuelle Überschreibung ist !{{aktiv|inaktiv}}"
+      }
+    }
+  ],
+  "actions": [
+    {
+      "id": "set_room_state",
+      "title": {
+        "en": "Set room state",
+        "nl": "Kamerstatus instellen",
+        "de": "Raumzustand einstellen"
+      },
+      "titleFormatted": {
+        "en": "Set room state to [[state]]",
+        "nl": "Kamerstatus instellen op [[state]]",
+        "de": "Raumzustand auf [[state]] einstellen"
+      },
+      "args": [
+        {
+          "name": "state",
+          "type": "text",
+          "placeholder": {
+            "en": "State ID",
+            "nl": "Status ID",
+            "de": "Zustands-ID"
+          }
+        }
+      ]
+    },
+    {
+      "id": "return_to_automatic",
+      "title": {
+        "en": "Return to automatic mode",
+        "nl": "Terug naar automatische modus",
+        "de": "Zurück zum automatischen Modus"
+      }
+    }
+  ]
+}

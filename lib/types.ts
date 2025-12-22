@@ -218,3 +218,69 @@ export interface HomeyAPI {
   devices: HomeyAPIDevices;
   zones: HomeyAPIZones;
 }
+
+/**
+ * State transition configuration for room state manager.
+ *
+ * Defines a transition from one state to another after a specified duration.
+ * Transitions can be triggered by zone activity (active) or inactivity (inactive).
+ *
+ * @interface StateTransition
+ * @property {string} targetState - The state ID to transition to
+ * @property {number} afterMinutes - Time in minutes before transitioning
+ */
+export interface StateTransition {
+  targetState: string;
+  afterMinutes: number;
+}
+
+/**
+ * Configuration for a single room state.
+ *
+ * States can have parent-child relationships for inheritance (max 2 levels).
+ * Each state defines transitions that occur when the zone is active or inactive.
+ *
+ * @interface StateConfig
+ * @property {string} id - Unique identifier for this state (e.g., "working", "sleeping")
+ * @property {string} name - Display name for this state shown in UI and flow cards
+ * @property {string} [parent] - Optional parent state ID for hierarchical states
+ * @property {StateTransition[]} activeTransitions - Transitions when zone is active
+ * @property {StateTransition[]} inactiveTransitions - Transitions when zone is inactive
+ */
+export interface StateConfig {
+  id: string;
+  name: string;
+  parent?: string;
+  activeTransitions: StateTransition[];
+  inactiveTransitions: StateTransition[];
+}
+
+/**
+ * Device settings for room state manager.
+ *
+ * These settings are stored in the device and control room state behavior.
+ *
+ * @interface RoomStateSettings
+ * @property {string} zoneId - The Homey zone ID to monitor for activity
+ * @property {string} states - JSON string of StateConfig[] array
+ * @property {string} initialState - State ID to use when device initializes
+ */
+export interface RoomStateSettings {
+  zoneId: string;
+  states: string;
+  initialState: string;
+}
+
+/**
+ * Zone update event from HomeyAPI.
+ *
+ * Emitted when a zone's activity status changes.
+ *
+ * @interface ZoneUpdate
+ * @property {boolean} active - Whether the zone is currently active
+ * @property {number} timestamp - Timestamp of the update
+ */
+export interface ZoneUpdate {
+  active: boolean;
+  timestamp: number;
+}

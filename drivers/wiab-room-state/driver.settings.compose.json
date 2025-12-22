@@ -1,0 +1,67 @@
+[
+  {
+    "type": "group",
+    "label": {
+      "en": "Zone Configuration",
+      "nl": "Zone Configuratie",
+      "de": "Zonenkonfiguration"
+    },
+    "children": [
+      {
+        "id": "zoneId",
+        "type": "text",
+        "label": {
+          "en": "Zone ID",
+          "nl": "Zone ID",
+          "de": "Zonen-ID"
+        },
+        "value": "",
+        "hint": {
+          "en": "Homey zone ID to monitor for activity",
+          "nl": "Homey zone ID om activiteit te monitoren",
+          "de": "Homey-Zonen-ID zur Aktivitätsüberwachung"
+        }
+      }
+    ]
+  },
+  {
+    "type": "group",
+    "label": {
+      "en": "State Configuration",
+      "nl": "Status Configuratie",
+      "de": "Zustandskonfiguration"
+    },
+    "children": [
+      {
+        "id": "states",
+        "type": "textarea",
+        "label": {
+          "en": "States (JSON)",
+          "nl": "Statussen (JSON)",
+          "de": "Zustände (JSON)"
+        },
+        "value": "[]",
+        "hint": {
+          "en": "JSON array of state configurations. Each state should have: id, name, parent (optional), activeTransitions, inactiveTransitions",
+          "nl": "JSON-array van statusconfiguraties. Elke status moet hebben: id, name, parent (optioneel), activeTransitions, inactiveTransitions",
+          "de": "JSON-Array von Zustandskonfigurationen. Jeder Zustand sollte haben: id, name, parent (optional), activeTransitions, inactiveTransitions"
+        }
+      },
+      {
+        "id": "initialState",
+        "type": "text",
+        "label": {
+          "en": "Initial State",
+          "nl": "Initiële Status",
+          "de": "Anfangszustand"
+        },
+        "value": "",
+        "hint": {
+          "en": "State ID to use when device initializes",
+          "nl": "Status-ID om te gebruiken bij initialisatie van apparaat",
+          "de": "Zustands-ID, die beim Initialisieren des Geräts verwendet werden soll"
+        }
+      }
+    ]
+  }
+]
