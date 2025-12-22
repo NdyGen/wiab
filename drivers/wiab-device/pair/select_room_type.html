@@ -244,15 +244,11 @@
                         Homey.emit('select_room_type', template.timerValues, function(err, result) {
                             if (err) {
                                 console.error('Failed to send template to driver:', err);
-                                alert('Failed to apply template. Please try again or skip this step.');
+                                alert('Failed to apply template: ' + (err.message || err));
                                 return;
                             }
 
-                            if (!result || !result.success) {
-                                console.error('Driver rejected template:', result);
-                                alert('Template could not be applied. Continuing with default values.');
-                            }
-
+                            // Success - proceed to next view
                             Homey.nextView();
                         });
                     } catch (error) {

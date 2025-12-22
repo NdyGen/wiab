@@ -69,7 +69,13 @@
       "Bash(gh pr comment:*)",
       "Skill(github:create-issues)",
       "Bash(gh issue view:*)",
-      "Bash(gh issue comment:*)"
+      "Bash(gh issue comment:*)",
+      "Bash(git worktree:*)",
+      "Bash(timeout 120 npm test)",
+      "WebFetch(domain:athombv.github.io)",
+      "WebFetch(domain:support.homey.app)",
+      "Bash(git cherry-pick:*)",
+      "Bash(git branch:*)"
     ],
     "deny": [],
     "ask": []

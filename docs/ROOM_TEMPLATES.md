@@ -283,7 +283,7 @@ Templates provide sensible starting points, but every setup is unique. You can (
 **No.** Template names are not stored. Only the timer values are saved. This allows you to mix-and-match or customize freely.
 
 ### Can I apply a template multiple times?
-**Yes.** You can apply the same template again to reset to those values, or switch to a different template anytime.
+**No.** Templates can only be applied during the initial pairing flow. Once a device is created, you must manually adjust timer values in device settings. To use a different template, you would need to delete and re-pair the device. However, you can manually configure the same timer values by copying them from the template reference table above.
 
 ### What happens if I don't select a template?
 The device uses built-in default values:

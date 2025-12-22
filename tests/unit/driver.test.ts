@@ -171,14 +171,9 @@ describe('WIABDriver - Pairing Session', () => {
         // Missing t_clear, stalePirMinutes, staleDoorMinutes
       };
 
-      const result = await handler(invalidTimers);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Invalid timer configuration',
-      });
+      await expect(handler(invalidTimers)).rejects.toThrow('Invalid timer configuration');
       expect(driver.error).toHaveBeenCalledWith(
-        'Invalid timer values received from pairing:',
+        expect.stringContaining('[PAIRING_004]'),
         invalidTimers
       );
     });
@@ -194,12 +189,7 @@ describe('WIABDriver - Pairing Session', () => {
         staleDoorMinutes: 60,
       };
 
-      const result = await handler(invalidTimers);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Invalid timer configuration',
-      });
+      await expect(handler(invalidTimers)).rejects.toThrow('Invalid timer configuration');
     });
 
     it('should reject timer values outside valid ranges (t_clear too high)', async () => {
@@ -213,12 +203,7 @@ describe('WIABDriver - Pairing Session', () => {
         staleDoorMinutes: 60,
       };
 
-      const result = await handler(invalidTimers);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Invalid timer configuration',
-      });
+      await expect(handler(invalidTimers)).rejects.toThrow('Invalid timer configuration');
     });
 
     it('should reject non-numeric timer values', async () => {
@@ -232,12 +217,7 @@ describe('WIABDriver - Pairing Session', () => {
         staleDoorMinutes: 60,
       };
 
-      const result = await handler(invalidTimers);
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Invalid timer configuration',
-      });
+      await expect(handler(invalidTimers)).rejects.toThrow('Invalid timer configuration');
     });
   });
 
@@ -572,6 +552,105 @@ describe('WIABDriver - Pairing Session', () => {
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ]);
       expect(JSON.parse(settings.resetSensors as string)).toEqual([]);
+    });
+  });
+
+  describe('Error handling', () => {
+    describe('get_motion_devices error scenarios', () => {
+      it('should provide friendly error when Homey API not available', async () => {
+        // Remove HomeyAPI to simulate API not ready
+        (driver.homey.app as unknown as { homeyApi?: unknown }).homeyApi = undefined;
+
+        await driver.onPair(mockSession as unknown as Homey.Driver.PairSession);
+        const handler = mockSession.getHandler('get_motion_devices');
+
+        await expect(handler()).rejects.toThrow('The app is still initializing');
+        expect(driver.error).toHaveBeenCalledWith(
+          expect.stringContaining('[PAIRING_002]'),
+          expect.any(Error)
+        );
+      });
+
+      it('should provide friendly error on timeout', async () => {
+        mockHomeyApi.devices.getDevices = jest.fn().mockRejectedValue(
+          new Error('Request timeout after 30 seconds')
+        );
+
+        await driver.onPair(mockSession as unknown as Homey.Driver.PairSession);
+        const handler = mockSession.getHandler('get_motion_devices');
+
+        await expect(handler()).rejects.toThrow('Request timed out');
+        expect(driver.error).toHaveBeenCalledWith(
+          expect.stringContaining('[PAIRING_002]'),
+          expect.any(Error)
+        );
+      });
+
+      it('should provide friendly error on permission denied', async () => {
+        mockHomeyApi.devices.getDevices = jest.fn().mockRejectedValue(
+          new Error('Insufficient permissions to access devices')
+        );
+
+        await driver.onPair(mockSession as unknown as Homey.Driver.PairSession);
+        const handler = mockSession.getHandler('get_motion_devices');
+
+        await expect(handler()).rejects.toThrow('Permission denied');
+        expect(driver.error).toHaveBeenCalledWith(
+          expect.stringContaining('[PAIRING_002]'),
+          expect.any(Error)
+        );
+      });
+
+      it('should re-throw unexpected errors with logging', async () => {
+        const unexpectedError = new Error('Unexpected system error');
+        mockHomeyApi.devices.getDevices = jest.fn().mockRejectedValue(unexpectedError);
+
+        await driver.onPair(mockSession as unknown as Homey.Driver.PairSession);
+        const handler = mockSession.getHandler('get_motion_devices');
+
+        await expect(handler()).rejects.toThrow('Unexpected system error');
+        expect(driver.error).toHaveBeenCalledWith(
+          expect.stringContaining('Unexpected error fetching motion devices'),
+          unexpectedError
+        );
+      });
+    });
+
+    describe('get_contact_devices error scenarios', () => {
+      it('should provide friendly error when Homey API not available', async () => {
+        (driver.homey.app as unknown as { homeyApi?: unknown }).homeyApi = undefined;
+
+        await driver.onPair(mockSession as unknown as Homey.Driver.PairSession);
+        const handler = mockSession.getHandler('get_contact_devices');
+
+        await expect(handler()).rejects.toThrow('The app is still initializing');
+        expect(driver.error).toHaveBeenCalledWith(
+          expect.stringContaining('[PAIRING_003]'),
+          expect.any(Error)
+        );
+      });
+
+      it('should provide friendly error on timeout', async () => {
+        mockHomeyApi.devices.getDevices = jest.fn().mockRejectedValue(
+          new Error('Connection timeout')
+        );
+
+        await driver.onPair(mockSession as unknown as Homey.Driver.PairSession);
+        const handler = mockSession.getHandler('get_contact_devices');
+
+        await expect(handler()).rejects.toThrow('Request timed out');
+      });
+
+      it('should provide friendly error on permission denied', async () => {
+        mockHomeyApi.devices.getDevices = jest.fn().mockRejectedValue(
+          new Error('permission error')
+        );
+
+        await driver.onPair(mockSession as unknown as Homey.Driver.PairSession);
+        const handler = mockSession.getHandler('get_contact_devices');
+
+        await expect(handler()).rejects.toThrow('Permission denied');
+      });
     });
   });
 });
