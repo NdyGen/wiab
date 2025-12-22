@@ -1,5 +1,7 @@
 import Homey from 'homey';
 import { HomeyAPI, HomeyAPIDevice, PairingDeviceConfig } from '../../lib/types';
+import { TimerValues } from '../../lib/RoomTemplates';
+import { PairingErrorId } from '../../constants/errorIds';
 
 /**
  * Interface for WIABApp with HomeyAPI
@@ -32,6 +34,38 @@ class WIABDriver extends Homey.Driver {
    */
   async onInit(): Promise<void> {
     this.log('WIAB driver has been initialized');
+  }
+
+  /**
+   * Validates timer values from room template selection.
+   * Ensures all required properties exist and are within acceptable ranges.
+   *
+   * @private
+   * @param {unknown} timers - The timer values to validate
+   * @returns {boolean} True if valid, false otherwise
+   */
+  private isValidTimerValues(timers: unknown): timers is TimerValues {
+    if (!timers || typeof timers !== 'object') {
+      return false;
+    }
+
+    const t = timers as Record<string, unknown>;
+
+    // Check all required properties exist and are numbers
+    if (typeof t.t_enter !== 'number' ||
+        typeof t.t_clear !== 'number' ||
+        typeof t.stalePirMinutes !== 'number' ||
+        typeof t.staleDoorMinutes !== 'number') {
+      return false;
+    }
+
+    // Validate ranges (same as device settings validation)
+    if (t.t_enter < 5 || t.t_enter > 60) return false;
+    if (t.t_clear < 60 || t.t_clear > 3600) return false;
+    if (t.stalePirMinutes < 5 || t.stalePirMinutes > 120) return false;
+    if (t.staleDoorMinutes < 5 || t.staleDoorMinutes > 120) return false;
+
+    return true;
   }
 
   /**
@@ -110,9 +144,55 @@ class WIABDriver extends Homey.Driver {
   async onPair(session: Homey.Driver.PairSession): Promise<void> {
     this.log('WIAB pairing session started');
 
-    // Store selected sensors during pairing flow
+    // Store selected sensors and template timers during pairing flow
     let triggerSensors: PairingDeviceConfig[] = [];
     let resetSensors: PairingDeviceConfig[] = [];
+    let pairingTimers: TimerValues | null = null;
+
+    /**
+     * Handler for fetching room templates.
+     * Returns all available room type templates from RoomTemplates.ts.
+     * Templates include localized names, descriptions, and pre-configured timer values.
+     */
+    session.setHandler('get_room_templates', async () => {
+      try {
+        const { getAllTemplates } = await import('../../lib/RoomTemplates');
+        const templates = getAllTemplates();
+
+        // Return simplified template data for frontend (English only for now)
+        return templates.map(t => ({
+          id: t.id,
+          name: t.name.en,
+          description: t.description.en,
+          timerValues: t.timerValues,
+        }));
+      } catch (error) {
+        this.error(`[${PairingErrorId.TEMPLATES_LOAD_FAILED}] Error loading room templates:`, error);
+        throw new Error('Failed to load room templates. Please restart pairing.');
+      }
+    });
+
+    /**
+     * Handler for room template selection.
+     * Stores timer values from the selected template.
+     * If null is passed (user skipped), default values will be used.
+     */
+    session.setHandler('select_room_type', async (timerValues: TimerValues | null) => {
+      if (timerValues) {
+        // Validate timer values structure and ranges
+        if (!this.isValidTimerValues(timerValues)) {
+          this.error(`[${PairingErrorId.INVALID_TIMER_VALUES}] Invalid timer values received from pairing:`, timerValues);
+          throw new Error('Invalid timer configuration. Timer values are out of acceptable ranges.');
+        }
+
+        this.log('Room template selected with timers:', timerValues);
+        pairingTimers = timerValues;
+      } else {
+        this.log('Room template selection skipped, using default timer values');
+        pairingTimers = null;
+      }
+      return { success: true };
+    });
 
     /**
      * Handler for fetching motion devices.
@@ -122,8 +202,30 @@ class WIABDriver extends Homey.Driver {
       try {
         return await this.getDevicesWithCapability('alarm_motion');
       } catch (error) {
-        this.error('Error fetching motion devices:', error);
-        throw new Error('Failed to fetch motion devices');
+        // Only handle expected, user-actionable errors
+        if (error instanceof Error) {
+          // Expected error: API not ready
+          if (error.message === 'Homey API not available') {
+            this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] HomeyAPI not available`, error);
+            throw new Error('The app is still initializing. Please wait a moment and try again.');
+          }
+
+          // Expected error: timeout
+          if (error.message.includes('timeout')) {
+            this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] Request timeout`, error);
+            throw new Error('Request timed out. Please check your network connection and try again.');
+          }
+
+          // Expected error: permission denied
+          if (error.message.includes('permission')) {
+            this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] Permission denied`, error);
+            throw new Error('Permission denied. Please check app permissions in Homey settings.');
+          }
+        }
+
+        // Unexpected error - log with full context and re-throw
+        this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] Unexpected error fetching motion devices:`, error);
+        throw error;
       }
     });
 
@@ -135,8 +237,30 @@ class WIABDriver extends Homey.Driver {
       try {
         return await this.getDevicesWithCapability('alarm_contact');
       } catch (error) {
-        this.error('Error fetching contact devices:', error);
-        throw new Error('Failed to fetch contact devices');
+        // Only handle expected, user-actionable errors
+        if (error instanceof Error) {
+          // Expected error: API not ready
+          if (error.message === 'Homey API not available') {
+            this.error(`[${PairingErrorId.CONTACT_DEVICES_FETCH_FAILED}] HomeyAPI not available`, error);
+            throw new Error('The app is still initializing. Please wait a moment and try again.');
+          }
+
+          // Expected error: timeout
+          if (error.message.includes('timeout')) {
+            this.error(`[${PairingErrorId.CONTACT_DEVICES_FETCH_FAILED}] Request timeout`, error);
+            throw new Error('Request timed out. Please check your network connection and try again.');
+          }
+
+          // Expected error: permission denied
+          if (error.message.includes('permission')) {
+            this.error(`[${PairingErrorId.CONTACT_DEVICES_FETCH_FAILED}] Permission denied`, error);
+            throw new Error('Permission denied. Please check app permissions in Homey settings.');
+          }
+        }
+
+        // Unexpected error - log with full context and re-throw
+        this.error(`[${PairingErrorId.CONTACT_DEVICES_FETCH_FAILED}] Unexpected error fetching contact devices:`, error);
+        throw error;
       }
     });
 
@@ -161,22 +285,37 @@ class WIABDriver extends Homey.Driver {
     /**
      * Handler for device listing.
      * Creates a virtual device with the selected sensor configuration.
+     * Applies room template timer values if a template was selected.
      */
     session.setHandler('list_devices', async () => {
       this.log('Creating WIAB device with selected sensors');
       this.log(`Trigger sensors: ${triggerSensors.length}, Reset sensors: ${resetSensors.length}`);
 
-      // Return a single virtual device instance with configured sensors
+      // Base settings with sensor configuration
+      const settings: Record<string, unknown> = {
+        triggerSensors: JSON.stringify(triggerSensors),
+        resetSensors: JSON.stringify(resetSensors),
+      };
+
+      // Apply template timer values if a template was selected
+      if (pairingTimers) {
+        settings.t_enter = pairingTimers.t_enter;
+        settings.t_clear = pairingTimers.t_clear;
+        settings.stalePirMinutes = pairingTimers.stalePirMinutes;
+        settings.staleDoorMinutes = pairingTimers.staleDoorMinutes;
+        this.log('Applying template timer values:', pairingTimers);
+      } else {
+        this.log('No template selected, device will use default timer values');
+      }
+
+      // Return a single virtual device instance with configured sensors and timers
       const devices = [
         {
           name: 'Wasp in a Box',
           data: {
-            id: `wiab-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: `wiab-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
           },
-          settings: {
-            triggerSensors: JSON.stringify(triggerSensors),
-            resetSensors: JSON.stringify(resetSensors),
-          },
+          settings,
         },
       ];
 
@@ -186,4 +325,5 @@ class WIABDriver extends Homey.Driver {
   }
 }
 
+export default WIABDriver;
 module.exports = WIABDriver;
