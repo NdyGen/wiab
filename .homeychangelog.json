@@ -28,5 +28,8 @@
   },
   "1.0.16": {
     "en": "automatic app release"
+  },
+  "1.1.0": {
+    "en": "New Device: Room State Manager for zone-based state tracking with state hierarchies and timer-based transitions. Occupancy Device Improvements: Event-driven sensor monitoring (replacing polling), room type templates for quick setup, stale sensor detection, and UI improvements."
   }
 }
