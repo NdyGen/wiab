@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .intro {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 300px;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+        }
+
+        .error {
+            color: #f44336;
+            font-size: 12px;
+            margin-top: 6px;
+            display: none;
+        }
+
+        .example {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+
+        .example-title {
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        pre {
+            margin: 0;
+            font-size: 11px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Define States</h1>
+    <p class="intro">
+        Define your room states as a JSON array. Each state can have transitions based on zone activity.
+    </p>
+
+    <div class="form-group">
+        <label for="states">States (JSON)</label>
+        <textarea id="states" placeholder='[{"id": "unoccupied", "name": "Unoccupied", ...}]'></textarea>
+        <div class="hint">
+            JSON array of state configurations. See example below.
+        </div>
+        <div class="error" id="statesError"></div>
+
+        <div class="example">
+            <div class="example-title">Example configuration:</div>
+            <pre>[
+  {
+    "id": "unoccupied",
+    "name": "Unoccupied",
+    "activeTransitions": [
+      {"targetState": "occupied", "afterMinutes": 0}
+    ],
+    "inactiveTransitions": []
+  },
+  {
+    "id": "occupied",
+    "name": "Occupied",
+    "activeTransitions": [
+      {"targetState": "working", "afterMinutes": 15}
+    ],
+    "inactiveTransitions": [
+      {"targetState": "unoccupied", "afterMinutes": 5}
+    ]
+  },
+  {
+    "id": "working",
+    "name": "Working",
+    "parent": "occupied",
+    "activeTransitions": [],
+    "inactiveTransitions": [
+      {"targetState": "unoccupied", "afterMinutes": 10}
+    ]
+  }
+]</pre>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="initialState">Initial State</label>
+        <input type="text" id="initialState" placeholder="e.g., unoccupied" />
+        <div class="hint">
+            State ID to use when device initializes
+        </div>
+        <div class="error" id="initialStateError"></div>
+    </div>
+
+    <script>
+        const statesTextarea = document.getElementById('states');
+        const initialStateInput = document.getElementById('initialState');
+        const statesError = document.getElementById('statesError');
+        const initialStateError = document.getElementById('initialStateError');
+
+        let statesData = null;
+
+        // Validate states JSON
+        statesTextarea.addEventListener('input', function() {
+            const statesJson = statesTextarea.value.trim();
+            statesError.style.display = 'none';
+
+            try {
+                if (statesJson) {
+                    statesData = JSON.parse(statesJson);
+
+                    if (!Array.isArray(statesData)) {
+                        throw new Error('States must be an array');
+                    }
+
+                    if (statesData.length === 0) {
+                        throw new Error('At least one state is required');
+                    }
+
+                    // Store valid data
+                    Homey.emit('set_states', { states: statesJson });
+                    updateNavigation();
+                }
+            } catch (error) {
+                statesError.textContent = 'Invalid JSON: ' + error.message;
+                statesError.style.display = 'block';
+                statesData = null;
+                Homey.setNavigationNext(null);
+            }
+        });
+
+        // Validate initial state
+        initialStateInput.addEventListener('input', function() {
+            const initialState = initialStateInput.value.trim();
+            initialStateError.style.display = 'none';
+
+            // Store initial state
+            Homey.emit('set_initial_state', { initialState: initialState });
+            updateNavigation();
+        });
+
+        function updateNavigation() {
+            const statesValid = statesData && statesData.length > 0;
+            const initialStateValid = initialStateInput.value.trim() !== '';
+
+            if (statesValid && initialStateValid) {
+                // Validate that initial state exists in states
+                const initialState = initialStateInput.value.trim();
+                const stateExists = statesData.some(s => s.id === initialState);
+
+                if (!stateExists) {
+                    initialStateError.textContent = 'Initial state not found in states array';
+                    initialStateError.style.display = 'block';
+                    Homey.setNavigationNext(null);
+                } else {
+                    Homey.setNavigationClose();
+                    Homey.setNavigationClose(false);
+                    Homey.setNavigationNext(() => {
+                        Homey.nextView();
+                    });
+                }
+            } else {
+                Homey.setNavigationNext(null);
+            }
+        }
+
+        // Show error if validation fails
+        Homey.on('validation_error', function(error) {
+            statesError.textContent = error;
+            statesError.style.display = 'block';
+        });
+
+        // On ready
+        Homey.ready();
+    </script>
+</body>
+</html>

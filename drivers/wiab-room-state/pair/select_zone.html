@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .intro {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #2196F3;
+        }
+
+        .hint {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+        }
+
+        .error {
+            color: #f44336;
+            font-size: 12px;
+            margin-top: 6px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Select Zone</h1>
+    <p class="intro">
+        Enter the Zone ID that this Room State Manager should monitor for activity.
+        You can find zone IDs in the Homey Developer Tools or by checking your zone settings.
+    </p>
+
+    <div class="form-group">
+        <label for="zoneId">Zone ID</label>
+        <input type="text" id="zoneId" placeholder="e.g., zone:living-room" />
+        <div class="hint">
+            The Homey zone ID to monitor (format: zone:name or UUID)
+        </div>
+        <div class="error" id="error"></div>
+    </div>
+
+    <script>
+        const zoneIdInput = document.getElementById('zoneId');
+        const errorDiv = document.getElementById('error');
+
+        // Store zone ID when user enters it
+        zoneIdInput.addEventListener('input', function() {
+            const zoneId = zoneIdInput.value.trim();
+            errorDiv.style.display = 'none';
+
+            // Store in session data
+            Homey.emit('set_zone_id', { zoneId: zoneId });
+
+            // Enable/disable next button
+            if (zoneId) {
+                Homey.setNavigationClose();
+                Homey.setNavigationClose(false);
+                Homey.setNavigationNext(() => {
+                    Homey.nextView();
+                });
+            } else {
+                Homey.setNavigationNext(null);
+            }
+        });
+
+        // Show error if validation fails
+        Homey.on('validation_error', function(error) {
+            errorDiv.textContent = error;
+            errorDiv.style.display = 'block';
+        });
+
+        // On ready
+        Homey.ready();
+    </script>
+</body>
+</html>

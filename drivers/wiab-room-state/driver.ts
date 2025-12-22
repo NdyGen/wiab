@@ -119,13 +119,36 @@ class RoomStateDriver extends Homey.Driver {
   /**
    * Handles pairing flow.
    *
-   * Creates a basic device that will be configured through settings.
-   * Users configure zone ID and states via device settings after pairing.
+   * Guides users through configuring zone and states during pairing.
    */
   async onPair(session: Homey.Driver.PairSession): Promise<void> {
     this.log('Pairing session started');
 
-    // Handler for list_devices - returns a template device to be configured
+    const pairingData = {
+      zoneId: '',
+      states: '[]',
+      initialState: '',
+    };
+
+    // Handle zone ID from pairing page
+    session.setHandler('set_zone_id', async (data: { zoneId: string }) => {
+      pairingData.zoneId = data.zoneId;
+      this.log('Zone ID set:', data.zoneId);
+    });
+
+    // Handle states JSON from pairing page
+    session.setHandler('set_states', async (data: { states: string }) => {
+      pairingData.states = data.states;
+      this.log('States configured');
+    });
+
+    // Handle initial state from pairing page
+    session.setHandler('set_initial_state', async (data: { initialState: string }) => {
+      pairingData.initialState = data.initialState;
+      this.log('Initial state set:', data.initialState);
+    });
+
+    // Handler for list_devices - returns device with pairing data
     session.setHandler('list_devices', async () => {
       return [
         {
@@ -134,9 +157,9 @@ class RoomStateDriver extends Homey.Driver {
             id: `room-state-${Date.now()}`,
           },
           settings: {
-            zoneId: '',
-            states: '[]',
-            initialState: '',
+            zoneId: pairingData.zoneId,
+            states: pairingData.states,
+            initialState: pairingData.initialState,
           },
         },
       ];
