@@ -69,6 +69,45 @@ class WIABDriver extends Homey.Driver {
   }
 
   /**
+   * Handles device fetch operations with standardized error handling.
+   *
+   * @private
+   * @param capability - The capability to filter by
+   * @param errorId - The error ID for logging
+   * @param deviceType - Human-readable device type for error messages
+   * @returns Array of devices with the specified capability
+   */
+  private async handleDeviceFetch(
+    capability: string,
+    errorId: string,
+    deviceType: string
+  ): Promise<PairingDeviceConfig[]> {
+    try {
+      return await this.getDevicesWithCapability(capability);
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'Homey API not available') {
+          this.error(`[${errorId}] HomeyAPI not available`, error);
+          throw new Error('The app is still initializing. Please wait a moment and try again.');
+        }
+
+        if (error.message.includes('timeout')) {
+          this.error(`[${errorId}] Request timeout`, error);
+          throw new Error('Request timed out. Please check your network connection and try again.');
+        }
+
+        if (error.message.includes('permission')) {
+          this.error(`[${errorId}] Permission denied`, error);
+          throw new Error('Permission denied. Please check app permissions in Homey settings.');
+        }
+      }
+
+      this.error(`[${errorId}] Unexpected error fetching ${deviceType}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Fetches devices with a specific capability from HomeyAPI.
    *
    * This private helper method eliminates code duplication by providing a
@@ -199,34 +238,11 @@ class WIABDriver extends Homey.Driver {
      * Returns all devices with alarm_motion capability.
      */
     session.setHandler('get_motion_devices', async () => {
-      try {
-        return await this.getDevicesWithCapability('alarm_motion');
-      } catch (error) {
-        // Only handle expected, user-actionable errors
-        if (error instanceof Error) {
-          // Expected error: API not ready
-          if (error.message === 'Homey API not available') {
-            this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] HomeyAPI not available`, error);
-            throw new Error('The app is still initializing. Please wait a moment and try again.');
-          }
-
-          // Expected error: timeout
-          if (error.message.includes('timeout')) {
-            this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] Request timeout`, error);
-            throw new Error('Request timed out. Please check your network connection and try again.');
-          }
-
-          // Expected error: permission denied
-          if (error.message.includes('permission')) {
-            this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] Permission denied`, error);
-            throw new Error('Permission denied. Please check app permissions in Homey settings.');
-          }
-        }
-
-        // Unexpected error - log with full context and re-throw
-        this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] Unexpected error fetching motion devices:`, error);
-        throw error;
-      }
+      return this.handleDeviceFetch(
+        'alarm_motion',
+        PairingErrorId.MOTION_DEVICES_FETCH_FAILED,
+        'motion devices'
+      );
     });
 
     /**
@@ -234,34 +250,11 @@ class WIABDriver extends Homey.Driver {
      * Returns all devices with alarm_contact capability.
      */
     session.setHandler('get_contact_devices', async () => {
-      try {
-        return await this.getDevicesWithCapability('alarm_contact');
-      } catch (error) {
-        // Only handle expected, user-actionable errors
-        if (error instanceof Error) {
-          // Expected error: API not ready
-          if (error.message === 'Homey API not available') {
-            this.error(`[${PairingErrorId.CONTACT_DEVICES_FETCH_FAILED}] HomeyAPI not available`, error);
-            throw new Error('The app is still initializing. Please wait a moment and try again.');
-          }
-
-          // Expected error: timeout
-          if (error.message.includes('timeout')) {
-            this.error(`[${PairingErrorId.CONTACT_DEVICES_FETCH_FAILED}] Request timeout`, error);
-            throw new Error('Request timed out. Please check your network connection and try again.');
-          }
-
-          // Expected error: permission denied
-          if (error.message.includes('permission')) {
-            this.error(`[${PairingErrorId.CONTACT_DEVICES_FETCH_FAILED}] Permission denied`, error);
-            throw new Error('Permission denied. Please check app permissions in Homey settings.');
-          }
-        }
-
-        // Unexpected error - log with full context and re-throw
-        this.error(`[${PairingErrorId.CONTACT_DEVICES_FETCH_FAILED}] Unexpected error fetching contact devices:`, error);
-        throw error;
-      }
+      return this.handleDeviceFetch(
+        'alarm_contact',
+        PairingErrorId.CONTACT_DEVICES_FETCH_FAILED,
+        'contact devices'
+      );
     });
 
     /**
