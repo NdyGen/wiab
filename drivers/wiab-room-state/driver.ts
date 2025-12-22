@@ -125,27 +125,15 @@ class RoomStateDriver extends Homey.Driver {
     this.log('Pairing session started');
 
     const pairingData = {
-      zoneId: '',
-      states: '[]',
-      initialState: '',
+      idleTimeout: 0,
+      occupiedTimeout: 0,
     };
 
-    // Handle zone ID from pairing page
-    session.setHandler('set_zone_id', async (data: { zoneId: string }) => {
-      pairingData.zoneId = data.zoneId;
-      this.log('Zone ID set:', data.zoneId);
-    });
-
-    // Handle states JSON from pairing page
-    session.setHandler('set_states', async (data: { states: string }) => {
-      pairingData.states = data.states;
-      this.log('States configured');
-    });
-
-    // Handle initial state from pairing page
-    session.setHandler('set_initial_state', async (data: { initialState: string }) => {
-      pairingData.initialState = data.initialState;
-      this.log('Initial state set:', data.initialState);
+    // Handle timer configuration from pairing page
+    session.setHandler('set_timers', async (data: { idleTimeout: number; occupiedTimeout: number }) => {
+      pairingData.idleTimeout = data.idleTimeout;
+      pairingData.occupiedTimeout = data.occupiedTimeout;
+      this.log('Timers configured:', data);
     });
 
     // Handler for list_devices - returns device with pairing data
@@ -157,9 +145,8 @@ class RoomStateDriver extends Homey.Driver {
             id: `room-state-${Date.now()}`,
           },
           settings: {
-            zoneId: pairingData.zoneId,
-            states: pairingData.states,
-            initialState: pairingData.initialState,
+            idleTimeout: pairingData.idleTimeout,
+            occupiedTimeout: pairingData.occupiedTimeout,
           },
         },
       ];

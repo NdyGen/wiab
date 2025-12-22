@@ -259,16 +259,21 @@ export interface StateConfig {
  * Device settings for room state manager.
  *
  * These settings are stored in the device and control room state behavior.
+ * The zone is determined by the device's zone assignment, not stored in settings.
+ *
+ * The app uses a fixed 4-state model:
+ * - idle: Room inactive
+ * - extended_idle: Room inactive for idleTimeout minutes (0 = disabled)
+ * - occupied: Room active
+ * - extended_occupied: Room active for occupiedTimeout minutes (0 = disabled)
  *
  * @interface RoomStateSettings
- * @property {string} zoneId - The Homey zone ID to monitor for activity
- * @property {string} states - JSON string of StateConfig[] array
- * @property {string} initialState - State ID to use when device initializes
+ * @property {number} idleTimeout - Minutes before idle → extended_idle (0 = disabled)
+ * @property {number} occupiedTimeout - Minutes before occupied → extended_occupied (0 = disabled)
  */
 export interface RoomStateSettings {
-  zoneId: string;
-  states: string;
-  initialState: string;
+  idleTimeout: number;
+  occupiedTimeout: number;
 }
 
 /**

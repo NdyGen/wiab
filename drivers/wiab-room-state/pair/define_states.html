@@ -22,7 +22,7 @@
         }
 
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 24px;
         }
 
         label {
@@ -32,24 +32,7 @@
             color: #333;
         }
 
-        textarea {
-            width: 100%;
-            min-height: 300px;
-            padding: 12px;
-            border: 2px solid #ddd;
-            border-radius: 4px;
-            font-size: 13px;
-            font-family: 'Courier New', monospace;
-            box-sizing: border-box;
-            resize: vertical;
-        }
-
-        textarea:focus {
-            outline: none;
-            border-color: #2196F3;
-        }
-
-        input[type="text"] {
+        input[type="number"] {
             width: 100%;
             padding: 12px;
             border: 2px solid #ddd;
@@ -58,7 +41,7 @@
             box-sizing: border-box;
         }
 
-        input[type="text"]:focus {
+        input[type="number"]:focus {
             outline: none;
             border-color: #2196F3;
         }
@@ -69,170 +52,171 @@
             margin-top: 6px;
         }
 
-        .error {
-            color: #f44336;
-            font-size: 12px;
-            margin-top: 6px;
-            display: none;
-        }
-
-        .example {
-            background: #f5f5f5;
-            padding: 12px;
+        .states-info {
+            background: #f5f9ff;
+            border-left: 4px solid #2196F3;
+            padding: 16px;
+            margin-bottom: 20px;
             border-radius: 4px;
-            margin-top: 10px;
-            font-size: 12px;
         }
 
-        .example-title {
-            font-weight: 600;
-            margin-bottom: 6px;
+        .states-info h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            color: #1976D2;
         }
 
-        pre {
-            margin: 0;
-            font-size: 11px;
-            overflow-x: auto;
+        .states-info ul {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .states-info li {
+            font-size: 13px;
+            color: #555;
+            line-height: 1.6;
         }
     </style>
 </head>
 <body>
-    <h1>Define States</h1>
-    <p class="intro">
-        Define your room states as a JSON array. Each state can have transitions based on zone activity.
+    <h1 data-i18n="title">Configure Room States</h1>
+    <p class="intro" data-i18n="intro">
+        The Room State Manager monitors activity in the zone you assign it to. After pairing, assign this device to a zone in the device settings.
     </p>
 
-    <div class="form-group">
-        <label for="states">States (JSON)</label>
-        <textarea id="states" placeholder='[{"id": "unoccupied", "name": "Unoccupied", ...}]'></textarea>
-        <div class="hint">
-            JSON array of state configurations. See example below.
-        </div>
-        <div class="error" id="statesError"></div>
+    <div class="states-info">
+        <h3 data-i18n="states_title">Room States</h3>
+        <ul>
+            <li><strong>idle</strong> - <span data-i18n="state_idle">Room is inactive (no activity detected)</span></li>
+            <li><strong>extended_idle</strong> - <span data-i18n="state_extended_idle">Room has been idle for a while (optional)</span></li>
+            <li><strong>occupied</strong> - <span data-i18n="state_occupied">Room is active (activity detected)</span></li>
+            <li><strong>extended_occupied</strong> - <span data-i18n="state_extended_occupied">Room has been active for a while (optional)</span></li>
+        </ul>
+    </div>
 
-        <div class="example">
-            <div class="example-title">Example configuration:</div>
-            <pre>[
-  {
-    "id": "unoccupied",
-    "name": "Unoccupied",
-    "activeTransitions": [
-      {"targetState": "occupied", "afterMinutes": 0}
-    ],
-    "inactiveTransitions": []
-  },
-  {
-    "id": "occupied",
-    "name": "Occupied",
-    "activeTransitions": [
-      {"targetState": "working", "afterMinutes": 15}
-    ],
-    "inactiveTransitions": [
-      {"targetState": "unoccupied", "afterMinutes": 5}
-    ]
-  },
-  {
-    "id": "working",
-    "name": "Working",
-    "parent": "occupied",
-    "activeTransitions": [],
-    "inactiveTransitions": [
-      {"targetState": "unoccupied", "afterMinutes": 10}
-    ]
-  }
-]</pre>
+    <div class="form-group">
+        <label for="idleTimeout" data-i18n="idle_timeout_label">Extended Idle Timeout (minutes)</label>
+        <input type="number" id="idleTimeout" min="0" max="1440" value="0" />
+        <div class="hint" data-i18n="idle_timeout_hint">
+            Minutes of inactivity before transitioning to extended_idle state. Set to 0 to disable.
         </div>
     </div>
 
     <div class="form-group">
-        <label for="initialState">Initial State</label>
-        <input type="text" id="initialState" placeholder="e.g., unoccupied" />
-        <div class="hint">
-            State ID to use when device initializes
+        <label for="occupiedTimeout" data-i18n="occupied_timeout_label">Extended Occupied Timeout (minutes)</label>
+        <input type="number" id="occupiedTimeout" min="0" max="1440" value="0" />
+        <div class="hint" data-i18n="occupied_timeout_hint">
+            Minutes of activity before transitioning to extended_occupied state. Set to 0 to disable.
         </div>
-        <div class="error" id="initialStateError"></div>
     </div>
 
     <script>
-        const statesTextarea = document.getElementById('states');
-        const initialStateInput = document.getElementById('initialState');
-        const statesError = document.getElementById('statesError');
-        const initialStateError = document.getElementById('initialStateError');
-
-        let statesData = null;
-
-        // Validate states JSON
-        statesTextarea.addEventListener('input', function() {
-            const statesJson = statesTextarea.value.trim();
-            statesError.style.display = 'none';
-
-            try {
-                if (statesJson) {
-                    statesData = JSON.parse(statesJson);
-
-                    if (!Array.isArray(statesData)) {
-                        throw new Error('States must be an array');
-                    }
-
-                    if (statesData.length === 0) {
-                        throw new Error('At least one state is required');
-                    }
-
-                    // Store valid data
-                    Homey.emit('set_states', { states: statesJson });
-                    updateNavigation();
-                }
-            } catch (error) {
-                statesError.textContent = 'Invalid JSON: ' + error.message;
-                statesError.style.display = 'block';
-                statesData = null;
-                Homey.setNavigationNext(null);
+        // Translations
+        const translations = {
+            en: {
+                title: 'Configure Room States',
+                intro: 'The Room State Manager monitors activity in the zone you assign it to. After pairing, assign this device to a zone in the device settings.',
+                states_title: 'Room States',
+                state_idle: 'Room is inactive (no activity detected)',
+                state_extended_idle: 'Room has been idle for a while (optional)',
+                state_occupied: 'Room is active (activity detected)',
+                state_extended_occupied: 'Room has been active for a while (optional)',
+                idle_timeout_label: 'Extended Idle Timeout (minutes)',
+                idle_timeout_hint: 'Minutes of inactivity before transitioning to extended_idle state. Set to 0 to disable.',
+                occupied_timeout_label: 'Extended Occupied Timeout (minutes)',
+                occupied_timeout_hint: 'Minutes of activity before transitioning to extended_occupied state. Set to 0 to disable.'
+            },
+            nl: {
+                title: 'Kamerstatussen Configureren',
+                intro: 'De Kamer Status Manager monitort de activiteit in de zone waaraan u deze toewijst. Wijs dit apparaat na het koppelen toe aan een zone in de apparaatinstellingen.',
+                states_title: 'Kamerstatussen',
+                state_idle: 'Kamer is vrij (geen activiteit gedetecteerd)',
+                state_extended_idle: 'Kamer is al een tijdje vrij (optioneel)',
+                state_occupied: 'Kamer is bezet (activiteit gedetecteerd)',
+                state_extended_occupied: 'Kamer is al een tijdje bezet (optioneel)',
+                idle_timeout_label: 'Verlengde Vrije Timeout (minuten)',
+                idle_timeout_hint: 'Minuten inactiviteit voordat wordt overgeschakeld naar verlengd vrije status. Stel in op 0 om uit te schakelen.',
+                occupied_timeout_label: 'Verlengde Bezette Timeout (minuten)',
+                occupied_timeout_hint: 'Minuten activiteit voordat wordt overgeschakeld naar verlengd bezette status. Stel in op 0 om uit te schakelen.'
+            },
+            de: {
+                title: 'Raumzustände Konfigurieren',
+                intro: 'Der Raumzustandsmanager überwacht die Aktivität in der Zone, der Sie ihn zuweisen. Weisen Sie dieses Gerät nach dem Koppeln in den Geräteeinstellungen einer Zone zu.',
+                states_title: 'Raumzustände',
+                state_idle: 'Raum ist inaktiv (keine Aktivität erkannt)',
+                state_extended_idle: 'Raum ist schon eine Weile inaktiv (optional)',
+                state_occupied: 'Raum ist besetzt (Aktivität erkannt)',
+                state_extended_occupied: 'Raum ist schon eine Weile besetzt (optional)',
+                idle_timeout_label: 'Erweiterte Inaktivitäts-Timeout (Minuten)',
+                idle_timeout_hint: 'Minuten der Inaktivität, bevor in den erweiterten inaktiven Zustand gewechselt wird. Auf 0 setzen zum Deaktivieren.',
+                occupied_timeout_label: 'Erweiterte Besetzt-Timeout (Minuten)',
+                occupied_timeout_hint: 'Minuten der Aktivität, bevor in den erweiterten besetzten Zustand gewechselt wird. Auf 0 setzen zum Deaktivieren.'
+            },
+            no: {
+                title: 'Konfigurer Romtilstander',
+                intro: 'Romtilstandsbehandleren overvåker aktivitet i sonen du tildeler den til. Etter paring, tildel denne enheten til en sone i enhetsinnstillingene.',
+                states_title: 'Romtilstander',
+                state_idle: 'Rommet er ledig (ingen aktivitet oppdaget)',
+                state_extended_idle: 'Rommet har vært ledig en stund (valgfritt)',
+                state_occupied: 'Rommet er opptatt (aktivitet oppdaget)',
+                state_extended_occupied: 'Rommet har vært opptatt en stund (valgfritt)',
+                idle_timeout_label: 'Utvidet Ledig Tidsavbrudd (minutter)',
+                idle_timeout_hint: 'Minutter med inaktivitet før overgang til utvidet ledig tilstand. Sett til 0 for å deaktivere.',
+                occupied_timeout_label: 'Utvidet Opptatt Tidsavbrudd (minutter)',
+                occupied_timeout_hint: 'Minutter med aktivitet før overgang til utvidet opptatt tilstand. Sett til 0 for å deaktivere.'
+            },
+            sv: {
+                title: 'Konfigurera Rumstatus',
+                intro: 'Rumstatus Hanteraren övervakar aktivitet i zonen du tilldelar den till. Efter parkoppling, tilldela denna enhet till en zon i enhetsinställningarna.',
+                states_title: 'Rumstatus',
+                state_idle: 'Rummet är ledigt (ingen aktivitet upptäckt)',
+                state_extended_idle: 'Rummet har varit ledigt ett tag (valfritt)',
+                state_occupied: 'Rummet är upptaget (aktivitet upptäckt)',
+                state_extended_occupied: 'Rummet har varit upptaget ett tag (valfritt)',
+                idle_timeout_label: 'Utökad Ledig Timeout (minuter)',
+                idle_timeout_hint: 'Minuter av inaktivitet innan övergång till utökad ledig status. Sätt till 0 för att inaktivera.',
+                occupied_timeout_label: 'Utökad Upptagen Timeout (minuter)',
+                occupied_timeout_hint: 'Minuter av aktivitet innan övergång till utökad upptagen status. Sätt till 0 för att inaktivera.'
             }
-        });
+        };
 
-        // Validate initial state
-        initialStateInput.addEventListener('input', function() {
-            const initialState = initialStateInput.value.trim();
-            initialStateError.style.display = 'none';
+        // Apply translations
+        function applyTranslations() {
+            const lang = Homey.getLanguage() || 'en';
+            const texts = translations[lang] || translations.en;
 
-            // Store initial state
-            Homey.emit('set_initial_state', { initialState: initialState });
-            updateNavigation();
-        });
-
-        function updateNavigation() {
-            const statesValid = statesData && statesData.length > 0;
-            const initialStateValid = initialStateInput.value.trim() !== '';
-
-            if (statesValid && initialStateValid) {
-                // Validate that initial state exists in states
-                const initialState = initialStateInput.value.trim();
-                const stateExists = statesData.some(s => s.id === initialState);
-
-                if (!stateExists) {
-                    initialStateError.textContent = 'Initial state not found in states array';
-                    initialStateError.style.display = 'block';
-                    Homey.setNavigationNext(null);
-                } else {
-                    Homey.setNavigationClose();
-                    Homey.setNavigationClose(false);
-                    Homey.setNavigationNext(() => {
-                        Homey.nextView();
-                    });
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (texts[key]) {
+                    el.textContent = texts[key];
                 }
-            } else {
-                Homey.setNavigationNext(null);
-            }
+            });
         }
 
-        // Show error if validation fails
-        Homey.on('validation_error', function(error) {
-            statesError.textContent = error;
-            statesError.style.display = 'block';
-        });
+        // Apply translations on load
+        applyTranslations();
 
-        // On ready
-        Homey.ready();
+        const idleTimeoutInput = document.getElementById('idleTimeout');
+        const occupiedTimeoutInput = document.getElementById('occupiedTimeout');
+
+        // Store timer values when changed
+        function updateTimers() {
+            const idleTimeout = parseInt(idleTimeoutInput.value) || 0;
+            const occupiedTimeout = parseInt(occupiedTimeoutInput.value) || 0;
+
+            Homey.emit('set_timers', {
+                idleTimeout: idleTimeout,
+                occupiedTimeout: occupiedTimeout
+            });
+        }
+
+        idleTimeoutInput.addEventListener('input', updateTimers);
+        occupiedTimeoutInput.addEventListener('input', updateTimers);
+
+        // On ready, send initial values
+        Homey.ready(() => {
+            updateTimers();
+        });
     </script>
 </body>
 </html>

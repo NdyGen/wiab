@@ -46,6 +46,8 @@ class RoomStateDevice extends Homey.Device {
   private lastActivityTimestamp: number | null = null;
   private isZoneActive: boolean = false;
   private manualOverride: boolean = false;
+  private currentZoneId?: string;
+  private zoneCheckInterval?: NodeJS.Timeout;
 
   /**
    * Initializes the Room State device.
@@ -80,8 +82,10 @@ class RoomStateDevice extends Homey.Device {
   /**
    * Handles settings changes.
    *
-   * When zone, states, or initial state settings change, teardown
+   * When timers change or zone assignment changes, teardown
    * existing monitoring and reinitialize with new configuration.
+   * This ensures the device re-evaluates zone activity and sets
+   * the correct initial state.
    *
    * @param event - Settings change event
    */
@@ -93,12 +97,12 @@ class RoomStateDevice extends Homey.Device {
     this.log('Settings changed:', event.changedKeys);
 
     try {
-      // If critical settings changed, reinitialize
-      const criticalKeys = ['zoneId', 'states', 'initialState'];
+      // If timer settings changed, reinitialize
+      const criticalKeys = ['idleTimeout', 'occupiedTimeout'];
       const needsReinit = event.changedKeys.some((key) => criticalKeys.includes(key));
 
       if (needsReinit) {
-        this.log('Critical settings changed, reinitializing...');
+        this.log('Timer settings changed, reinitializing...');
         this.teardownRoomStateManagement();
         await this.setupRoomStateManagement();
       }
@@ -132,6 +136,73 @@ class RoomStateDevice extends Homey.Device {
   }
 
   /**
+   * Gets the zone ID this device is assigned to.
+   *
+   * Uses HomeyAPI to get device information including zone assignment.
+   * In Homey, ALL devices are always assigned to a zone - they cannot exist without one.
+   *
+   * @private
+   * @returns {Promise<string | null>} Zone ID or null if lookup fails
+   */
+  private async getDeviceZone(): Promise<string | null> {
+    try {
+      const app = this.homey.app as WIABApp;
+      const homeyApi = app.homeyApi;
+
+      if (!homeyApi) {
+        this.error('HomeyAPI not available');
+        return null;
+      }
+
+      // Get our Homey device ID (the UUID that Homey assigns, not our custom pairing ID)
+      const customDeviceId = this.getData().id;
+      this.log(`[DEBUG] Custom device ID from pairing: ${customDeviceId}`);
+
+      // Get all devices from HomeyAPI
+      const devices = await homeyApi.devices.getDevices();
+      this.log(`[DEBUG] Found ${Object.keys(devices).length} total devices in Homey`);
+
+      // Search through all devices to find ours by matching the device name
+      // Since we're looking for a device named "Room State Manager" created by this driver,
+      // we can match by name. The device object will have a zone property.
+      let foundZoneId: string | null = null;
+      const ourDeviceName = this.getName();
+
+      this.log(`[DEBUG] Looking for device named: "${ourDeviceName}"`);
+
+      for (const [deviceId, device] of Object.entries(devices)) {
+        const deviceObj = device as unknown as {
+          name?: string;
+          zone?: string;
+        };
+
+        // Match by device name
+        if (deviceObj.name === ourDeviceName) {
+          this.log(`[DEBUG] Found matching device: ${deviceId}`);
+          this.log(`[DEBUG] Device zone: ${deviceObj.zone}`);
+
+          // Take the first match with a zone (should only be one device with this name)
+          if (deviceObj.zone) {
+            foundZoneId = deviceObj.zone;
+            this.log(`Device is in zone: ${foundZoneId}`);
+            break;
+          }
+        }
+      }
+
+      if (!foundZoneId) {
+        this.error(`Could not find zone for device "${ourDeviceName}"`);
+        this.error('Device may need to be manually assigned to a zone in Homey settings');
+      }
+
+      return foundZoneId;
+    } catch (error) {
+      this.error('Failed to get device zone:', error);
+      return null;
+    }
+  }
+
+  /**
    * Sets up room state management.
    *
    * Steps:
@@ -139,41 +210,59 @@ class RoomStateDevice extends Homey.Device {
    * 2. Validate state configuration
    * 3. Create RoomStateEngine
    * 4. Setup zone monitoring
-   * 5. Initialize state and capabilities
+   * 5. Check current zone activity
+   * 6. Initialize state based on actual zone activity
+   * 7. Initialize capabilities
    */
   private async setupRoomStateManagement(): Promise<void> {
     try {
-      // Load settings
-      const settings = this.getSettings() as RoomStateSettings;
-      const zoneId = settings.zoneId;
-      const statesJson = settings.states;
-      const initialState = settings.initialState;
+      // Get zone from device assignment via HomeyAPI
+      const zoneId = await this.getDeviceZone();
 
       if (!zoneId) {
-        throw new Error('No zone configured');
+        this.error('No zone assigned - please assign this device to a zone in device settings');
+        throw new Error('No zone assigned to device');
       }
 
-      // Parse state configuration
-      const stateConfigs = this.parseStateConfiguration(statesJson);
+      this.log(`Monitoring zone: ${zoneId}`);
 
-      if (stateConfigs.length === 0) {
-        throw new Error('No states configured');
-      }
+      // Store current zone ID for change detection
+      this.currentZoneId = zoneId;
 
-      // Validate initial state exists
-      if (!stateConfigs.find((s) => s.id === initialState)) {
-        throw new Error(`Initial state "${initialState}" not found in configuration`);
-      }
+      // Load settings
+      const settings = this.getSettings() as RoomStateSettings;
+      const idleTimeout = settings.idleTimeout || 0;
+      const occupiedTimeout = settings.occupiedTimeout || 0;
 
-      // Create state engine
-      this.stateEngine = new RoomStateEngine(stateConfigs, initialState);
-      this.log(`State engine created with ${stateConfigs.length} states`);
+      // Build fixed 4-state configuration based on timer settings
+      const stateConfigs = this.buildStateConfiguration(idleTimeout, occupiedTimeout);
 
-      // Setup zone monitoring
+      // Setup zone monitoring FIRST to get zone object
       await this.setupZoneMonitoring(zoneId);
+
+      // Check current zone activity to determine initial state
+      const isZoneActive = this.zone?.active || false;
+      const initialState = isZoneActive ? 'occupied' : 'idle';
+      this.log(`Zone is currently ${isZoneActive ? 'ACTIVE' : 'INACTIVE'}, starting in state: ${initialState}`);
+
+      // Create state engine with correct initial state
+      this.stateEngine = new RoomStateEngine(stateConfigs, initialState);
+      this.log(`State engine created with timers: idle=${idleTimeout}min, occupied=${occupiedTimeout}min`);
+
+      // Set initial zone activity state
+      this.isZoneActive = isZoneActive;
+      if (isZoneActive) {
+        this.lastActivityTimestamp = Date.now();
+      }
 
       // Initialize capabilities
       await this.initializeCapabilities();
+
+      // Schedule next transition if needed
+      this.evaluateAndScheduleTransition();
+
+      // Start periodic zone change detection (check every 30 seconds)
+      this.startZoneChangeDetection();
 
       this.log('Room state management setup complete');
     } catch (error) {
@@ -183,6 +272,37 @@ class RoomStateDevice extends Homey.Device {
       );
       throw error;
     }
+  }
+
+  /**
+   * Starts periodic zone change detection.
+   *
+   * Checks every 30 seconds if the device has been moved to a different zone.
+   * If a zone change is detected, reinitializes the device with the new zone.
+   */
+  private startZoneChangeDetection(): void {
+    // Clear any existing interval
+    if (this.zoneCheckInterval) {
+      clearInterval(this.zoneCheckInterval);
+    }
+
+    // Check for zone changes every 30 seconds
+    this.zoneCheckInterval = setInterval(async () => {
+      try {
+        const newZoneId = await this.getDeviceZone();
+
+        if (newZoneId && newZoneId !== this.currentZoneId) {
+          this.log(`Zone change detected: ${this.currentZoneId} → ${newZoneId}`);
+          this.log('Reinitializing with new zone...');
+
+          // Reinitialize with new zone
+          this.teardownRoomStateManagement();
+          await this.setupRoomStateManagement();
+        }
+      } catch (error) {
+        this.error('Failed to check for zone changes:', error);
+      }
+    }, 30000); // Check every 30 seconds
   }
 
   /**
@@ -204,12 +324,19 @@ class RoomStateDevice extends Homey.Device {
         this.stateTimer = undefined;
       }
 
+      // Clear zone check interval
+      if (this.zoneCheckInterval) {
+        clearInterval(this.zoneCheckInterval);
+        this.zoneCheckInterval = undefined;
+      }
+
       // Clear references
       this.zone = undefined;
       this.stateEngine = undefined;
       this.lastActivityTimestamp = null;
       this.isZoneActive = false;
       this.manualOverride = false;
+      this.currentZoneId = undefined;
 
       this.log('Room state management torn down');
     } catch (error) {
@@ -218,30 +345,65 @@ class RoomStateDevice extends Homey.Device {
   }
 
   /**
-   * Parses and validates state configuration from JSON.
+   * Builds the fixed 4-state configuration based on timer settings.
    *
-   * @param statesJson - JSON string containing StateConfig array
-   * @returns Parsed state configuration array
+   * Creates a standard state model:
+   * - idle → extended_idle (after idleTimeout minutes, or disabled if 0)
+   * - occupied → extended_occupied (after occupiedTimeout minutes, or disabled if 0)
+   * - extended_idle and extended_occupied are child states for hierarchy support
+   *
+   * Zone activity triggers transition between idle ↔ occupied
+   * Timers trigger transitions to extended states
+   *
+   * @param idleTimeout - Minutes before idle → extended_idle (0 = disabled)
+   * @param occupiedTimeout - Minutes before occupied → extended_occupied (0 = disabled)
+   * @returns State configuration array
    */
-  private parseStateConfiguration(statesJson: string): StateConfig[] {
-    try {
-      if (!statesJson || statesJson.trim() === '') {
-        this.error('States JSON is empty');
-        return [];
-      }
+  private buildStateConfiguration(idleTimeout: number, occupiedTimeout: number): StateConfig[] {
+    const states: StateConfig[] = [
+      {
+        id: 'idle',
+        name: 'Idle',
+        activeTransitions: [
+          { targetState: 'occupied', afterMinutes: 0 }, // Immediate transition on activity
+        ],
+        inactiveTransitions:
+          idleTimeout > 0
+            ? [{ targetState: 'extended_idle', afterMinutes: idleTimeout }]
+            : [],
+      },
+      {
+        id: 'extended_idle',
+        name: 'Extended Idle',
+        parent: 'idle', // Child of idle for hierarchy
+        activeTransitions: [
+          { targetState: 'occupied', afterMinutes: 0 }, // Immediate transition on activity
+        ],
+        inactiveTransitions: [],
+      },
+      {
+        id: 'occupied',
+        name: 'Occupied',
+        activeTransitions:
+          occupiedTimeout > 0
+            ? [{ targetState: 'extended_occupied', afterMinutes: occupiedTimeout }]
+            : [],
+        inactiveTransitions: [
+          { targetState: 'idle', afterMinutes: 0 }, // Immediate transition on inactivity
+        ],
+      },
+      {
+        id: 'extended_occupied',
+        name: 'Extended Occupied',
+        parent: 'occupied', // Child of occupied for hierarchy
+        activeTransitions: [],
+        inactiveTransitions: [
+          { targetState: 'idle', afterMinutes: 0 }, // Immediate transition on inactivity
+        ],
+      },
+    ];
 
-      const parsed = JSON.parse(statesJson);
-
-      if (!Array.isArray(parsed)) {
-        this.error('States configuration is not an array');
-        return [];
-      }
-
-      return parsed as StateConfig[];
-    } catch (error) {
-      this.error('Failed to parse states configuration:', error);
-      return [];
-    }
+    return states;
   }
 
   /**
@@ -577,25 +739,43 @@ class RoomStateDevice extends Homey.Device {
   /**
    * Initializes device capabilities.
    *
-   * Currently no capabilities to initialize as state management
-   * is done through flow cards only.
+   * Sets the initial room_state capability value to display current state.
    */
   private async initializeCapabilities(): Promise<void> {
-    // No capabilities to initialize - flow cards handle all state interactions
-    this.log('Device initialized without capabilities (flow card based)');
+    try {
+      if (!this.stateEngine) {
+        return;
+      }
+
+      // Add capability if it doesn't exist
+      if (!this.hasCapability('room_state')) {
+        await this.addCapability('room_state');
+      }
+
+      // Set initial state value
+      const currentState = this.stateEngine.getCurrentState();
+      await this.setCapabilityValue('room_state', currentState);
+      this.log(`Capability initialized with state: ${currentState}`);
+    } catch (error) {
+      this.error('Failed to initialize capabilities:', error);
+    }
   }
 
   /**
    * Updates device capabilities after state change.
    *
-   * Currently no capabilities to update as state management
-   * is done through flow cards only.
+   * Updates the room_state capability to display the new state.
    *
    * @param newState - New state ID
    */
   private async updateCapabilities(newState: string): Promise<void> {
-    // No capabilities to update - flow cards handle all state interactions
-    this.log(`State updated to: ${newState} (no capability updates)`);
+    try {
+      // Update room_state capability
+      await this.setCapabilityValue('room_state', newState);
+      this.log(`State capability updated to: ${newState}`);
+    } catch (error) {
+      this.error('Failed to update capabilities:', error);
+    }
   }
 
   /**

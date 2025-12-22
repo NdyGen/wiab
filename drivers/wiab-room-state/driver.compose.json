@@ -2,10 +2,25 @@
   "name": {
     "en": "Room State Manager",
     "nl": "Kamer Status Manager",
-    "de": "Raumzustandsverwaltung"
+    "de": "Raumzustandsverwaltung",
+    "no": "Romtilstandsbehandler",
+    "sv": "Rumstatus Hanterare"
   },
   "class": "sensor",
-  "capabilities": [],
+  "capabilities": [
+    "room_state"
+  ],
+  "capabilitiesOptions": {
+    "room_state": {
+      "title": {
+        "en": "State",
+        "nl": "Status",
+        "de": "Zustand",
+        "no": "Tilstand",
+        "sv": "Tillstånd"
+      }
+    }
+  },
   "platforms": [
     "local"
   ],
@@ -17,15 +32,8 @@
   },
   "pair": [
     {
-      "id": "select_zone",
-      "navigation": {
-        "next": "define_states"
-      }
-    },
-    {
       "id": "define_states",
       "navigation": {
-        "prev": "select_zone",
         "next": "list_devices"
       }
     },
