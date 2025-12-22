@@ -28,9 +28,14 @@ class RoomStateDriver extends Homey.Driver {
     // Action: Set room state manually
     const setStateAction = this.homey.flow.getActionCard('set_room_state');
     if (setStateAction) {
+      // Register autocomplete for state selection
+      setStateAction.registerArgumentAutocompleteListener('state', async () => {
+        return this.getAvailableStates();
+      });
+
       setStateAction.registerRunListener(async (args) => {
         const device = args.device;
-        const targetState = args.state;
+        const targetState = args.state.id || args.state;
 
         this.log(`Flow action: Set room state to "${targetState}"`);
 
@@ -63,9 +68,14 @@ class RoomStateDriver extends Homey.Driver {
     // Condition: Is in specific state
     const isStateCondition = this.homey.flow.getConditionCard('is_in_state');
     if (isStateCondition) {
+      // Register autocomplete for state selection
+      isStateCondition.registerArgumentAutocompleteListener('state', async () => {
+        return this.getAvailableStates();
+      });
+
       isStateCondition.registerRunListener(async (args) => {
         const device = args.device;
-        const targetState = args.state;
+        const targetState = args.state.id || args.state;
 
         this.log(`Flow condition: Is in state "${targetState}"?`);
 
@@ -81,9 +91,14 @@ class RoomStateDriver extends Homey.Driver {
     // Condition: Is exactly in specific state
     const isExactlyStateCondition = this.homey.flow.getConditionCard('is_exactly_state');
     if (isExactlyStateCondition) {
+      // Register autocomplete for state selection
+      isExactlyStateCondition.registerArgumentAutocompleteListener('state', async () => {
+        return this.getAvailableStates();
+      });
+
       isExactlyStateCondition.registerRunListener(async (args) => {
         const device = args.device;
-        const targetState = args.state;
+        const targetState = args.state.id || args.state;
 
         this.log(`Flow condition: Is exactly in state "${targetState}"?`);
 
@@ -114,6 +129,27 @@ class RoomStateDriver extends Homey.Driver {
     }
 
     this.log('Flow card listeners registered');
+  }
+
+  /**
+   * Returns the list of available states for autocomplete.
+   *
+   * The Room State Manager uses a fixed 4-state configuration:
+   * - idle: Room is inactive
+   * - extended_idle: Room has been inactive for extended period
+   * - occupied: Room is active
+   * - extended_occupied: Room has been active for extended period
+   *
+   * @returns {Array} Array of autocomplete options with id and name
+   * @private
+   */
+  private getAvailableStates(): Array<{ id: string; name: string }> {
+    return [
+      { id: 'idle', name: 'Idle' },
+      { id: 'extended_idle', name: 'Extended Idle' },
+      { id: 'occupied', name: 'Occupied' },
+      { id: 'extended_occupied', name: 'Extended Occupied' }
+    ];
   }
 
   /**

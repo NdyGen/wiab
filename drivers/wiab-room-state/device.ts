@@ -314,7 +314,7 @@ class RoomStateDevice extends Homey.Device {
     try {
       // Remove zone event listener
       if (this.zone && this.zoneActivityListener) {
-        this.zone.on('update', this.zoneActivityListener);
+        this.zone.removeListener('update', this.zoneActivityListener);
         this.zoneActivityListener = undefined;
       }
 
@@ -442,12 +442,6 @@ class RoomStateDevice extends Homey.Device {
       };
 
       this.zone.on('update', this.zoneActivityListener);
-
-      // Initialize with current zone activity (if available)
-      // Note: Zone active property should be checked here if available
-      // For now, assume zone starts inactive
-      this.isZoneActive = false;
-      this.lastActivityTimestamp = null;
 
       this.log('Zone monitoring setup complete');
     } catch (error) {

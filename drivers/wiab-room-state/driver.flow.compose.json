@@ -45,17 +45,17 @@
       },
       "titleFormatted": {
         "en": "Is in state [[state]] !{{or child of it}}",
-        "nl": "Is in status [[state]] !{{of kind ervan}}",
+        "nl": "Is status [[state]] of afgeleide ervan",
         "de": "Ist im Zustand [[state]] !{{oder Kind davon}}"
       },
       "args": [
         {
           "name": "state",
-          "type": "text",
+          "type": "autocomplete",
           "placeholder": {
-            "en": "State ID",
-            "nl": "Status ID",
-            "de": "Zustands-ID"
+            "en": "State",
+            "nl": "Status",
+            "de": "Zustand"
           }
         }
       ]
@@ -68,18 +68,18 @@
         "de": "Ist genau im Zustand !{{(nicht Elternteil)}}"
       },
       "titleFormatted": {
-        "en": "Is exactly [[state]] !{{(no hierarchy)}}",
-        "nl": "Is exact [[state]] !{{(geen hiërarchie)}}",
-        "de": "Ist genau [[state]] !{{(keine Hierarchie)}}"
+        "en": "Is exactly [[state]]",
+        "nl": "Is exact [[state]]",
+        "de": "Ist genau [[state]]"
       },
       "args": [
         {
           "name": "state",
-          "type": "text",
+          "type": "autocomplete",
           "placeholder": {
-            "en": "State ID",
-            "nl": "Status ID",
-            "de": "Zustands-ID"
+            "en": "State",
+            "nl": "Status",
+            "de": "Zustand"
           }
         }
       ]
@@ -109,11 +109,11 @@
       "args": [
         {
           "name": "state",
-          "type": "text",
+          "type": "autocomplete",
           "placeholder": {
-            "en": "State ID",
-            "nl": "Status ID",
-            "de": "Zustands-ID"
+            "en": "State",
+            "nl": "Status",
+            "de": "Zustand"
           }
         }
       ]
