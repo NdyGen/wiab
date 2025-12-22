@@ -20,18 +20,20 @@ import type { TimerValues } from '../../lib/RoomTemplates';
  * Mimics Homey.Driver.PairSession interface.
  */
 class MockPairSession {
-  private handlers: Map<string, Function> = new Map();
+  private handlers: Map<string, (...args: unknown[]) => Promise<unknown>> = new Map();
 
-  setHandler(event: string, handler: Function): void {
+  setHandler(event: string, handler: (...args: unknown[]) => Promise<unknown>): void {
     this.handlers.set(event, handler);
   }
 
-  getHandler(event: string): Function {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getHandler(event: string): (...args: any[]) => Promise<any> {
     const handler = this.handlers.get(event);
     if (!handler) {
       throw new Error(`Handler '${event}' not registered in pairing session`);
     }
-    return handler;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return handler as (...args: any[]) => Promise<any>;
   }
 
   hasHandler(event: string): boolean {
