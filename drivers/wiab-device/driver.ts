@@ -69,6 +69,40 @@ class WIABDriver extends Homey.Driver {
   }
 
   /**
+   * Type guard to check if device has zone property.
+   *
+   * @private
+   * @param device - The device to check
+   * @returns true if device has zone property
+   */
+  private hasZoneProperty(device: HomeyAPIDevice): device is HomeyAPIDevice & { zone: string } {
+    return 'zone' in device && typeof (device as { zone?: unknown }).zone === 'string';
+  }
+
+  /**
+   * Retrieves zone name for a device if available.
+   *
+   * @private
+   * @param device - The device to get zone information for
+   * @param homeyApi - The HomeyAPI instance
+   * @returns Zone name or null if not available
+   */
+  private async getDeviceZoneName(device: HomeyAPIDevice, homeyApi: HomeyAPI): Promise<string | null> {
+    try {
+      if (!this.hasZoneProperty(device)) {
+        return null;
+      }
+
+      const zone = await homeyApi.zones.getZone({ id: device.zone });
+      this.log(`Device ${device.name} is in zone: ${zone.name}`);
+      return zone.name;
+    } catch (error) {
+      this.log(`Could not retrieve zone for device ${device.name}:`, error);
+      return null;
+    }
+  }
+
+  /**
    * Handles device fetch operations with standardized error handling.
    *
    * @private
@@ -139,18 +173,7 @@ class WIABDriver extends Homey.Driver {
         this.log(`Device ${device.name} (${deviceId}) has ${capability} capability`);
 
         // Fetch zone name if device has a zone assigned
-        let zoneName: string | null = null;
-        try {
-          const deviceWithZone = device as HomeyAPIDevice & { zone?: string };
-          if (deviceWithZone.zone) {
-            const zone = await homeyApi.zones.getZone({ id: deviceWithZone.zone });
-            zoneName = zone.name;
-            this.log(`Device ${device.name} is in zone: ${zoneName}`);
-          }
-        } catch (error) {
-          // Zone information is optional, continue without it
-          this.log(`Could not retrieve zone for device ${device.name}:`, error);
-        }
+        const zoneName = await this.getDeviceZoneName(device, homeyApi);
 
         matchingDevices.push({
           deviceId: deviceId,

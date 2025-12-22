@@ -170,8 +170,11 @@ class WIABApp extends Homey.App {
    */
   private async getDeviceZoneName(device: Homey.Device): Promise<string | undefined> {
     try {
-      const deviceWithZone = device as unknown as { getZone?: () => Promise<{ name?: string }> };
-      const zone = await deviceWithZone.getZone?.();
+      if (!this.hasGetZoneMethod(device)) {
+        return undefined;
+      }
+
+      const zone = await device.getZone();
       return zone?.name;
     } catch (error) {
       this.log(
@@ -180,6 +183,18 @@ class WIABApp extends Homey.App {
       );
       return undefined;
     }
+  }
+
+  /**
+   * Type guard to check if device has getZone method.
+   *
+   * @param device - The device to check
+   * @returns true if device has getZone method
+   */
+  private hasGetZoneMethod(
+    device: Homey.Device
+  ): device is Homey.Device & { getZone: () => Promise<{ name?: string }> } {
+    return 'getZone' in device && typeof (device as { getZone?: unknown }).getZone === 'function';
   }
 }
 
