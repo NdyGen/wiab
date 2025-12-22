@@ -44,9 +44,9 @@
         "de": "Ist im Zustand !{{oder Kind des Zustands}}"
       },
       "titleFormatted": {
-        "en": "Is in state [[state]] !{{or child of state [[state]]}}",
-        "nl": "Is in status [[state]] !{{of kind van status [[state]]}}",
-        "de": "Ist im Zustand [[state]] !{{oder Kind des Zustands [[state]]}}"
+        "en": "Is in state [[state]] !{{or child of it}}",
+        "nl": "Is in status [[state]] !{{of kind ervan}}",
+        "de": "Ist im Zustand [[state]] !{{oder Kind davon}}"
       },
       "args": [
         {
@@ -68,9 +68,9 @@
         "de": "Ist genau im Zustand !{{(nicht Elternteil)}}"
       },
       "titleFormatted": {
-        "en": "Is exactly in state [[state]] !{{(not parent state)}}",
-        "nl": "Is exact in status [[state]] !{{(niet ouderstatus)}}",
-        "de": "Ist genau im Zustand [[state]] !{{(nicht Elternzustand)}}"
+        "en": "Is exactly [[state]] !{{(no hierarchy)}}",
+        "nl": "Is exact [[state]] !{{(geen hiërarchie)}}",
+        "de": "Ist genau [[state]] !{{(keine Hierarchie)}}"
       },
       "args": [
         {

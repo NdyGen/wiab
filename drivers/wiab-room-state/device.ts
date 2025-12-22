@@ -124,13 +124,11 @@ class RoomStateDevice extends Homey.Device {
   /**
    * Registers capability listeners for manual state control.
    *
-   * Allows users to manually change the current state via device controls.
+   * Currently no capabilities are registered as state management
+   * is done through flow cards only.
    */
   private registerCapabilityListeners(): void {
-    // Listener for manual state changes (if capability is added)
-    this.registerCapabilityListener('measure_state', async (value: number) => {
-      await this.handleManualStateChange(value);
-    });
+    // No capability listeners needed - flow cards handle all interactions
   }
 
   /**
@@ -469,46 +467,27 @@ class RoomStateDevice extends Homey.Device {
   }
 
   /**
-   * Handles manual state change from device controls or flow cards.
+   * Handles manual state change from flow cards.
    *
    * Activates manual override mode and sets state immediately.
    * Public method called from flow cards.
    *
-   * @param stateIdOrIndex - State ID (string) or numeric index (number)
+   * @param stateId - State ID to transition to
    */
-  public async handleManualStateChange(stateIdOrIndex: string | number): Promise<void> {
+  public async handleManualStateChange(stateId: string): Promise<void> {
     try {
       if (!this.stateEngine) {
         return;
       }
 
-      let newState: string;
-
-      // Handle both string state ID and numeric index
-      if (typeof stateIdOrIndex === 'string') {
-        // State ID provided directly (from flow cards)
-        newState = stateIdOrIndex;
-
-        // Validate state exists
-        const allStates = this.stateEngine.getAllStateIds();
-        if (!allStates.includes(newState)) {
-          this.error(`Invalid state ID: ${newState}`);
-          return;
-        }
-      } else {
-        // Numeric index provided (from capability)
-        const stateIndex = stateIdOrIndex;
-        const allStates = this.stateEngine.getAllStateIds();
-
-        if (stateIndex < 0 || stateIndex >= allStates.length) {
-          this.error(`Invalid state index: ${stateIndex}`);
-          return;
-        }
-
-        newState = allStates[stateIndex];
+      // Validate state exists
+      const allStates = this.stateEngine.getAllStateIds();
+      if (!allStates.includes(stateId)) {
+        this.error(`Invalid state ID: ${stateId}`);
+        return;
       }
 
-      this.log(`Manual state change to: ${newState}`);
+      this.log(`Manual state change to: ${stateId}`);
 
       // Activate manual override
       this.manualOverride = true;
@@ -520,7 +499,7 @@ class RoomStateDevice extends Homey.Device {
       }
 
       // Execute state transition
-      await this.executeStateTransition(newState, 'Manual override');
+      await this.executeStateTransition(stateId, 'Manual override');
     } catch (error) {
       this.error(
         `[${RoomStateErrorId.STATE_TRANSITION_FAILED}] Failed to handle manual state change:`,
@@ -598,65 +577,25 @@ class RoomStateDevice extends Homey.Device {
   /**
    * Initializes device capabilities.
    *
-   * Sets up initial capability values based on current state.
+   * Currently no capabilities to initialize as state management
+   * is done through flow cards only.
    */
   private async initializeCapabilities(): Promise<void> {
-    try {
-      if (!this.stateEngine) {
-        return;
-      }
-
-      const currentState = this.stateEngine.getCurrentState();
-
-      // Initialize measure_state capability (if exists)
-      if (this.hasCapability('measure_state')) {
-        const stateIndex = this.getStateIndex(currentState);
-        await this.setCapabilityValue('measure_state', stateIndex);
-      }
-
-      // Initialize alarm_state_changed (flow trigger flag)
-      if (this.hasCapability('alarm_state_changed')) {
-        await this.setCapabilityValue('alarm_state_changed', false);
-      }
-
-      this.log(`Capabilities initialized for state: ${currentState}`);
-    } catch (error) {
-      this.error(
-        `[${RoomStateErrorId.CAPABILITY_UPDATE_FAILED}] Failed to initialize capabilities:`,
-        error
-      );
-    }
+    // No capabilities to initialize - flow cards handle all state interactions
+    this.log('Device initialized without capabilities (flow card based)');
   }
 
   /**
    * Updates device capabilities after state change.
    *
+   * Currently no capabilities to update as state management
+   * is done through flow cards only.
+   *
    * @param newState - New state ID
    */
   private async updateCapabilities(newState: string): Promise<void> {
-    try {
-      // Update measure_state (numeric state index)
-      if (this.hasCapability('measure_state')) {
-        const stateIndex = this.getStateIndex(newState);
-        await this.setCapabilityValue('measure_state', stateIndex);
-      }
-
-      // Trigger alarm_state_changed for flow cards
-      if (this.hasCapability('alarm_state_changed')) {
-        await this.setCapabilityValue('alarm_state_changed', true);
-        // Reset after brief delay
-        setTimeout(async () => {
-          await this.setCapabilityValue('alarm_state_changed', false);
-        }, 1000);
-      }
-
-      this.log(`Capabilities updated for state: ${newState}`);
-    } catch (error) {
-      this.error(
-        `[${RoomStateErrorId.CAPABILITY_UPDATE_FAILED}] Failed to update capabilities:`,
-        error
-      );
-    }
+    // No capabilities to update - flow cards handle all state interactions
+    this.log(`State updated to: ${newState} (no capability updates)`);
   }
 
   /**
@@ -687,25 +626,6 @@ class RoomStateDevice extends Homey.Device {
     } catch (error) {
       this.error('Failed to trigger state changed flow:', error);
     }
-  }
-
-  /**
-   * Gets the numeric index of a state ID.
-   *
-   * Used for mapping state IDs to capability values.
-   *
-   * @param stateId - State ID
-   * @returns Numeric index of state
-   */
-  private getStateIndex(stateId: string): number {
-    if (!this.stateEngine) {
-      return 0;
-    }
-
-    const allStates = this.stateEngine.getAllStateIds();
-    const index = allStates.indexOf(stateId);
-
-    return index >= 0 ? index : 0;
   }
 
   /**

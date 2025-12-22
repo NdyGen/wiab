@@ -5,10 +5,7 @@
     "de": "Raumzustandsverwaltung"
   },
   "class": "sensor",
-  "capabilities": [
-    "measure_state",
-    "alarm_state_changed"
-  ],
+  "capabilities": [],
   "platforms": [
     "local"
   ],
@@ -20,23 +17,9 @@
   },
   "pair": [
     {
-      "id": "select_zone",
-      "navigation": {
-        "next": "define_states"
-      }
-    },
-    {
-      "id": "define_states",
-      "navigation": {
-        "prev": "select_zone",
-        "next": "list_devices"
-      }
-    },
-    {
       "id": "list_devices",
       "template": "list_devices",
       "navigation": {
-        "prev": "define_states",
         "next": "add_devices"
       }
     },
