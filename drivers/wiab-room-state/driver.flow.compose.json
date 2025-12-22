@@ -5,7 +5,9 @@
       "title": {
         "en": "Room state changed",
         "nl": "Kamerstatus gewijzigd",
-        "de": "Raumzustand geändert"
+        "de": "Raumzustand geändert",
+        "no": "Romtilstand endret",
+        "sv": "Rumstillstånd ändrat"
       },
       "tokens": [
         {
@@ -14,7 +16,9 @@
           "title": {
             "en": "Current state",
             "nl": "Huidige status",
-            "de": "Aktueller Zustand"
+            "de": "Aktueller Zustand",
+            "no": "Nåværende tilstand",
+            "sv": "Nuvarande tillstånd"
           },
           "example": {
             "en": "occupied"
@@ -26,7 +30,9 @@
           "title": {
             "en": "Previous state",
             "nl": "Vorige status",
-            "de": "Vorheriger Zustand"
+            "de": "Vorheriger Zustand",
+            "no": "Forrige tilstand",
+            "sv": "Föregående tillstånd"
           },
           "example": {
             "en": "idle"
@@ -41,12 +47,16 @@
       "title": {
         "en": "Is in state !{{or child of state}}",
         "nl": "Is in status !{{of kind van status}}",
-        "de": "Ist im Zustand !{{oder Kind des Zustands}}"
+        "de": "Ist im Zustand !{{oder Kind des Zustands}}",
+        "no": "Er i tilstand !{{eller underordnet tilstand}}",
+        "sv": "Är i tillstånd !{{eller underordnat tillstånd}}"
       },
       "titleFormatted": {
         "en": "Is in state [[state]] !{{or child of it}}",
         "nl": "Is status [[state]] of afgeleide ervan",
-        "de": "Ist im Zustand [[state]] !{{oder Kind davon}}"
+        "de": "Ist im Zustand [[state]] !{{oder Kind davon}}",
+        "no": "Er i tilstand [[state]] !{{eller avledet fra den}}",
+        "sv": "Är i tillstånd [[state]] !{{eller härlett från det}}"
       },
       "args": [
         {
@@ -55,7 +65,9 @@
           "placeholder": {
             "en": "State",
             "nl": "Status",
-            "de": "Zustand"
+            "de": "Zustand",
+            "no": "Tilstand",
+            "sv": "Tillstånd"
           }
         }
       ]
@@ -65,12 +77,16 @@
       "title": {
         "en": "Is exactly in state !{{(not parent)}}",
         "nl": "Is exact in status !{{(niet ouder)}}",
-        "de": "Ist genau im Zustand !{{(nicht Elternteil)}}"
+        "de": "Ist genau im Zustand !{{(nicht Elternteil)}}",
+        "no": "Er nøyaktig i tilstand !{{(ikke overordnet)}}",
+        "sv": "Är exakt i tillstånd !{{(inte överordnat)}}"
       },
       "titleFormatted": {
         "en": "Is exactly [[state]]",
         "nl": "Is exact [[state]]",
-        "de": "Ist genau [[state]]"
+        "de": "Ist genau [[state]]",
+        "no": "Er nøyaktig [[state]]",
+        "sv": "Är exakt [[state]]"
       },
       "args": [
         {
@@ -79,7 +95,9 @@
           "placeholder": {
             "en": "State",
             "nl": "Status",
-            "de": "Zustand"
+            "de": "Zustand",
+            "no": "Tilstand",
+            "sv": "Tillstånd"
           }
         }
       ]
@@ -89,7 +107,9 @@
       "title": {
         "en": "Manual override is !{{active|inactive}}",
         "nl": "Handmatige overschrijving is !{{actief|inactief}}",
-        "de": "Manuelle Überschreibung ist !{{aktiv|inaktiv}}"
+        "de": "Manuelle Überschreibung ist !{{aktiv|inaktiv}}",
+        "no": "Manuell overstyring er !{{aktiv|inaktiv}}",
+        "sv": "Manuell åsidosättning är !{{aktiv|inaktiv}}"
       }
     }
   ],
@@ -99,12 +119,16 @@
       "title": {
         "en": "Set room state",
         "nl": "Kamerstatus instellen",
-        "de": "Raumzustand einstellen"
+        "de": "Raumzustand einstellen",
+        "no": "Sett romtilstand",
+        "sv": "Ställ in rumstillstånd"
       },
       "titleFormatted": {
         "en": "Set room state to [[state]]",
         "nl": "Kamerstatus instellen op [[state]]",
-        "de": "Raumzustand auf [[state]] einstellen"
+        "de": "Raumzustand auf [[state]] einstellen",
+        "no": "Sett romtilstand til [[state]]",
+        "sv": "Ställ in rumstillstånd till [[state]]"
       },
       "args": [
         {
@@ -113,7 +137,9 @@
           "placeholder": {
             "en": "State",
             "nl": "Status",
-            "de": "Zustand"
+            "de": "Zustand",
+            "no": "Tilstand",
+            "sv": "Tillstånd"
           }
         }
       ]
@@ -123,7 +149,9 @@
       "title": {
         "en": "Return to automatic mode",
         "nl": "Terug naar automatische modus",
-        "de": "Zurück zum automatischen Modus"
+        "de": "Zurück zum automatischen Modus",
+        "no": "Gå tilbake til automatisk modus",
+        "sv": "Återgå till automatiskt läge"
       }
     }
   ]
