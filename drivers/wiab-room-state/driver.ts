@@ -140,28 +140,61 @@ class RoomStateDriver extends Homey.Driver {
    * - occupied: Room is active
    * - extended_occupied: Room has been active for extended period
    *
-   * Returns localized state names using Homey's i18n system.
+   * Returns localized state names based on Homey's language setting.
    *
    * @returns {Array} Array of autocomplete options with id and localized name
    * @private
    */
   private getAvailableStates(): Array<{ id: string; name: string }> {
+    const language = this.homey.i18n.getLanguage();
+
+    const translations: Record<string, Record<string, string>> = {
+      idle: {
+        en: 'idle',
+        nl: 'vrij',
+        de: 'inaktiv',
+        no: 'ledig',
+        sv: 'ledig'
+      },
+      extended_idle: {
+        en: 'extended idle',
+        nl: 'verlengd vrij',
+        de: 'erweitert inaktiv',
+        no: 'utvidet ledig',
+        sv: 'utökad ledig'
+      },
+      occupied: {
+        en: 'occupied',
+        nl: 'bezet',
+        de: 'besetzt',
+        no: 'opptatt',
+        sv: 'upptagen'
+      },
+      extended_occupied: {
+        en: 'extended occupied',
+        nl: 'verlengd bezet',
+        de: 'erweitert besetzt',
+        no: 'utvidet opptatt',
+        sv: 'utökad upptagen'
+      }
+    };
+
     return [
       {
         id: 'idle',
-        name: this.homey.__('capabilities.room_state.values.idle.title')
+        name: translations.idle[language] || translations.idle.en
       },
       {
         id: 'extended_idle',
-        name: this.homey.__('capabilities.room_state.values.extended_idle.title')
+        name: translations.extended_idle[language] || translations.extended_idle.en
       },
       {
         id: 'occupied',
-        name: this.homey.__('capabilities.room_state.values.occupied.title')
+        name: translations.occupied[language] || translations.occupied.en
       },
       {
         id: 'extended_occupied',
-        name: this.homey.__('capabilities.room_state.values.extended_occupied.title')
+        name: translations.extended_occupied[language] || translations.extended_occupied.en
       }
     ];
   }
