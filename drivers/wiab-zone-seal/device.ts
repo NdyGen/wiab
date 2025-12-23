@@ -205,6 +205,7 @@ class WIABZoneSealDevice extends Homey.Device {
         this.log('No contact sensors configured, device in idle state');
         // Set sealed state (no sensors = no openings)
         await this.setCapabilityValue('zone_sealed', true);
+        await this.setCapabilityValue('alarm_zone_leaky', false);
         return;
       }
 
@@ -286,6 +287,7 @@ class WIABZoneSealDevice extends Homey.Device {
 
       // Set initial capability values
       await this.setCapabilityValue('zone_sealed', initiallySealed);
+      await this.setCapabilityValue('alarm_zone_leaky', !initiallySealed);
 
       // Register WebSocket listeners for all contact sensors
       for (const sensor of this.contactSensors) {
@@ -547,6 +549,7 @@ class WIABZoneSealDevice extends Homey.Device {
       // Determine boolean sealed value
       const isSealed = state === ZoneSealState.SEALED;
       await this.setCapabilityValue('zone_sealed', isSealed);
+      await this.setCapabilityValue('alarm_zone_leaky', !isSealed);
 
       // Trigger state change flow card
       await this.handleStateChanged(state);
