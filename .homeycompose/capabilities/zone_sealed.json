@@ -17,5 +17,5 @@
   "getable": true,
   "setable": false,
   "uiComponent": "sensor",
-  "icon": "/assets/zone_sealed.svg"
+  "icon": "/assets/icon.svg"
 }
