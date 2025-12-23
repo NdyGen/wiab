@@ -8,6 +8,12 @@ import {
 import { ContactSensorAggregator } from '../../lib/ContactSensorAggregator';
 import { ZoneSealEngine, StateTransition } from '../../lib/ZoneSealEngine';
 import { validateSensorSettings, validateNumber } from '../../lib/SensorSettingsValidator';
+import { WarningManager } from '../../lib/WarningManager';
+import { ErrorReporter } from '../../lib/ErrorReporter';
+import { FlowCardErrorHandler } from '../../lib/FlowCardErrorHandler';
+import { RetryManager } from '../../lib/RetryManager';
+import { ZoneSealErrorId } from '../../constants/errorIds';
+import { ErrorSeverity } from '../../lib/ErrorTypes';
 
 /**
  * Interface for WIABApp with HomeyAPI
@@ -69,21 +75,39 @@ class WIABZoneSealDevice extends Homey.Device {
   private staleCheckInterval?: NodeJS.Timeout;
   private staleTimeoutMs: number = 30 * 60 * 1000; // Default 30 minutes
 
+  // Error handling utilities
+  private warningManager?: WarningManager;
+  private errorReporter?: ErrorReporter;
+  private flowCardHandler?: FlowCardErrorHandler;
+  private retryManager?: RetryManager;
+
   /**
    * Initializes the WIAB Zone Seal device.
    *
    * Initialization process:
-   * 1. Parse and validate sensor configuration
-   * 2. Initialize ContactSensorAggregator and ZoneSealEngine
-   * 3. Determine initial state from current sensor values (no delays)
-   * 4. Setup event-driven monitoring via HomeyAPI WebSocket
-   * 5. Initialize stale sensor tracking
-   * 6. Register flow card handlers
+   * 1. Initialize error handling utilities (WarningManager, ErrorReporter, etc.)
+   * 2. Parse and validate sensor configuration
+   * 3. Initialize ContactSensorAggregator and ZoneSealEngine
+   * 4. Determine initial state from current sensor values (no delays)
+   * 5. Setup event-driven monitoring via HomeyAPI WebSocket
+   * 6. Initialize stale sensor tracking
+   * 7. Register flow card handlers
+   *
+   * Error Handling:
+   * - Uses WarningManager to set device warning on initialization failure
+   * - Uses ErrorReporter for structured error logging
+   * - Device remains in degraded mode if initialization fails
    *
    * @returns {Promise<void>}
    */
   async onInit(): Promise<void> {
     this.log('WIAB Zone Seal device initializing');
+
+    // Initialize error handling utilities first
+    this.warningManager = new WarningManager(this, this);
+    this.errorReporter = new ErrorReporter(this);
+    this.flowCardHandler = new FlowCardErrorHandler(this.homey, this);
+    this.retryManager = new RetryManager(this);
 
     try {
       // Setup sensor monitoring with current settings
@@ -92,9 +116,25 @@ class WIABZoneSealDevice extends Homey.Device {
       // Register flow card handlers
       this.registerFlowCardHandlers();
 
+      // Clear any previous warning on successful initialization
+      await this.warningManager.clearWarning();
+
       this.log('WIAB Zone Seal device initialization complete');
     } catch (error) {
-      this.error('Failed to initialize Zone Seal device:', error);
+      // Issue #1 FIX: Report error with structured logging and set device warning
+      this.errorReporter.reportError({
+        errorId: ZoneSealErrorId.DEVICE_INIT_FAILED,
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'Device initialization failed. Check sensor configuration.',
+        technicalMessage: `Failed to initialize Zone Seal device: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: { deviceId: this.getData().id },
+      });
+
+      await this.warningManager.setWarning(
+        ZoneSealErrorId.DEVICE_INIT_FAILED,
+        'Device initialization failed. Check sensor configuration in settings.'
+      );
+
       // Don't throw - allow device to exist in degraded mode
     }
   }
@@ -115,44 +155,73 @@ class WIABZoneSealDevice extends Homey.Device {
   }): Promise<void> {
     this.log('Zone Seal device settings changed:', event.changedKeys);
 
-    // Check if sensor configuration changed
-    const sensorSettingsChanged = event.changedKeys.includes('contactSensors');
+    try {
+      // Check if sensor configuration changed
+      const sensorSettingsChanged = event.changedKeys.includes('contactSensors');
 
-    // Check if delay settings changed
-    const delaySettingsChanged =
-      event.changedKeys.includes('openDelaySeconds') ||
-      event.changedKeys.includes('closeDelaySeconds');
+      // Check if delay settings changed
+      const delaySettingsChanged =
+        event.changedKeys.includes('openDelaySeconds') ||
+        event.changedKeys.includes('closeDelaySeconds');
 
-    // Check if stale timeout changed
-    const staleTimeoutChanged = event.changedKeys.includes('staleContactMinutes');
+      // Check if stale timeout changed
+      const staleTimeoutChanged = event.changedKeys.includes('staleContactMinutes');
 
-    if (sensorSettingsChanged || staleTimeoutChanged) {
-      this.log('Sensor configuration or stale timeout changed, reinitializing monitoring');
+      if (sensorSettingsChanged || staleTimeoutChanged) {
+        this.log('Sensor configuration or stale timeout changed, reinitializing monitoring');
 
-      // Teardown existing monitoring
-      this.teardownSensorMonitoring();
+        // Teardown existing monitoring
+        this.teardownSensorMonitoring();
 
-      // Setup new monitoring with updated settings
-      await this.setupSensorMonitoring();
-    } else if (delaySettingsChanged) {
-      this.log('Delay settings changed, updating engine configuration');
+        // Setup new monitoring with updated settings
+        await this.setupSensorMonitoring();
 
-      // Update engine configuration without reinitializing
-      const openDelaySeconds = validateNumber(
-        event.newSettings.openDelaySeconds,
-        0,
-        0,
-        300
+        // Clear warning on successful settings update
+        await this.warningManager!.clearWarning();
+
+        this.log('Settings applied successfully');
+      } else if (delaySettingsChanged) {
+        this.log('Delay settings changed, updating engine configuration');
+
+        // Update engine configuration without reinitializing
+        const openDelaySeconds = validateNumber(
+          event.newSettings.openDelaySeconds,
+          0,
+          0,
+          300
+        );
+        const closeDelaySeconds = validateNumber(
+          event.newSettings.closeDelaySeconds,
+          0,
+          0,
+          300
+        );
+
+        if (!this.engine) {
+          throw new Error('Zone seal engine not initialized');
+        }
+
+        this.engine.updateConfig({ openDelaySeconds, closeDelaySeconds });
+        this.log(`Updated delays: open=${openDelaySeconds}s, close=${closeDelaySeconds}s`);
+      }
+    } catch (error) {
+      this.errorReporter!.reportError({
+        errorId: ZoneSealErrorId.SETTINGS_UPDATE_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to apply settings. Check sensor configuration.',
+        technicalMessage: `Failed to update settings: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: {
+          deviceId: this.getData().id,
+          changedKeys: event.changedKeys,
+        },
+      });
+
+      await this.warningManager!.setWarning(
+        ZoneSealErrorId.SETTINGS_UPDATE_FAILED,
+        'Failed to apply settings. Check sensor configuration and try again.'
       );
-      const closeDelaySeconds = validateNumber(
-        event.newSettings.closeDelaySeconds,
-        0,
-        0,
-        300
-      );
 
-      this.engine?.updateConfig({ openDelaySeconds, closeDelaySeconds });
-      this.log(`Updated delays: open=${openDelaySeconds}s, close=${closeDelaySeconds}s`);
+      throw error; // Re-throw to show error in Homey settings UI
     }
   }
 
@@ -209,13 +278,37 @@ class WIABZoneSealDevice extends Homey.Device {
 
       this.log(`Configuring monitoring for ${this.contactSensors.length} contact sensors`);
 
-      // Get HomeyAPI instance from app
+      // Get HomeyAPI instance from app with retry logic
       const app = this.homey.app as WIABApp;
-      if (!app || !app.homeyApi) {
-        throw new Error('Homey API not available');
+
+      if (!this.retryManager) {
+        throw new Error('RetryManager not initialized');
       }
 
-      const homeyApi = app.homeyApi;
+      // Retry getting HomeyAPI (may not be ready during device initialization)
+      const homeyApiResult = await this.retryManager.retryWithBackoff(
+        async () => {
+          if (!app || !app.homeyApi) {
+            throw new Error('HomeyAPI not available');
+          }
+          return app.homeyApi;
+        },
+        'Wait for HomeyAPI availability',
+        {
+          maxAttempts: 5,
+          initialDelayMs: 1000,
+          maxDelayMs: 5000,
+          backoffMultiplier: 2,
+        }
+      );
+
+      if (!homeyApiResult.success) {
+        throw new Error(
+          `HomeyAPI not available after ${homeyApiResult.attempts} attempts: ${homeyApiResult.error?.message || 'Unknown error'}`
+        );
+      }
+
+      const homeyApi = homeyApiResult.value!;
 
       // Get stale timeout setting
       const staleContactMinutes = validateNumber(
@@ -299,8 +392,20 @@ class WIABZoneSealDevice extends Homey.Device {
 
       this.log('Sensor monitoring initialized successfully');
     } catch (error) {
-      this.error('Failed to setup sensor monitoring:', error);
-      // Don't throw - allow device to function in degraded mode
+      this.errorReporter!.reportError({
+        errorId: ZoneSealErrorId.SENSOR_MONITORING_SETUP_FAILED,
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'Cannot connect to sensors. Check device configuration.',
+        technicalMessage: `Failed to setup sensor monitoring: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: { deviceId: this.getData().id },
+      });
+
+      await this.warningManager!.setWarning(
+        ZoneSealErrorId.SENSOR_MONITORING_SETUP_FAILED,
+        'Cannot connect to sensors. Check device configuration in settings.'
+      );
+
+      throw error; // Re-throw to propagate to onInit or onSettings
     }
   }
 
@@ -415,7 +520,18 @@ class WIABZoneSealDevice extends Homey.Device {
       // Process the transition with previous state for redundancy check
       await this.processStateTransition(transition, previousState);
     } catch (error) {
-      this.error('Failed to handle sensor update:', error);
+      this.errorReporter!.reportError({
+        errorId: ZoneSealErrorId.SENSOR_UPDATE_HANDLER_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Sensor state update failed. Device may not respond to changes.',
+        technicalMessage: `Failed to handle sensor update: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: {
+          deviceId: this.getData().id,
+          engineState: this.engine?.getCurrentState(),
+        },
+      });
+
+      // Don't throw - sensor updates are frequent, continue monitoring
     }
   }
 
@@ -582,26 +698,25 @@ class WIABZoneSealDevice extends Homey.Device {
    * @returns {Promise<void>}
    */
   private async handleStateChanged(state: ZoneSealState): Promise<void> {
-    try {
-      const isLeaky = state !== ZoneSealState.SEALED;
+    const isLeaky = state !== ZoneSealState.SEALED;
 
-      // Trigger zone_status_changed with token
-      await this.homey.flow
-        .getDeviceTriggerCard('zone_status_changed')
-        .trigger(this, { is_leaky: isLeaky });
-      this.log(`Triggered zone_status_changed flow card: is_leaky=${isLeaky}`);
+    // Trigger zone_status_changed with token
+    await this.flowCardHandler!.triggerDeviceCard(
+      this,
+      'zone_status_changed',
+      { is_leaky: isLeaky },
+      ZoneSealErrorId.FLOW_CARD_TRIGGER_FAILED
+    );
 
-      // Trigger specific state flow card
-      if (isLeaky) {
-        await this.homey.flow.getDeviceTriggerCard('zone_leaky').trigger(this);
-        this.log('Triggered zone_leaky flow card');
-      } else {
-        await this.homey.flow.getDeviceTriggerCard('zone_sealed').trigger(this);
-        this.log('Triggered zone_sealed flow card');
-      }
-    } catch (error) {
-      this.error('Failed to trigger flow card:', error);
-    }
+    // Trigger specific state flow card
+    await this.flowCardHandler!.triggerConditionalCard(
+      this,
+      isLeaky,
+      'zone_leaky',
+      'zone_sealed',
+      {},
+      ZoneSealErrorId.FLOW_CARD_TRIGGER_FAILED
+    );
   }
 
   /**
@@ -691,8 +806,8 @@ class WIABZoneSealDevice extends Homey.Device {
 
         this.log(`Sensor became stale: ${sensor.deviceName || sensor.deviceId}`);
 
-        // Trigger sensor_became_stale flow card
-        this.triggerSensorBecameStale(sensor.deviceName || sensor.deviceId, sensor.deviceId);
+        // Trigger sensor_became_stale flow card (fire-and-forget)
+        void this.triggerSensorBecameStale(sensor.deviceName || sensor.deviceId, sensor.deviceId);
       }
     }
 
@@ -713,13 +828,13 @@ class WIABZoneSealDevice extends Homey.Device {
       (info) => info.isStale
     );
 
-    // Trigger stale_state_changed flow card
-    this.triggerStaleStateChanged(hasAnyStaleSensors);
+    // Trigger stale_state_changed flow card (fire-and-forget)
+    void this.triggerStaleStateChanged(hasAnyStaleSensors);
 
-    // If all sensors fresh, trigger stale_state_ended
+    // If all sensors fresh, trigger stale_state_ended (fire-and-forget)
     if (!hasAnyStaleSensors) {
       this.log('All sensors are now fresh');
-      this.triggerStaleStateEnded();
+      void this.triggerStaleStateEnded();
     }
   }
 
@@ -729,39 +844,33 @@ class WIABZoneSealDevice extends Homey.Device {
    * @private
    * @param deviceName - Name of the device
    * @param deviceId - ID of the device
-   * @returns {void}
+   * @returns {Promise<void>}
    */
-  private triggerSensorBecameStale(
+  private async triggerSensorBecameStale(
     deviceName: string,
     _deviceId: string
-  ): void {
-    this.homey.flow
-      .getDeviceTriggerCard('contact_stale')
-      .trigger(this, { sensor_name: deviceName })
-      .then(() => {
-        this.log(`Triggered contact_stale for ${deviceName}`);
-      })
-      .catch((error) => {
-        this.error('Failed to trigger contact_stale flow card:', error);
-      });
+  ): Promise<void> {
+    await this.flowCardHandler!.triggerDeviceCard(
+      this,
+      'contact_stale',
+      { sensor_name: deviceName },
+      ZoneSealErrorId.FLOW_CARD_TRIGGER_FAILED
+    );
   }
 
   /**
    * Triggers zone_no_stale_sensors flow card when all sensors become unstale.
    *
    * @private
-   * @returns {void}
+   * @returns {Promise<void>}
    */
-  private triggerStaleStateEnded(): void {
-    this.homey.flow
-      .getDeviceTriggerCard('zone_no_stale_sensors')
-      .trigger(this)
-      .then(() => {
-        this.log('Triggered zone_no_stale_sensors flow card');
-      })
-      .catch((error) => {
-        this.error('Failed to trigger zone_no_stale_sensors flow card:', error);
-      });
+  private async triggerStaleStateEnded(): Promise<void> {
+    await this.flowCardHandler!.triggerDeviceCard(
+      this,
+      'zone_no_stale_sensors',
+      {},
+      ZoneSealErrorId.FLOW_CARD_TRIGGER_FAILED
+    );
   }
 
   /**
@@ -769,18 +878,15 @@ class WIABZoneSealDevice extends Homey.Device {
    *
    * @private
    * @param hasStale - Whether any sensors are stale
-   * @returns {void}
+   * @returns {Promise<void>}
    */
-  private triggerStaleStateChanged(hasStale: boolean): void {
-    this.homey.flow
-      .getDeviceTriggerCard('stale_status_changed')
-      .trigger(this, { has_stale: hasStale })
-      .then(() => {
-        this.log(`Triggered stale_status_changed: has_stale=${hasStale}`);
-      })
-      .catch((error) => {
-        this.error('Failed to trigger stale_status_changed flow card:', error);
-      });
+  private async triggerStaleStateChanged(hasStale: boolean): Promise<void> {
+    await this.flowCardHandler!.triggerDeviceCard(
+      this,
+      'stale_status_changed',
+      { has_stale: hasStale },
+      ZoneSealErrorId.FLOW_CARD_TRIGGER_FAILED
+    );
   }
 
   /**
@@ -841,48 +947,31 @@ class WIABZoneSealDevice extends Homey.Device {
    * @returns {void}
    */
   private registerFlowCardHandlers(): void {
-    try {
-      // Register is_zone_leaky condition handler
-      const isLeakyCard = this.homey.flow.getConditionCard('is_zone_leaky');
-      if (isLeakyCard) {
-        isLeakyCard.registerRunListener(
-          async (args: { device: WIABZoneSealDevice }): Promise<boolean> => {
-            try {
-              const leaky = args.device.getCapabilityValue('alarm_zone_leaky') as boolean;
-              args.device.log(`is_zone_leaky condition evaluated: ${leaky}`);
-              return leaky;
-            } catch (error) {
-              args.device.error('is_zone_leaky condition evaluation failed:', error);
-              throw error;
-            }
-          }
-        );
-        this.log('Registered is_zone_leaky condition handler');
-      }
+    // Register is_zone_leaky condition handler
+    this.flowCardHandler!.registerConditionCard(
+      'is_zone_leaky',
+      async (args: { device: Homey.Device }): Promise<boolean> => {
+        const device = args.device as WIABZoneSealDevice;
+        const leaky = device.getCapabilityValue('alarm_zone_leaky') as boolean;
+        device.log(`is_zone_leaky condition evaluated: ${leaky}`);
+        return leaky;
+      },
+      ZoneSealErrorId.FLOW_CARD_REGISTRATION_FAILED
+    );
 
-      // Register has_stale_sensor condition handler
-      const hasStaleSensorCard = this.homey.flow.getConditionCard('has_stale_sensor');
-      if (hasStaleSensorCard) {
-        hasStaleSensorCard.registerRunListener(
-          async (args: { device: WIABZoneSealDevice }): Promise<boolean> => {
-            try {
-              const hasStale = args.device.hasAnyStaleSensors();
-              args.device.log(`has_stale_sensor condition evaluated: ${hasStale}`);
-              return hasStale;
-            } catch (error) {
-              args.device.error('has_stale_sensor condition evaluation failed:', error);
-              throw error;
-            }
-          }
-        );
-        this.log('Registered has_stale_sensor condition handler');
-      }
+    // Register has_stale_sensor condition handler
+    this.flowCardHandler!.registerConditionCard(
+      'has_stale_sensor',
+      async (args: { device: Homey.Device }): Promise<boolean> => {
+        const device = args.device as WIABZoneSealDevice;
+        const hasStale = device.hasAnyStaleSensors();
+        device.log(`has_stale_sensor condition evaluated: ${hasStale}`);
+        return hasStale;
+      },
+      ZoneSealErrorId.FLOW_CARD_REGISTRATION_FAILED
+    );
 
-      this.log('Flow card handlers registered successfully');
-    } catch (error) {
-      this.error('Failed to register flow card handlers:', error);
-      throw error;
-    }
+    this.log('Flow card handlers registered successfully');
   }
 }
 

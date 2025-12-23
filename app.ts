@@ -1,6 +1,7 @@
 import Homey from 'homey';
 import { HomeyAPI } from 'homey-api';
 import { DeviceResponse } from './lib/types';
+import { RetryManager } from './lib/RetryManager';
 
 /**
  * Main application coordinator for the WIAB (Wasp in a Box) Homey app.
@@ -25,21 +26,34 @@ class WIABApp extends Homey.App {
    * Called by the Homey framework when the app is loaded. This method is responsible
    * for any app-level initialization tasks including setting up the HomeyAPI client
    * that allows access to all devices across all apps on the Homey system.
+   *
+   * Uses RetryManager with exponential backoff to handle transient initialization
+   * failures (e.g., network issues, temporary API unavailability).
    */
   async onInit(): Promise<void> {
     this.log('WIAB app initializing...');
 
-    try {
-      // Initialize HomeyAPI client to access all devices on Homey
-      this.homeyApi = await HomeyAPI.createAppAPI({
-        homey: this.homey,
-      });
-      this.log('HomeyAPI client initialized successfully');
-    } catch (error) {
-      this.error('Failed to initialize HomeyAPI client:', error);
-      throw error;
+    // Initialize retry manager for HomeyAPI initialization
+    const retryManager = new RetryManager(this);
+
+    // Retry HomeyAPI initialization with exponential backoff
+    const result = await retryManager.retryWithBackoff(
+      () => HomeyAPI.createAppAPI({ homey: this.homey }),
+      'Initialize HomeyAPI client',
+      {
+        maxAttempts: 5,
+        initialDelayMs: 2000,
+        maxDelayMs: 10000,
+        backoffMultiplier: 2,
+      }
+    );
+
+    if (!result.success) {
+      this.error('Failed to initialize HomeyAPI client after retries:', result.error);
+      throw result.error || new Error('HomeyAPI initialization failed');
     }
 
+    this.homeyApi = result.value!;
     this.log('WIAB app has been initialized');
   }
 
