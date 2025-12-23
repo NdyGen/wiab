@@ -150,7 +150,7 @@ class WIABZoneSealDriver extends Homey.Driver {
      * Handler for fetching contact devices.
      * Returns all devices with alarm_contact capability.
      */
-    session.setHandler('get_contact_devices', async () => {
+    session.setHandler('get_contact_devices', async (): Promise<PairingDeviceConfig[]> => {
       try {
         return await this.getContactDevices();
       } catch (error) {
@@ -185,7 +185,7 @@ class WIABZoneSealDriver extends Homey.Driver {
      */
     session.setHandler(
       'select_contact_sensors',
-      async (devices: PairingDeviceConfig[]) => {
+      async (devices: PairingDeviceConfig[]): Promise<{ success: boolean }> => {
         this.log('Contact sensors selected:', devices);
         contactSensors = devices || [];
         return { success: true };
@@ -196,7 +196,7 @@ class WIABZoneSealDriver extends Homey.Driver {
      * Handler for device listing.
      * Creates a virtual device with the selected sensor configuration.
      */
-    session.setHandler('list_devices', async () => {
+    session.setHandler('list_devices', async (): Promise<Array<{ name: string; data: { id: string }; settings: Record<string, unknown> }>> => {
       this.log('Creating Zone Seal device with selected sensors');
       this.log(`Contact sensors: ${contactSensors.length}`);
 
