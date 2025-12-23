@@ -1,0 +1,29 @@
+{
+  "title": {
+    "en": "Contact sensor became stale",
+    "nl": "Contactsensor is verlopen",
+    "de": "Kontaktsensor wurde veraltet",
+    "no": "Kontaktsensor ble foreldet",
+    "sv": "Kontaktsensor blev föråldrad"
+  },
+  "hint": {
+    "en": "Triggered when a contact sensor hasn't updated for the configured timeout period",
+    "nl": "Geactiveerd wanneer een contactsensor niet is bijgewerkt gedurende de geconfigureerde time-outperiode",
+    "de": "Ausgelöst, wenn ein Kontaktsensor für die konfigurierte Timeout-Periode nicht aktualisiert wurde",
+    "no": "Utløst når en kontaktsensor ikke har oppdatert for den konfigurerte tidsavbruddsperioden",
+    "sv": "Utlöses när en kontaktsensor inte har uppdaterats under den konfigurerade timeout-perioden"
+  },
+  "tokens": [
+    {
+      "name": "sensor_name",
+      "type": "string",
+      "title": {
+        "en": "Sensor name",
+        "nl": "Sensornaam",
+        "de": "Sensorname",
+        "no": "Sensornavn",
+        "sv": "Sensornamn"
+      }
+    }
+  ]
+}

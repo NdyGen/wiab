@@ -1,0 +1,99 @@
+[
+  {
+    "id": "contactSensors",
+    "type": "textarea",
+    "label": {
+      "en": "Contact Sensors",
+      "nl": "Contactsensoren",
+      "de": "Kontaktsensoren",
+      "no": "Kontaktsensorer",
+      "sv": "Kontaktsensorer"
+    },
+    "hint": {
+      "en": "Door and window contact sensors that define the zone seal (JSON array, configured during pairing)",
+      "nl": "Deur- en raamcontactsensoren die de zone-afdichting definiëren (JSON array, geconfigureerd tijdens koppeling)",
+      "de": "Tür- und Fensterkontaktsensoren, die die Zonenversiegelung definieren (JSON-Array, konfiguriert während der Kopplung)",
+      "no": "Dør- og vinduskontaktsensorer som definerer soneforseglingen (JSON-array, konfigurert under paring)",
+      "sv": "Dörr- och fönsterkontaktsensorer som definierar zonförseglingen (JSON-array, konfigurerad vid parkoppling)"
+    },
+    "value": "[]"
+  },
+  {
+    "type": "group",
+    "label": {
+      "en": "Delay Settings",
+      "nl": "Vertragingsinstellingen",
+      "de": "Verzögerungseinstellungen",
+      "no": "Forsinkelsesinnstillinger",
+      "sv": "Fördröjningsinställningar"
+    },
+    "children": [
+      {
+        "id": "openDelaySeconds",
+        "type": "number",
+        "label": {
+          "en": "Open delay (seconds)",
+          "nl": "Open vertraging (seconden)",
+          "de": "Öffnungsverzögerung (Sekunden)",
+          "no": "Åpen forsinkelse (sekunder)",
+          "sv": "Öppen fördröjning (sekunder)"
+        },
+        "hint": {
+          "en": "Wait this long after a sensor opens before marking the zone as leaky. Set to 0 for instant detection.",
+          "nl": "Wacht zo lang nadat een sensor opent voordat de zone als lek wordt gemarkeerd. Stel in op 0 voor directe detectie.",
+          "de": "Warten Sie so lange, nachdem ein Sensor geöffnet wurde, bevor die Zone als undicht markiert wird. Auf 0 setzen für sofortige Erkennung.",
+          "no": "Vent så lenge etter at en sensor åpnes før sonen markeres som lekkende. Sett til 0 for øyeblikkelig deteksjon.",
+          "sv": "Vänta så länge efter att en sensor öppnas innan zonen markeras som läckande. Ställ in på 0 för omedelbar detektering."
+        },
+        "value": 0,
+        "min": 0,
+        "max": 300,
+        "step": 1
+      },
+      {
+        "id": "closeDelaySeconds",
+        "type": "number",
+        "label": {
+          "en": "Close delay (seconds)",
+          "nl": "Sluit vertraging (seconden)",
+          "de": "Schließverzögerung (Sekunden)",
+          "no": "Lukke forsinkelse (sekunder)",
+          "sv": "Stängd fördröjning (sekunder)"
+        },
+        "hint": {
+          "en": "Wait this long after all sensors close before marking the zone as sealed. Set to 0 for instant detection.",
+          "nl": "Wacht zo lang nadat alle sensoren sluiten voordat de zone als verzegeld wordt gemarkeerd. Stel in op 0 voor directe detectie.",
+          "de": "Warten Sie so lange, nachdem alle Sensoren geschlossen wurden, bevor die Zone als versiegelt markiert wird. Auf 0 setzen für sofortige Erkennung.",
+          "no": "Vent så lenge etter at alle sensorer lukkes før sonen markeres som forseglet. Sett til 0 for øyeblikkelig deteksjon.",
+          "sv": "Vänta så länge efter att alla sensorer stängs innan zonen markeras som förseglad. Ställ in på 0 för omedelbar detektering."
+        },
+        "value": 0,
+        "min": 0,
+        "max": 300,
+        "step": 1
+      },
+      {
+        "id": "staleContactMinutes",
+        "type": "number",
+        "label": {
+          "en": "Stale contact timeout (minutes)",
+          "nl": "Verlopen contact timeout (minuten)",
+          "de": "Veralteter Kontakt-Timeout (Minuten)",
+          "no": "Foreldet kontakt timeout (minutter)",
+          "sv": "Föråldrad kontakt timeout (minuter)"
+        },
+        "hint": {
+          "en": "Mark contact sensors as stale if they report the same state for longer than this. Stale sensors are excluded from seal calculations.",
+          "nl": "Markeer contactsensoren als verlopen als ze langer dan dit dezelfde status rapporteren. Verlopen sensoren worden uitgesloten van afdichtingsberekeningen.",
+          "de": "Markieren Sie Kontaktsensoren als veraltet, wenn sie länger als dies denselben Zustand melden. Veraltete Sensoren werden von Versiegelungsberechnungen ausgeschlossen.",
+          "no": "Merk kontaktsensorer som foreldede hvis de rapporterer samme tilstand lenger enn dette. Foreldede sensorer er ekskludert fra forseglingskalkuleringer.",
+          "sv": "Markera kontaktsensorer som föråldrade om de rapporterar samma tillstånd längre än detta. Föråldrade sensorer är uteslutna från förseglingskalkuleringer."
+        },
+        "value": 30,
+        "min": 5,
+        "max": 120,
+        "step": 1
+      }
+    ]
+  }
+]

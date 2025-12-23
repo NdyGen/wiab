@@ -1,0 +1,29 @@
+{
+  "title": {
+    "en": "Contact sensor became active",
+    "nl": "Contactsensor is actief geworden",
+    "de": "Kontaktsensor wurde aktiv",
+    "no": "Kontaktsensor ble aktiv",
+    "sv": "Kontaktsensor blev aktiv"
+  },
+  "hint": {
+    "en": "Triggered when a stale contact sensor becomes active again by updating its state",
+    "nl": "Geactiveerd wanneer een verlopen contactsensor weer actief wordt door zijn status bij te werken",
+    "de": "Ausgelöst, wenn ein veralteter Kontaktsensor durch Aktualisierung seines Zustands wieder aktiv wird",
+    "no": "Utløst når en foreldet kontaktsensor blir aktiv igjen ved å oppdatere sin tilstand",
+    "sv": "Utlöses när en föråldrad kontaktsensor blir aktiv igen genom att uppdatera sitt tillstånd"
+  },
+  "tokens": [
+    {
+      "name": "sensor_name",
+      "type": "string",
+      "title": {
+        "en": "Sensor name",
+        "nl": "Sensornaam",
+        "de": "Sensorname",
+        "no": "Sensornavn",
+        "sv": "Sensornamn"
+      }
+    }
+  ]
+}

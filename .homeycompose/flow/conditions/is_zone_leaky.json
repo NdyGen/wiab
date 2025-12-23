@@ -1,0 +1,16 @@
+{
+  "title": {
+    "en": "Zone !{{is|is not}} leaky",
+    "nl": "Zone !{{is|is niet}} lek",
+    "de": "Zone !{{ist|ist nicht}} undicht",
+    "no": "Sone !{{er|er ikke}} lekkende",
+    "sv": "Zon !{{är|är inte}} läckande"
+  },
+  "hint": {
+    "en": "Returns true when one or more contact sensors are open (zone leaky)",
+    "nl": "Retourneert waar wanneer een of meer contactsensoren open zijn (zone lek)",
+    "de": "Gibt wahr zurück, wenn ein oder mehrere Kontaktsensoren offen sind (Zone undicht)",
+    "no": "Returnerer sant når en eller flere kontaktsensorer er åpne (sone lekkende)",
+    "sv": "Returnerar sant när en eller flera kontaktsensorer är öppna (zon läckande)"
+  }
+}
