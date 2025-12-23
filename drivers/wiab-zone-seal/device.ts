@@ -684,7 +684,17 @@ class WIABZoneSealDevice extends Homey.Device {
 
       this.log(`Zone seal state updated to: ${state} (sealed: ${isSealed})`);
     } catch (error) {
-      this.error('Failed to update zone seal state:', error);
+      this.errorReporter!.reportError({
+        errorId: ZoneSealErrorId.STATE_UPDATE_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to update zone state. Device may be out of sync.',
+        technicalMessage: `Failed to update zone seal state to ${state}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: { deviceId: this.getData().id, targetState: state },
+      });
+      await this.warningManager!.setWarning(
+        ZoneSealErrorId.STATE_UPDATE_FAILED,
+        'Failed to update zone state. Device may be out of sync with sensor states.'
+      );
     }
   }
 
