@@ -749,7 +749,17 @@ class RoomStateDevice extends Homey.Device {
       // Set initial state value
       const currentState = this.stateEngine.getCurrentState();
       await this.setCapabilityValue('room_state', currentState);
-      this.log(`Capability initialized with state: ${currentState}`);
+
+      // Add alarm_room_occupied capability if it doesn't exist (migration)
+      if (!this.hasCapability('alarm_room_occupied')) {
+        await this.addCapability('alarm_room_occupied');
+      }
+
+      // Set initial occupancy indicator
+      const occupied = this.computeOccupancyIndicator(currentState);
+      await this.setCapabilityValue('alarm_room_occupied', occupied);
+
+      this.log(`Capabilities initialized: state=${currentState}, occupied=${occupied}`);
     } catch (error) {
       this.error('Failed to initialize capabilities:', error);
     }
@@ -766,10 +776,29 @@ class RoomStateDevice extends Homey.Device {
     try {
       // Update room_state capability
       await this.setCapabilityValue('room_state', newState);
-      this.log(`State capability updated to: ${newState}`);
+
+      // Update occupancy indicator alarm
+      const occupied = this.computeOccupancyIndicator(newState);
+      await this.setCapabilityValue('alarm_room_occupied', occupied);
+
+      this.log(`Capabilities updated: state=${newState}, occupied=${occupied}`);
     } catch (error) {
       this.error('Failed to update capabilities:', error);
     }
+  }
+
+  /**
+   * Computes occupancy indicator state from current room state.
+   *
+   * The alarm capability pulses when true, providing visual feedback
+   * that the room is currently in an occupied state.
+   *
+   * @param stateId - Current room state ID
+   * @returns True if state is occupied or extended_occupied
+   * @private
+   */
+  private computeOccupancyIndicator(stateId: string): boolean {
+    return stateId === 'occupied' || stateId === 'extended_occupied';
   }
 
   /**
