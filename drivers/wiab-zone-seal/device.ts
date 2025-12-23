@@ -559,7 +559,7 @@ class WIABZoneSealDevice extends Homey.Device {
   /**
    * Handles zone seal state change.
    *
-   * Triggers the zone_seal_changed flow card with sealed token.
+   * Triggers the appropriate flow card based on state.
    *
    * @private
    * @param state - New zone seal state
@@ -569,14 +569,16 @@ class WIABZoneSealDevice extends Homey.Device {
     try {
       const isSealed = state === ZoneSealState.SEALED;
 
-      // Trigger zone_seal_changed flow card
-      await this.homey.flow
-        .getDeviceTriggerCard('zone_seal_changed')
-        .trigger(this, { sealed: isSealed });
-
-      this.log(`Triggered zone_seal_changed: sealed=${isSealed}`);
+      // Trigger appropriate flow card
+      if (isSealed) {
+        await this.homey.flow.getDeviceTriggerCard('zone_sealed').trigger(this);
+        this.log('Triggered zone_sealed flow card');
+      } else {
+        await this.homey.flow.getDeviceTriggerCard('zone_leaky').trigger(this);
+        this.log('Triggered zone_leaky flow card');
+      }
     } catch (error) {
-      this.error('Failed to trigger zone_seal_changed flow card:', error);
+      this.error('Failed to trigger flow card:', error);
     }
   }
 
