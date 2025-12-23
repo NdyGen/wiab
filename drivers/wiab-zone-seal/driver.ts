@@ -1,5 +1,8 @@
 import Homey from 'homey';
 import { HomeyAPI, HomeyAPIDevice, PairingDeviceConfig } from '../../lib/types';
+import { ErrorReporter } from '../../lib/ErrorReporter';
+import { ZoneSealErrorId, PairingErrorId } from '../../constants/errorIds';
+import { ErrorSeverity } from '../../lib/ErrorTypes';
 
 /**
  * Interface for WIABApp with HomeyAPI
@@ -28,16 +31,18 @@ interface WIABApp extends Homey.App {
  * @extends {Homey.Driver}
  */
 class WIABZoneSealDriver extends Homey.Driver {
+  private errorReporter!: ErrorReporter;
+
   /**
    * Initializes the WIAB Zone Seal driver.
    *
    * Called by the Homey framework when the driver is loaded. This method performs
-   * any driver-level initialization tasks. Currently, it only logs the initialization
-   * event, as device-specific logic is handled in the device class itself.
+   * any driver-level initialization tasks. Initializes the error reporting utilities.
    *
    * @returns {Promise<void>}
    */
   async onInit(): Promise<void> {
+    this.errorReporter = new ErrorReporter(this);
     this.log('WIAB Zone Seal driver has been initialized');
   }
 
@@ -73,7 +78,16 @@ class WIABZoneSealDriver extends Homey.Driver {
       this.log(`Device ${device.name} is in zone: ${zone.name}`);
       return zone.name;
     } catch (error) {
-      this.log(`Could not retrieve zone for device ${device.name}:`, error);
+      this.errorReporter.reportError({
+        errorId: ZoneSealErrorId.ZONE_NAME_RETRIEVAL_FAILED,
+        severity: ErrorSeverity.LOW,
+        userMessage: 'Cannot access device zones. Some devices may not display zone information.',
+        technicalMessage: `Failed to retrieve zone for device ${device.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: {
+          deviceName: device.name,
+          deviceZone: this.hasZoneProperty(device) ? device.zone : undefined,
+        },
+      });
       return null;
     }
   }
@@ -154,29 +168,23 @@ class WIABZoneSealDriver extends Homey.Driver {
       try {
         return await this.getContactDevices();
       } catch (error) {
-        this.error('Error fetching contact devices:', error);
+        // Get user-friendly error message from ErrorReporter
+        const userMessage = this.errorReporter.getUserMessage(
+          error,
+          PairingErrorId.CONTACT_DEVICES_FETCH_FAILED,
+          'Failed to fetch contact sensors. Please try again.'
+        );
 
-        if (error instanceof Error) {
-          if (error.message === 'Homey API not available') {
-            throw new Error(
-              'The app is still initializing. Please wait a moment and try again.'
-            );
-          }
+        // Report error with structured logging
+        this.errorReporter.reportError({
+          errorId: PairingErrorId.CONTACT_DEVICES_FETCH_FAILED,
+          severity: ErrorSeverity.HIGH,
+          userMessage: userMessage,
+          technicalMessage: `Failed to fetch contact devices during pairing: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        });
 
-          if (error.message.includes('timeout')) {
-            throw new Error(
-              'Request timed out. Please check your network connection and try again.'
-            );
-          }
-
-          if (error.message.includes('permission')) {
-            throw new Error(
-              'Permission denied. Please check app permissions in Homey settings.'
-            );
-          }
-        }
-
-        throw new Error('Failed to fetch contact sensors. Please try again.');
+        // Throw user-friendly error for pairing UI
+        throw new Error(userMessage);
       }
     });
 

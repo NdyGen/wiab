@@ -72,6 +72,9 @@ describe('WIABZoneSealDevice - Integration', () => {
       };
       return settings[key];
     });
+    device.getData = jest.fn().mockReturnValue({ id: 'test-device-123' });
+    device.setWarning = jest.fn().mockResolvedValue(undefined);
+    device.unsetWarning = jest.fn().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -628,15 +631,21 @@ describe('WIABZoneSealDevice - Integration', () => {
         return undefined;
       });
 
-      // Act
-      await device.onInit();
+      // Act - initiate onInit
+      const initPromise = device.onInit();
 
-      // Assert - should not throw, but log error
-      expect(device.error).toHaveBeenCalledWith(
-        'Failed to setup sensor monitoring:',
-        expect.any(Error)
-      );
-    });
+      // Advance through retry delays (RetryManager: 1s, 2s, 4s, 5s, 5s)
+      await jest.advanceTimersByTimeAsync(1000);
+      await jest.advanceTimersByTimeAsync(2000);
+      await jest.advanceTimersByTimeAsync(4000);
+      await jest.advanceTimersByTimeAsync(5000);
+      await jest.advanceTimersByTimeAsync(5000);
+
+      await initPromise;
+
+      // Assert - should set warning after retries exhausted
+      expect(device.setWarning).toHaveBeenCalled();
+    }, 30000);
 
     it('should handle invalid sensor settings JSON gracefully', async () => {
       // Arrange

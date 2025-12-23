@@ -147,3 +147,46 @@ export enum RoomStateErrorId {
   /** Invalid state configuration in settings */
   INVALID_STATE_CONFIG = 'ROOM_STATE_008',
 }
+
+/**
+ * Error ID constants for tracking and monitoring zone seal device errors.
+ *
+ * These IDs enable error aggregation, filtering, and analysis in logs.
+ * Each error should be logged with its corresponding ID for traceability.
+ *
+ * @example
+ * ```typescript
+ * this.error(
+ *   `[${ZoneSealErrorId.DEVICE_INIT_FAILED}] Failed to initialize device`,
+ *   error
+ * );
+ * ```
+ */
+export enum ZoneSealErrorId {
+  /** Failed to initialize device (onInit) */
+  DEVICE_INIT_FAILED = 'ZONE_SEAL_001',
+
+  /** Failed to setup sensor monitoring */
+  SENSOR_MONITORING_SETUP_FAILED = 'ZONE_SEAL_002',
+
+  /** Failed to handle sensor update */
+  SENSOR_UPDATE_HANDLER_FAILED = 'ZONE_SEAL_003',
+
+  /** Failed to trigger flow card */
+  FLOW_CARD_TRIGGER_FAILED = 'ZONE_SEAL_004',
+
+  /** Zone name retrieval failed (driver) */
+  ZONE_NAME_RETRIEVAL_FAILED = 'ZONE_SEAL_005',
+
+  /** Pairing handler error */
+  PAIRING_HANDLER_FAILED = 'ZONE_SEAL_006',
+
+  /** Settings update failed */
+  SETTINGS_UPDATE_FAILED = 'ZONE_SEAL_007',
+
+  /** State update failed */
+  STATE_UPDATE_FAILED = 'ZONE_SEAL_008',
+
+  /** Flow card registration failed */
+  FLOW_CARD_REGISTRATION_FAILED = 'ZONE_SEAL_009',
+}
