@@ -4,7 +4,6 @@ import {
   HomeyAPI,
   HomeyAPIDevice,
   ZoneSealState,
-  CapabilityUpdate,
 } from '../../lib/types';
 import { ContactSensorAggregator } from '../../lib/ContactSensorAggregator';
 import { ZoneSealEngine, StateTransition } from '../../lib/ZoneSealEngine';
@@ -87,6 +86,12 @@ class WIABZoneSealDevice extends Homey.Device {
     this.log('WIAB Zone Seal device initializing');
 
     try {
+      // Add alarm capability if it doesn't exist (for existing devices)
+      if (!this.hasCapability('alarm_zone_leaky')) {
+        this.log('Adding alarm_zone_leaky capability to existing device');
+        await this.addCapability('alarm_zone_leaky');
+      }
+
       // Setup sensor monitoring with current settings
       await this.setupSensorMonitoring();
 
