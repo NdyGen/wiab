@@ -8,21 +8,8 @@
   },
   "class": "sensor",
   "capabilities": [
-    "alarm_zone_leaky",
-    "zone_sealed"
+    "alarm_zone_leaky"
   ],
-  "capabilitiesOptions": {
-    "zone_sealed": {
-      "title": {
-        "en": "Sealed",
-        "nl": "Verzegeld",
-        "de": "Versiegelt",
-        "no": "Forseglet",
-        "sv": "Förseglad"
-      },
-      "showTitle": true
-    }
-  },
   "platforms": [
     "local"
   ],

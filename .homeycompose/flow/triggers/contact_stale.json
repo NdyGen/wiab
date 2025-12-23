@@ -25,5 +25,12 @@
         "sv": "Sensornamn"
       }
     }
+  ],
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab-zone-seal"
+    }
   ]
 }

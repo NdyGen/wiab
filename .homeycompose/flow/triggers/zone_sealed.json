@@ -12,5 +12,12 @@
     "de": "Ausgelöst, wenn alle Kontaktsensoren geschlossen sind (Zone versiegelt)",
     "no": "Utløst når alle kontaktsensorer er lukket (sone forseglet)",
     "sv": "Utlöses när alla kontaktsensorer är stängda (zon förseglad)"
-  }
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab-zone-seal"
+    }
+  ]
 }

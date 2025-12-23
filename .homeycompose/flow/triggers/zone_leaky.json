@@ -12,5 +12,12 @@
     "de": "Ausgelöst, wenn ein oder mehrere Kontaktsensoren offen sind (Zone undicht)",
     "no": "Utløst når en eller flere kontaktsensorer er åpne (sone lekkende)",
     "sv": "Utlöses när en eller flera kontaktsensorer är öppna (zon läckande)"
-  }
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab-zone-seal"
+    }
+  ]
 }

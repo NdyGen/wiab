@@ -86,12 +86,6 @@ class WIABZoneSealDevice extends Homey.Device {
     this.log('WIAB Zone Seal device initializing');
 
     try {
-      // Add alarm capability if it doesn't exist (for existing devices)
-      if (!this.hasCapability('alarm_zone_leaky')) {
-        this.log('Adding alarm_zone_leaky capability to existing device');
-        await this.addCapability('alarm_zone_leaky');
-      }
-
       // Setup sensor monitoring with current settings
       await this.setupSensorMonitoring();
 
@@ -209,7 +203,6 @@ class WIABZoneSealDevice extends Homey.Device {
       if (this.contactSensors.length === 0) {
         this.log('No contact sensors configured, device in idle state');
         // Set sealed state (no sensors = no openings)
-        await this.setCapabilityValue('zone_sealed', true);
         await this.setCapabilityValue('alarm_zone_leaky', false);
         return;
       }
@@ -291,7 +284,6 @@ class WIABZoneSealDevice extends Homey.Device {
       );
 
       // Set initial capability values
-      await this.setCapabilityValue('zone_sealed', initiallySealed);
       await this.setCapabilityValue('alarm_zone_leaky', !initiallySealed);
 
       // Register WebSocket listeners for all contact sensors
@@ -553,7 +545,6 @@ class WIABZoneSealDevice extends Homey.Device {
 
       // Determine boolean sealed value
       const isSealed = state === ZoneSealState.SEALED;
-      await this.setCapabilityValue('zone_sealed', isSealed);
       await this.setCapabilityValue('alarm_zone_leaky', !isSealed);
 
       // Trigger state change flow card
@@ -902,7 +893,8 @@ class WIABZoneSealDevice extends Homey.Device {
         isSealedCard.registerRunListener(
           async (args: { device: WIABZoneSealDevice }): Promise<boolean> => {
             try {
-              const sealed = args.device.getCapabilityValue('zone_sealed') as boolean;
+              const leaky = args.device.getCapabilityValue('alarm_zone_leaky') as boolean;
+              const sealed = !leaky;
               args.device.log(`is_zone_sealed condition evaluated: ${sealed}`);
               return sealed;
             } catch (error) {
@@ -920,9 +912,7 @@ class WIABZoneSealDevice extends Homey.Device {
         isLeakyCard.registerRunListener(
           async (args: { device: WIABZoneSealDevice }): Promise<boolean> => {
             try {
-              // Zone is leaky when zone_sealed is false
-              const sealed = args.device.getCapabilityValue('zone_sealed') as boolean;
-              const leaky = !sealed;
+              const leaky = args.device.getCapabilityValue('alarm_zone_leaky') as boolean;
               args.device.log(`is_zone_leaky condition evaluated: ${leaky}`);
               return leaky;
             } catch (error) {

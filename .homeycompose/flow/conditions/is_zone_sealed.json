@@ -12,5 +12,12 @@
     "de": "Gibt wahr zurück, wenn alle Kontaktsensoren geschlossen sind (Zone versiegelt)",
     "no": "Returnerer sant når alle kontaktsensorer er lukket (sone forseglet)",
     "sv": "Returnerar sant när alla kontaktsensorer är stängda (zon förseglad)"
-  }
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab-zone-seal"
+    }
+  ]
 }

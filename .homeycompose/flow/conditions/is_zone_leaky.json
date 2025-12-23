@@ -12,5 +12,12 @@
     "de": "Gibt wahr zurück, wenn ein oder mehrere Kontaktsensoren offen sind (Zone undicht)",
     "no": "Returnerer sant når en eller flere kontaktsensorer er åpne (sone lekkende)",
     "sv": "Returnerar sant när en eller flera kontaktsensorer är öppna (zon läckande)"
-  }
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab-zone-seal"
+    }
+  ]
 }
