@@ -29,11 +29,11 @@ class RoomStateDriver extends Homey.Driver {
     const setStateAction = this.homey.flow.getActionCard('set_room_state');
     if (setStateAction) {
       // Register autocomplete for state selection
-      setStateAction.registerArgumentAutocompleteListener('state', async () => {
+      setStateAction.registerArgumentAutocompleteListener('state', async (): Promise<Array<{ id: string; name: string }>> => {
         return this.getAvailableStates();
       });
 
-      setStateAction.registerRunListener(async (args) => {
+      setStateAction.registerRunListener(async (args): Promise<boolean> => {
         const device = args.device;
         const targetState = args.state.id || args.state;
 
@@ -51,7 +51,7 @@ class RoomStateDriver extends Homey.Driver {
     // Action: Return to automatic mode
     const returnAutoAction = this.homey.flow.getActionCard('return_to_automatic');
     if (returnAutoAction) {
-      returnAutoAction.registerRunListener(async (args) => {
+      returnAutoAction.registerRunListener(async (args): Promise<boolean> => {
         const device = args.device;
 
         this.log('Flow action: Return to automatic mode');
@@ -69,11 +69,11 @@ class RoomStateDriver extends Homey.Driver {
     const isStateCondition = this.homey.flow.getConditionCard('is_in_state');
     if (isStateCondition) {
       // Register autocomplete for state selection
-      isStateCondition.registerArgumentAutocompleteListener('state', async () => {
+      isStateCondition.registerArgumentAutocompleteListener('state', async (): Promise<Array<{ id: string; name: string }>> => {
         return this.getAvailableStates();
       });
 
-      isStateCondition.registerRunListener(async (args) => {
+      isStateCondition.registerRunListener(async (args): Promise<boolean> => {
         const device = args.device;
         const targetState = args.state.id || args.state;
 
@@ -92,11 +92,11 @@ class RoomStateDriver extends Homey.Driver {
     const isExactlyStateCondition = this.homey.flow.getConditionCard('is_exactly_state');
     if (isExactlyStateCondition) {
       // Register autocomplete for state selection
-      isExactlyStateCondition.registerArgumentAutocompleteListener('state', async () => {
+      isExactlyStateCondition.registerArgumentAutocompleteListener('state', async (): Promise<Array<{ id: string; name: string }>> => {
         return this.getAvailableStates();
       });
 
-      isExactlyStateCondition.registerRunListener(async (args) => {
+      isExactlyStateCondition.registerRunListener(async (args): Promise<boolean> => {
         const device = args.device;
         const targetState = args.state.id || args.state;
 
@@ -114,7 +114,7 @@ class RoomStateDriver extends Homey.Driver {
     // Condition: Is manual override active
     const isManualCondition = this.homey.flow.getConditionCard('is_manual_override');
     if (isManualCondition) {
-      isManualCondition.registerRunListener(async (args) => {
+      isManualCondition.registerRunListener(async (args): Promise<boolean> => {
         const device = args.device;
 
         this.log('Flow condition: Is manual override active?');
@@ -213,14 +213,14 @@ class RoomStateDriver extends Homey.Driver {
     };
 
     // Handle timer configuration from pairing page
-    session.setHandler('set_timers', async (data: { idleTimeout: number; occupiedTimeout: number }) => {
+    session.setHandler('set_timers', async (data: { idleTimeout: number; occupiedTimeout: number }): Promise<void> => {
       pairingData.idleTimeout = data.idleTimeout;
       pairingData.occupiedTimeout = data.occupiedTimeout;
       this.log('Timers configured:', data);
     });
 
     // Handler for list_devices - returns device with pairing data
-    session.setHandler('list_devices', async () => {
+    session.setHandler('list_devices', async (): Promise<Array<{ name: string; data: { id: string }; settings: Record<string, unknown> }>> => {
       return [
         {
           name: 'Room State Manager',
