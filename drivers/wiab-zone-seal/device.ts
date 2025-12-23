@@ -759,7 +759,7 @@ class WIABZoneSealDevice extends Homey.Device {
    */
   private async triggerSensorBecameStale(
     deviceName: string,
-    deviceId: string
+    _deviceId: string
   ): Promise<void> {
     try {
       await this.homey.flow
