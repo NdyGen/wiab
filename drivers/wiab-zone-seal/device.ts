@@ -335,7 +335,8 @@ class WIABZoneSealDevice extends Homey.Device {
       this.handleSensorUpdate();
     };
 
-    // Create capability instance using makeCapabilityInstance
+    // Subscribe to capability changes via WebSocket using makeCapabilityInstance
+    // Returns listener reference for cleanup during teardown
     const extendedDevice = device as unknown as {
       makeCapabilityInstance?: (capability: string, callback: (value: boolean) => void) => unknown;
     };
@@ -371,25 +372,30 @@ class WIABZoneSealDevice extends Homey.Device {
         return;
       }
 
-      // Filter out stale sensors from consideration
-      const nonStaleSensors = this.contactSensors.filter((sensor) => {
-        const info = this.staleSensorMap.get(sensor.deviceId);
-        return info && !info.isStale;
-      });
-
-      // If all sensors are stale, treat as all closed (sealed)
-      if (nonStaleSensors.length === 0) {
-        this.log('All sensors are stale, treating zone as sealed');
-        const transition = this.engine.handleAllSensorsClosed();
-        await this.processStateTransition(transition);
-        return;
-      }
-
-      // Check aggregated state (excluding stale sensors)
+      // Check aggregated state (stale sensors are ignored by the check methods)
       const allClosed = this.areNonStaleSensorsClosed();
       const anyOpen = this.isAnyNonStaleSensorOpen();
 
+      // If all sensors are stale, both allClosed and anyOpen will be false/true respectively
+      // Treat as all closed (sealed)
+      if (!anyOpen && allClosed) {
+        const nonStaleCount = this.contactSensors.filter((sensor) => {
+          const info = this.staleSensorMap.get(sensor.deviceId);
+          return info && !info.isStale;
+        }).length;
+
+        if (nonStaleCount === 0) {
+          this.log('All sensors are stale, treating zone as sealed');
+          const transition = this.engine.handleAllSensorsClosed();
+          await this.processStateTransition(transition);
+          return;
+        }
+      }
+
       this.log(`Sensor update: allClosed=${allClosed}, anyOpen=${anyOpen}`);
+
+      // Capture current state before evaluating transition (for redundancy check)
+      const previousState = this.engine.getCurrentState();
 
       // Evaluate state transition
       let transition: StateTransition;
@@ -406,8 +412,8 @@ class WIABZoneSealDevice extends Homey.Device {
         return;
       }
 
-      // Process the transition
-      await this.processStateTransition(transition);
+      // Process the transition with previous state for redundancy check
+      await this.processStateTransition(transition, previousState);
     } catch (error) {
       this.error('Failed to handle sensor update:', error);
     }
@@ -477,14 +483,24 @@ class WIABZoneSealDevice extends Homey.Device {
    *
    * @private
    * @param transition - State transition result from engine
+   * @param previousState - State before the transition (for redundancy check)
    * @returns {Promise<void>}
    */
-  private async processStateTransition(transition: StateTransition): Promise<void> {
+  private async processStateTransition(
+    transition: StateTransition,
+    previousState?: ZoneSealState
+  ): Promise<void> {
     this.log(
       `Processing transition: ${transition.newState} (immediate: ${transition.immediate})`
     );
 
     if (transition.immediate) {
+      // Only update if state actually changed (prevents redundant flow card triggers)
+      if (previousState !== undefined && previousState === transition.newState) {
+        this.log(`State unchanged (${transition.newState}), skipping redundant update`);
+        return;
+      }
+
       // Immediate transition - update state now
       await this.updateZoneSealState(transition.newState);
     } else if (transition.delaySeconds !== undefined) {
@@ -540,7 +556,7 @@ class WIABZoneSealDevice extends Homey.Device {
     try {
       this.log(`Updating zone seal state to: ${state}`);
 
-      // Update engine state
+      // Update engine state (note: engine may have already updated internally)
       this.engine?.setCurrentState(state);
 
       // Determine boolean sealed value
@@ -586,48 +602,6 @@ class WIABZoneSealDevice extends Homey.Device {
     } catch (error) {
       this.error('Failed to trigger flow card:', error);
     }
-  }
-
-  /**
-   * Handles open delay timer starting.
-   *
-   * @private
-   * @param delaySeconds - Delay duration in seconds
-   * @returns {void}
-   */
-  private handleOpenDelayStarted(delaySeconds: number): void {
-    this.log(`Open delay started: ${delaySeconds}s`);
-  }
-
-  /**
-   * Handles open delay timer cancellation.
-   *
-   * @private
-   * @returns {void}
-   */
-  private handleOpenDelayCancelled(): void {
-    this.log('Open delay cancelled');
-  }
-
-  /**
-   * Handles close delay timer starting.
-   *
-   * @private
-   * @param delaySeconds - Delay duration in seconds
-   * @returns {void}
-   */
-  private handleCloseDelayStarted(delaySeconds: number): void {
-    this.log(`Close delay started: ${delaySeconds}s`);
-  }
-
-  /**
-   * Handles close delay timer cancellation.
-   *
-   * @private
-   * @returns {void}
-   */
-  private handleCloseDelayCancelled(): void {
-    this.log('Close delay cancelled');
   }
 
   /**
@@ -757,19 +731,19 @@ class WIABZoneSealDevice extends Homey.Device {
    * @param deviceId - ID of the device
    * @returns {void}
    */
-  private async triggerSensorBecameStale(
+  private triggerSensorBecameStale(
     deviceName: string,
     _deviceId: string
-  ): Promise<void> {
-    try {
-      await this.homey.flow
-        .getDeviceTriggerCard('contact_stale')
-        .trigger(this, { sensor_name: deviceName });
-
-      this.log(`Triggered contact_stale for ${deviceName}`);
-    } catch (error) {
-      this.error('Failed to trigger contact_stale flow card:', error);
-    }
+  ): void {
+    this.homey.flow
+      .getDeviceTriggerCard('contact_stale')
+      .trigger(this, { sensor_name: deviceName })
+      .then(() => {
+        this.log(`Triggered contact_stale for ${deviceName}`);
+      })
+      .catch((error) => {
+        this.error('Failed to trigger contact_stale flow card:', error);
+      });
   }
 
   /**
@@ -778,14 +752,16 @@ class WIABZoneSealDevice extends Homey.Device {
    * @private
    * @returns {void}
    */
-  private async triggerStaleStateEnded(): Promise<void> {
-    try {
-      await this.homey.flow.getDeviceTriggerCard('zone_no_stale_sensors').trigger(this);
-
-      this.log('Triggered zone_no_stale_sensors flow card');
-    } catch (error) {
-      this.error('Failed to trigger zone_no_stale_sensors flow card:', error);
-    }
+  private triggerStaleStateEnded(): void {
+    this.homey.flow
+      .getDeviceTriggerCard('zone_no_stale_sensors')
+      .trigger(this)
+      .then(() => {
+        this.log('Triggered zone_no_stale_sensors flow card');
+      })
+      .catch((error) => {
+        this.error('Failed to trigger zone_no_stale_sensors flow card:', error);
+      });
   }
 
   /**
@@ -795,16 +771,16 @@ class WIABZoneSealDevice extends Homey.Device {
    * @param hasStale - Whether any sensors are stale
    * @returns {void}
    */
-  private async triggerStaleStateChanged(hasStale: boolean): Promise<void> {
-    try {
-      await this.homey.flow
-        .getDeviceTriggerCard('stale_status_changed')
-        .trigger(this, { has_stale: hasStale });
-
-      this.log(`Triggered stale_status_changed: has_stale=${hasStale}`);
-    } catch (error) {
-      this.error('Failed to trigger stale_status_changed flow card:', error);
-    }
+  private triggerStaleStateChanged(hasStale: boolean): void {
+    this.homey.flow
+      .getDeviceTriggerCard('stale_status_changed')
+      .trigger(this, { has_stale: hasStale })
+      .then(() => {
+        this.log(`Triggered stale_status_changed: has_stale=${hasStale}`);
+      })
+      .catch((error) => {
+        this.error('Failed to trigger stale_status_changed flow card:', error);
+      });
   }
 
   /**
@@ -832,9 +808,6 @@ class WIABZoneSealDevice extends Homey.Device {
         this.log('Cleared device listener references');
       }
     }
-
-    // Clear listeners map
-    this.deviceListeners.clear();
 
     // Clear stale tracking
     this.staleSensorMap.clear();
