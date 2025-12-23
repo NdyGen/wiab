@@ -18,5 +18,5 @@
   "setable": false,
   "uiComponent": "sensor",
   "uiQuickAction": false,
-  "icon": "/assets/icon.svg"
+  "icon": "/drivers/wiab-zone-seal/assets/icon.svg"
 }
