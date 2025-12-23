@@ -79,7 +79,16 @@
       "Bash(homey app run:*)",
       "mcp__playwright__browser_take_screenshot",
       "mcp__playwright__browser_wait_for",
-      "mcp__playwright__browser_console_messages"
+      "mcp__playwright__browser_console_messages",
+      "Bash(xargs:*)",
+      "Bash(file:*)",
+      "Bash(md5sum:*)",
+      "Bash(md5:*)",
+      "Bash(git tag:*)",
+      "Bash(npm install)",
+      "Bash(wc:*)",
+      "Skill(execute-tasks)",
+      "Bash(npx jest:*)"
     ],
     "deny": [],
     "ask": []
