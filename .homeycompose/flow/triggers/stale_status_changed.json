@@ -1,0 +1,36 @@
+{
+  "title": {
+    "en": "Stale status changed",
+    "nl": "Verouderde status veranderd",
+    "de": "Veralteter Status geändert",
+    "no": "Foreldet status endret",
+    "sv": "Föråldrad status ändrades"
+  },
+  "hint": {
+    "en": "Triggered when one or more sensors become stale or unstale",
+    "nl": "Geactiveerd wanneer een of meer sensoren verlopen of actueel worden",
+    "de": "Ausgelöst, wenn ein oder mehrere Sensoren veraltet oder aktuell werden",
+    "no": "Utløst når en eller flere sensorer blir foreldede eller aktuelle",
+    "sv": "Utlöses när en eller flera sensorer blir föråldrade eller aktuella"
+  },
+  "tokens": [
+    {
+      "name": "has_stale",
+      "type": "boolean",
+      "title": {
+        "en": "Has stale sensor(s)",
+        "nl": "Heeft verouderde sensor(s)",
+        "de": "Hat veraltete Sensor(en)",
+        "no": "Har foreldede sensor(er)",
+        "sv": "Har föråldrade sensorer"
+      }
+    }
+  ],
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab-zone-seal"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "title": {
+    "en": "Zone became leaky",
+    "nl": "Zone is lek",
+    "de": "Zone wurde undicht",
+    "no": "Sonen ble lekkende",
+    "sv": "Zonen blev läckande"
+  },
+  "hint": {
+    "en": "Triggered when one or more contact sensors are open (zone leaky)",
+    "nl": "Geactiveerd wanneer een of meer contactsensoren open zijn (zone lek)",
+    "de": "Ausgelöst, wenn ein oder mehrere Kontaktsensoren offen sind (Zone undicht)",
+    "no": "Utløst når en eller flere kontaktsensorer er åpne (sone lekkende)",
+    "sv": "Utlöses när en eller flera kontaktsensorer är öppna (zon läckande)"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab-zone-seal"
+    }
+  ]
+}

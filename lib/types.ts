@@ -289,3 +289,80 @@ export interface ZoneUpdate {
   active: boolean;
   timestamp: number;
 }
+
+/**
+ * Zone seal state enumeration.
+ *
+ * Represents the possible states of a zone seal device, including
+ * transitional delay states.
+ *
+ * @enum {string}
+ */
+export enum ZoneSealState {
+  /** All sensors closed - zone is sealed */
+  SEALED = 'sealed',
+  /** Waiting for open delay to expire before marking as leaky */
+  OPEN_DELAY = 'open_delay',
+  /** At least one sensor is open - zone is leaky */
+  LEAKY = 'leaky',
+  /** Waiting for close delay to expire before marking as sealed */
+  CLOSE_DELAY = 'close_delay',
+}
+
+/**
+ * Configuration for zone seal delay timers.
+ *
+ * Defines how long to wait before transitioning between sealed and leaky states.
+ * Zero delays result in immediate state transitions.
+ *
+ * @interface ZoneSealDelayConfig
+ * @property {number} openDelaySeconds - Seconds to wait after first sensor opens before marking zone as leaky (0 = immediate)
+ * @property {number} closeDelaySeconds - Seconds to wait after all sensors close before marking zone as sealed (0 = immediate)
+ */
+export interface ZoneSealDelayConfig {
+  openDelaySeconds: number;
+  closeDelaySeconds: number;
+}
+
+/**
+ * Callback functions for zone seal state transitions.
+ *
+ * These callbacks are invoked by the ZoneSealEngine when state transitions occur.
+ * The device implementation handles the actual capability updates and flow card triggers.
+ *
+ * @interface ZoneSealCallbacks
+ * @property {(state: ZoneSealState) => void} onStateChanged - Called when zone seal state changes
+ * @property {() => void} onSealed - Called when zone becomes fully sealed (all sensors closed)
+ * @property {() => void} onLeaky - Called when zone becomes leaky (any sensor open)
+ * @property {(delaySeconds: number) => void} [onOpenDelayStarted] - Optional callback when open delay timer starts
+ * @property {() => void} [onOpenDelayCancelled] - Optional callback when open delay timer is cancelled
+ * @property {(delaySeconds: number) => void} [onCloseDelayStarted] - Optional callback when close delay timer starts
+ * @property {() => void} [onCloseDelayCancelled] - Optional callback when close delay timer is cancelled
+ */
+export interface ZoneSealCallbacks {
+  onStateChanged: (state: ZoneSealState) => void;
+  onSealed: () => void;
+  onLeaky: () => void;
+  onOpenDelayStarted?: (delaySeconds: number) => void;
+  onOpenDelayCancelled?: () => void;
+  onCloseDelayStarted?: (delaySeconds: number) => void;
+  onCloseDelayCancelled?: () => void;
+}
+
+/**
+ * Device settings for zone seal monitor.
+ *
+ * These settings are stored in the device and control zone seal behavior.
+ *
+ * @interface ZoneSealSettings
+ * @property {string} contactSensors - JSON array of SensorConfig for door/window sensors
+ * @property {number} openDelaySeconds - Seconds before zone marked as leaky (0-300)
+ * @property {number} closeDelaySeconds - Seconds before zone marked as sealed (0-300)
+ * @property {number} staleContactMinutes - Minutes before contact sensor considered stale (5-120)
+ */
+export interface ZoneSealSettings {
+  contactSensors: string;
+  openDelaySeconds: number;
+  closeDelaySeconds: number;
+  staleContactMinutes: number;
+}

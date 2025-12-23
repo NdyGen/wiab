@@ -1,0 +1,23 @@
+{
+  "title": {
+    "en": "Zone !{{has|does not have}} stale sensor(s)",
+    "nl": "Zone !{{heeft|heeft geen}} verouderde sensor(s)",
+    "de": "Zone !{{hat|hat keine}} veralteten Sensor(en)",
+    "no": "Sone !{{har|har ikke}} foreldede sensor(er)",
+    "sv": "Zon !{{har|har inga}} föråldrade sensorer"
+  },
+  "hint": {
+    "en": "Returns true when one or more sensors are stale",
+    "nl": "Retourneert waar wanneer een of meer sensoren verlopen zijn",
+    "de": "Gibt wahr zurück, wenn ein oder mehrere Sensoren veraltet sind",
+    "no": "Returnerer sant når en eller flere sensorer er foreldede",
+    "sv": "Returnerar sant när en eller flera sensorer är föråldrade"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab-zone-seal"
+    }
+  ]
+}

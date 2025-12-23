@@ -1,0 +1,22 @@
+{
+  "type": "boolean",
+  "title": {
+    "en": "Zone leaky",
+    "nl": "Zone lek",
+    "de": "Zone undicht",
+    "no": "Sone lekkende",
+    "sv": "Zon läckande"
+  },
+  "desc": {
+    "en": "Alert when one or more contact sensors in the zone are open (leaky)",
+    "nl": "Waarschuwing wanneer een of meer contactsensoren in de zone open zijn (lek)",
+    "de": "Warnung, wenn ein oder mehrere Kontaktsensoren in der Zone offen sind (undicht)",
+    "no": "Varsling når en eller flere kontaktsensorer i sonen er åpne (lekkende)",
+    "sv": "Varning när en eller flera kontaktsensorer i zonen är öppna (läckande)"
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "uiQuickAction": false,
+  "icon": "/drivers/wiab-zone-seal/assets/icon.svg"
+}

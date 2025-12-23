@@ -1,0 +1,43 @@
+{
+  "name": {
+    "en": "Zone Seal Monitor",
+    "nl": "Zone Seal Monitor",
+    "de": "Zone Seal Monitor",
+    "no": "Zone Seal Monitor",
+    "sv": "Zone Seal Monitor"
+  },
+  "class": "sensor",
+  "capabilities": [
+    "alarm_zone_leaky"
+  ],
+  "platforms": [
+    "local"
+  ],
+  "connectivity": [],
+  "icon": "/drivers/wiab-zone-seal/assets/icon.svg",
+  "images": {
+    "small": "/drivers/wiab-zone-seal/assets/images/small.png",
+    "large": "/drivers/wiab-zone-seal/assets/images/large.png",
+    "xlarge": "/drivers/wiab-zone-seal/assets/images/xlarge.png"
+  },
+  "pair": [
+    {
+      "id": "select_contact_sensors",
+      "navigation": {
+        "next": "list_devices"
+      }
+    },
+    {
+      "id": "list_devices",
+      "template": "list_devices",
+      "navigation": {
+        "prev": "select_contact_sensors",
+        "next": "add_devices"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ]
+}

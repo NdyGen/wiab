@@ -1,0 +1,23 @@
+{
+  "title": {
+    "en": "Zone has no more stale sensors",
+    "nl": "Zone heeft geen verouderde sensoren meer",
+    "de": "Zone hat keine veralteten Sensoren mehr",
+    "no": "Sone har ikke flere foreldede sensorer",
+    "sv": "Zon har inga föråldrade sensorer längre"
+  },
+  "hint": {
+    "en": "Triggered when all sensors become unstale (none are stale anymore)",
+    "nl": "Geactiveerd wanneer alle sensoren actueel worden (geen zijn meer verlopen)",
+    "de": "Ausgelöst, wenn alle Sensoren aktuell werden (keine sind mehr veraltet)",
+    "no": "Utløst når alle sensorer blir aktuelle (ingen er foreldede lenger)",
+    "sv": "Utlöses när alla sensorer blir aktuella (inga är föråldrade längre)"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab-zone-seal"
+    }
+  ]
+}

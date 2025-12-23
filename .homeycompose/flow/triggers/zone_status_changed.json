@@ -1,0 +1,36 @@
+{
+  "title": {
+    "en": "Zone status changed",
+    "nl": "Zone status veranderd",
+    "de": "Zonenstatus geändert",
+    "no": "Sonestatus endret",
+    "sv": "Zonstatus ändrades"
+  },
+  "hint": {
+    "en": "Triggered when the zone changes between leaky and sealed states",
+    "nl": "Geactiveerd wanneer de zone verandert tussen lek en verzegeld",
+    "de": "Ausgelöst, wenn die Zone zwischen undicht und versiegelt wechselt",
+    "no": "Utløst når sonen endrer mellom lekkende og forseglet tilstand",
+    "sv": "Utlöses när zonen ändras mellan läckande och förseglat tillstånd"
+  },
+  "tokens": [
+    {
+      "name": "is_leaky",
+      "type": "boolean",
+      "title": {
+        "en": "Is leaky",
+        "nl": "Is lek",
+        "de": "Ist undicht",
+        "no": "Er lekkende",
+        "sv": "Är läckande"
+      }
+    }
+  ],
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab-zone-seal"
+    }
+  ]
+}

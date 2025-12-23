@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+        }
+
+        .intro {
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .error {
+            background: #fee;
+            border: 1px solid #fcc;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 20px;
+            color: #c33;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loading::before {
+            content: '';
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #2196F3;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 0.3;
+                transform: scale(0.8);
+            }
+            50% {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .device-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .device-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .device-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .device-item.selected {
+            background-color: #e3f2fd;
+            border-color: #2196F3;
+        }
+
+        .device-checkbox {
+            margin-right: 12px;
+        }
+
+        .device-info {
+            flex: 1;
+        }
+
+        .device-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .device-zone {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .no-devices {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <h1 data-i18n="pair.select_contact_sensors.title">Select Contact Sensors</h1>
+    <p class="intro" data-i18n="pair.select_contact_sensors.intro">Select the door and window contact sensors that will define the zone seal. When ANY sensor is open, the zone is considered leaky.</p>
+
+    <div id="contact-error" class="error" style="display: none;"></div>
+    <div id="contact-loading" class="loading"></div>
+    <input type="text" id="contact-search" class="search-box" placeholder="Search sensors..." style="display: none;">
+    <div id="contact-device-list" class="device-list"></div>
+
+    <script type="application/javascript">
+        (function() {
+            'use strict';
+
+            let allDevices = [];
+            let selectedDevices = [];
+
+            function onHomeyReady(Homey) {
+            console.log('Homey ready, fetching contact sensors...');
+
+            // Fetch contact devices from the driver
+            Homey.emit('get_contact_devices')
+                .then(function(devices) {
+                    console.log('Received contact devices:', devices);
+                    allDevices = devices;
+                    renderDevices(devices);
+                    document.getElementById('contact-loading').style.display = 'none';
+                    document.getElementById('contact-search').style.display = 'block';
+                })
+                .catch(function(error) {
+                    console.error('Error loading contact sensors:', error);
+                    showError('Failed to load contact sensors: ' + (error.message || error));
+                    document.getElementById('contact-loading').style.display = 'none';
+                });
+
+        }
+
+        function renderDevices(devices) {
+            const container = document.getElementById('contact-device-list');
+            container.innerHTML = '';
+
+            if (devices.length === 0) {
+                container.innerHTML = '<div class="no-devices">No contact sensors found. Please add door or window sensors to your Homey first.</div>';
+                return;
+            }
+
+            devices.forEach(function(device) {
+                const item = document.createElement('div');
+                item.className = 'device-item';
+                if (selectedDevices.some(function(d) { return d.deviceId === device.deviceId; })) {
+                    item.classList.add('selected');
+                }
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'device-checkbox';
+                checkbox.checked = selectedDevices.some(function(d) { return d.deviceId === device.deviceId; });
+                checkbox.addEventListener('change', function() {
+                    toggleDevice(device);
+                });
+
+                const info = document.createElement('div');
+                info.className = 'device-info';
+
+                const name = document.createElement('div');
+                name.className = 'device-name';
+                name.textContent = device.name;
+
+                const zone = document.createElement('div');
+                zone.className = 'device-zone';
+                zone.textContent = device.zone || 'No zone';
+
+                info.appendChild(name);
+                info.appendChild(zone);
+
+                item.appendChild(checkbox);
+                item.appendChild(info);
+
+                item.addEventListener('click', function(e) {
+                    if (e.target !== checkbox) {
+                        checkbox.checked = !checkbox.checked;
+                        toggleDevice(device);
+                    }
+                });
+
+                container.appendChild(item);
+            });
+        }
+
+        function toggleDevice(device) {
+            const index = selectedDevices.findIndex(function(d) { return d.deviceId === device.deviceId; });
+            if (index > -1) {
+                selectedDevices.splice(index, 1);
+            } else {
+                selectedDevices.push(device);
+            }
+            renderDevices(allDevices);
+
+            // Send selection immediately to driver (don't wait for continue event)
+            console.log('Sending updated selection:', selectedDevices);
+            Homey.emit('select_contact_sensors', selectedDevices)
+                .then(function(result) {
+                    console.log('Selection saved:', result);
+                })
+                .catch(function(error) {
+                    console.error('Error saving selection:', error);
+                });
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('contact-error');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+
+        // Search functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('contact-search');
+            searchInput.addEventListener('input', function() {
+                const query = this.value.toLowerCase();
+                const filtered = allDevices.filter(function(device) {
+                    return device.name.toLowerCase().includes(query) ||
+                           (device.zone && device.zone.toLowerCase().includes(query));
+                });
+                renderDevices(filtered);
+            });
+        });
+
+            // Wait for Homey to be ready, then initialize
+            if (typeof Homey !== 'undefined') {
+                onHomeyReady(Homey);
+            }
+        })();
+    </script>
+</body>
+</html>
