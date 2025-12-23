@@ -64,7 +64,7 @@ class WIABZoneSealDevice extends Homey.Device {
   private contactSensors: SensorConfig[] = [];
   private aggregator?: ContactSensorAggregator;
   private engine?: ZoneSealEngine;
-  private deviceListeners: Map<string, (update: CapabilityUpdate) => void> = new Map();
+  private deviceListeners: Map<string, unknown> = new Map();
   private delayTimer?: NodeJS.Timeout;
   private staleSensorMap: Map<string, StaleSensorInfo> = new Map();
   private staleCheckInterval?: NodeJS.Timeout;
@@ -320,31 +320,40 @@ class WIABZoneSealDevice extends Homey.Device {
     device: HomeyAPIDevice,
     sensor: SensorConfig
   ): Promise<void> {
-    const handler = (update: CapabilityUpdate) => {
-      if (update.capabilityId === sensor.capability) {
-        const isOpen = typeof update.value === 'boolean' ? update.value : false;
-        this.log(
-          `Sensor update: ${sensor.deviceName || sensor.deviceId} = ${isOpen}`
-        );
+    const handler = (value: boolean) => {
+      const isOpen = typeof value === 'boolean' ? value : false;
+      this.log(
+        `Sensor update: ${sensor.deviceName || sensor.deviceId} = ${isOpen}`
+      );
 
-        // Update stale tracking
-        this.updateStaleSensorTracking(sensor.deviceId);
+      // Update stale tracking
+      this.updateStaleSensorTracking(sensor.deviceId);
 
-        // Update aggregator
-        this.aggregator?.updateSensorState(sensor.deviceId, isOpen);
+      // Update aggregator
+      this.aggregator?.updateSensorState(sensor.deviceId, isOpen);
 
-        // Handle state transitions
-        this.handleSensorUpdate();
-      }
+      // Handle state transitions
+      this.handleSensorUpdate();
     };
 
-    // Store listener for cleanup
-    this.deviceListeners.set(sensor.deviceId, handler);
+    // Create capability instance using makeCapabilityInstance
+    const extendedDevice = device as unknown as {
+      makeCapabilityInstance?: (capability: string, callback: (value: boolean) => void) => unknown;
+    };
 
-    // Register listener
-    device.on('$update', handler);
+    if (extendedDevice.makeCapabilityInstance) {
+      const capabilityInstance = extendedDevice.makeCapabilityInstance(
+        sensor.capability,
+        handler
+      );
 
-    this.log(`Registered listener for ${sensor.deviceName || sensor.deviceId}`);
+      // Store capability instance for cleanup
+      this.deviceListeners.set(sensor.deviceId, capabilityInstance);
+
+      this.log(`Registered listener for ${sensor.deviceName || sensor.deviceId}`);
+    } else {
+      this.error(`Device ${sensor.deviceId} does not support makeCapabilityInstance`);
+    }
   }
 
   /**
@@ -848,17 +857,10 @@ class WIABZoneSealDevice extends Homey.Device {
     if (this.deviceListeners.size > 0) {
       const app = this.homey.app as WIABApp;
       if (app && app.homeyApi) {
-        app.homeyApi.devices.getDevices().then((devices) => {
-          for (const [sensorId, handler] of this.deviceListeners) {
-            const device = devices[sensorId];
-            if (device) {
-              device.removeListener('$update', handler);
-              this.log(`Removed listener for ${sensorId}`);
-            }
-          }
-        }).catch((error) => {
-          this.error('Failed to remove device listeners:', error);
-        });
+        // Capability instances are automatically cleaned up by HomeyAPI
+        // Just clear our references
+        this.deviceListeners.clear();
+        this.log('Cleared device listener references');
       }
     }
 
