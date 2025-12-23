@@ -97,6 +97,11 @@ export class ZoneSealEngine {
   /**
    * Creates a new ZoneSealEngine instance.
    *
+   * Initializes the engine with the specified configuration and initial state.
+   * The delayDeadline is set to null, meaning no delay is active initially.
+   * This is important for state recovery - the engine starts in a stable state
+   * without any pending delays, even if initialized in a delay state.
+   *
    * @param {ZoneSealDelayConfig} config - Delay configuration for state transitions
    * @param {ZoneSealState} initialState - State to start in (default: SEALED)
    * @throws {Error} If delay configuration is invalid (negative values)

@@ -187,7 +187,11 @@ class WIABZoneSealDriver extends Homey.Driver {
       'select_contact_sensors',
       async (devices: PairingDeviceConfig[]): Promise<{ success: boolean }> => {
         this.log('Contact sensors selected:', devices);
-        contactSensors = devices || [];
+        // Validate device structure before storing
+        contactSensors = (devices || []).filter(
+          (d) => d && d.deviceId && d.capability
+        );
+        this.log(`Validated ${contactSensors.length} contact sensors`);
         return { success: true };
       }
     );
