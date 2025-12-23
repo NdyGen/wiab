@@ -205,7 +205,6 @@ class WIABZoneSealDevice extends Homey.Device {
         this.log('No contact sensors configured, device in idle state');
         // Set sealed state (no sensors = no openings)
         await this.setCapabilityValue('zone_sealed', true);
-        await this.setCapabilityValue('zone_seal_state', ZoneSealState.SEALED);
         return;
       }
 
@@ -287,7 +286,6 @@ class WIABZoneSealDevice extends Homey.Device {
 
       // Set initial capability values
       await this.setCapabilityValue('zone_sealed', initiallySealed);
-      await this.setCapabilityValue('zone_seal_state', initialState);
 
       // Register WebSocket listeners for all contact sensors
       for (const sensor of this.contactSensors) {
@@ -536,9 +534,6 @@ class WIABZoneSealDevice extends Homey.Device {
 
       // Update engine state
       this.engine?.setCurrentState(state);
-
-      // Update capability
-      await this.setCapabilityValue('zone_seal_state', state);
 
       // Determine boolean sealed value
       const isSealed = state === ZoneSealState.SEALED;
@@ -891,42 +886,42 @@ class WIABZoneSealDevice extends Homey.Device {
    */
   private registerFlowCardHandlers(): void {
     try {
-      // Register is_sealed condition handler
-      const isSealedCard = this.homey.flow.getConditionCard('is_sealed');
+      // Register is_zone_sealed condition handler
+      const isSealedCard = this.homey.flow.getConditionCard('is_zone_sealed');
       if (isSealedCard) {
         isSealedCard.registerRunListener(
           async (args: { device: WIABZoneSealDevice }): Promise<boolean> => {
             try {
               const sealed = args.device.getCapabilityValue('zone_sealed') as boolean;
-              args.device.log(`is_sealed condition evaluated: ${sealed}`);
+              args.device.log(`is_zone_sealed condition evaluated: ${sealed}`);
               return sealed;
             } catch (error) {
-              args.device.error('is_sealed condition evaluation failed:', error);
+              args.device.error('is_zone_sealed condition evaluation failed:', error);
               throw error;
             }
           }
         );
-        this.log('Registered is_sealed condition handler');
+        this.log('Registered is_zone_sealed condition handler');
       }
 
-      // Register has_stale_sensors condition handler
-      const hasStaleSensorsCard = this.homey.flow.getConditionCard('has_stale_sensors');
-      if (hasStaleSensorsCard) {
-        hasStaleSensorsCard.registerRunListener(
+      // Register is_zone_leaky condition handler
+      const isLeakyCard = this.homey.flow.getConditionCard('is_zone_leaky');
+      if (isLeakyCard) {
+        isLeakyCard.registerRunListener(
           async (args: { device: WIABZoneSealDevice }): Promise<boolean> => {
             try {
-              const hasStale = Array.from(args.device.staleSensorMap.values()).some(
-                (info) => info.isStale
-              );
-              args.device.log(`has_stale_sensors condition evaluated: ${hasStale}`);
-              return hasStale;
+              // Zone is leaky when zone_sealed is false
+              const sealed = args.device.getCapabilityValue('zone_sealed') as boolean;
+              const leaky = !sealed;
+              args.device.log(`is_zone_leaky condition evaluated: ${leaky}`);
+              return leaky;
             } catch (error) {
-              args.device.error('has_stale_sensors condition evaluation failed:', error);
+              args.device.error('is_zone_leaky condition evaluation failed:', error);
               throw error;
             }
           }
         );
-        this.log('Registered has_stale_sensors condition handler');
+        this.log('Registered is_zone_leaky condition handler');
       }
 
       this.log('Flow card handlers registered successfully');
