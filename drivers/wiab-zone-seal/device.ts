@@ -559,7 +559,7 @@ class WIABZoneSealDevice extends Homey.Device {
   /**
    * Handles zone seal state change.
    *
-   * Triggers the appropriate flow card based on state.
+   * Triggers the appropriate flow cards based on state.
    *
    * @private
    * @param state - New zone seal state
@@ -567,56 +567,24 @@ class WIABZoneSealDevice extends Homey.Device {
    */
   private async handleStateChanged(state: ZoneSealState): Promise<void> {
     try {
-      const isSealed = state === ZoneSealState.SEALED;
+      const isLeaky = state !== ZoneSealState.SEALED;
 
-      // Trigger appropriate flow card
-      if (isSealed) {
-        await this.homey.flow.getDeviceTriggerCard('zone_sealed').trigger(this);
-        this.log('Triggered zone_sealed flow card');
-      } else {
+      // Trigger zone_status_changed with token
+      await this.homey.flow
+        .getDeviceTriggerCard('zone_status_changed')
+        .trigger(this, { is_leaky: isLeaky });
+      this.log(`Triggered zone_status_changed flow card: is_leaky=${isLeaky}`);
+
+      // Trigger specific state flow card
+      if (isLeaky) {
         await this.homey.flow.getDeviceTriggerCard('zone_leaky').trigger(this);
         this.log('Triggered zone_leaky flow card');
+      } else {
+        await this.homey.flow.getDeviceTriggerCard('zone_sealed').trigger(this);
+        this.log('Triggered zone_sealed flow card');
       }
     } catch (error) {
       this.error('Failed to trigger flow card:', error);
-    }
-  }
-
-  /**
-   * Handles zone becoming sealed.
-   *
-   * Triggers the zone_became_sealed flow card.
-   *
-   * @private
-   * @returns {Promise<void>}
-   */
-  private async handleZoneSealed(): Promise<void> {
-    try {
-      // Trigger zone_became_sealed flow card
-      await this.homey.flow.getDeviceTriggerCard('zone_became_sealed').trigger(this);
-
-      this.log('Triggered zone_became_sealed flow card');
-    } catch (error) {
-      this.error('Failed to trigger zone_became_sealed flow card:', error);
-    }
-  }
-
-  /**
-   * Handles zone becoming leaky.
-   *
-   * Triggers the zone_became_leaky flow card.
-   *
-   * @private
-   * @returns {Promise<void>}
-   */
-  private async handleZoneLeaky(): Promise<void> {
-    try {
-      // Trigger zone_became_leaky flow card
-      await this.homey.flow.getDeviceTriggerCard('zone_became_leaky').trigger(this);
-
-      this.log('Triggered zone_became_leaky flow card');
-    } catch (error) {
-      this.error('Failed to trigger zone_became_leaky flow card:', error);
     }
   }
 
@@ -782,7 +750,7 @@ class WIABZoneSealDevice extends Homey.Device {
   }
 
   /**
-   * Triggers sensor_became_stale flow card.
+   * Triggers contact_stale flow card when a sensor becomes stale.
    *
    * @private
    * @param deviceName - Name of the device
@@ -795,33 +763,33 @@ class WIABZoneSealDevice extends Homey.Device {
   ): Promise<void> {
     try {
       await this.homey.flow
-        .getDeviceTriggerCard('sensor_became_stale')
-        .trigger(this, { device_name: deviceName, device_id: deviceId });
+        .getDeviceTriggerCard('contact_stale')
+        .trigger(this, { sensor_name: deviceName });
 
-      this.log(`Triggered sensor_became_stale for ${deviceName}`);
+      this.log(`Triggered contact_stale for ${deviceName}`);
     } catch (error) {
-      this.error('Failed to trigger sensor_became_stale flow card:', error);
+      this.error('Failed to trigger contact_stale flow card:', error);
     }
   }
 
   /**
-   * Triggers stale_state_ended flow card.
+   * Triggers zone_no_stale_sensors flow card when all sensors become unstale.
    *
    * @private
    * @returns {void}
    */
   private async triggerStaleStateEnded(): Promise<void> {
     try {
-      await this.homey.flow.getDeviceTriggerCard('stale_state_ended').trigger(this);
+      await this.homey.flow.getDeviceTriggerCard('zone_no_stale_sensors').trigger(this);
 
-      this.log('Triggered stale_state_ended flow card');
+      this.log('Triggered zone_no_stale_sensors flow card');
     } catch (error) {
-      this.error('Failed to trigger stale_state_ended flow card:', error);
+      this.error('Failed to trigger zone_no_stale_sensors flow card:', error);
     }
   }
 
   /**
-   * Triggers stale_state_changed flow card.
+   * Triggers stale_status_changed flow card when stale status changes.
    *
    * @private
    * @param hasStale - Whether any sensors are stale
@@ -830,12 +798,12 @@ class WIABZoneSealDevice extends Homey.Device {
   private async triggerStaleStateChanged(hasStale: boolean): Promise<void> {
     try {
       await this.homey.flow
-        .getDeviceTriggerCard('stale_state_changed')
-        .trigger(this, { has_stale_sensors: hasStale });
+        .getDeviceTriggerCard('stale_status_changed')
+        .trigger(this, { has_stale: hasStale });
 
-      this.log(`Triggered stale_state_changed: has_stale=${hasStale}`);
+      this.log(`Triggered stale_status_changed: has_stale=${hasStale}`);
     } catch (error) {
-      this.error('Failed to trigger stale_state_changed flow card:', error);
+      this.error('Failed to trigger stale_status_changed flow card:', error);
     }
   }
 
@@ -879,6 +847,18 @@ class WIABZoneSealDevice extends Homey.Device {
   }
 
   /**
+   * Checks if zone has any stale sensors.
+   *
+   * Public method for flow card condition handlers.
+   *
+   * @public
+   * @returns {boolean} True if at least one sensor is stale
+   */
+  public hasAnyStaleSensors(): boolean {
+    return Array.from(this.staleSensorMap.values()).some((info) => info.isStale);
+  }
+
+  /**
    * Registers flow card handlers for triggers and conditions.
    *
    * Called during device initialization to register the handlers that will
@@ -889,25 +869,6 @@ class WIABZoneSealDevice extends Homey.Device {
    */
   private registerFlowCardHandlers(): void {
     try {
-      // Register is_zone_sealed condition handler
-      const isSealedCard = this.homey.flow.getConditionCard('is_zone_sealed');
-      if (isSealedCard) {
-        isSealedCard.registerRunListener(
-          async (args: { device: WIABZoneSealDevice }): Promise<boolean> => {
-            try {
-              const leaky = args.device.getCapabilityValue('alarm_zone_leaky') as boolean;
-              const sealed = !leaky;
-              args.device.log(`is_zone_sealed condition evaluated: ${sealed}`);
-              return sealed;
-            } catch (error) {
-              args.device.error('is_zone_sealed condition evaluation failed:', error);
-              throw error;
-            }
-          }
-        );
-        this.log('Registered is_zone_sealed condition handler');
-      }
-
       // Register is_zone_leaky condition handler
       const isLeakyCard = this.homey.flow.getConditionCard('is_zone_leaky');
       if (isLeakyCard) {
@@ -924,6 +885,24 @@ class WIABZoneSealDevice extends Homey.Device {
           }
         );
         this.log('Registered is_zone_leaky condition handler');
+      }
+
+      // Register has_stale_sensor condition handler
+      const hasStaleSensorCard = this.homey.flow.getConditionCard('has_stale_sensor');
+      if (hasStaleSensorCard) {
+        hasStaleSensorCard.registerRunListener(
+          async (args: { device: WIABZoneSealDevice }): Promise<boolean> => {
+            try {
+              const hasStale = args.device.hasAnyStaleSensors();
+              args.device.log(`has_stale_sensor condition evaluated: ${hasStale}`);
+              return hasStale;
+            } catch (error) {
+              args.device.error('has_stale_sensor condition evaluation failed:', error);
+              throw error;
+            }
+          }
+        );
+        this.log('Registered has_stale_sensor condition handler');
       }
 
       this.log('Flow card handlers registered successfully');
