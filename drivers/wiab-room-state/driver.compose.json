@@ -25,6 +25,7 @@
     "local"
   ],
   "connectivity": [],
+  "icon": "/drivers/wiab-room-state/assets/icon.svg",
   "images": {
     "small": "/drivers/wiab-room-state/assets/images/small.png",
     "large": "/drivers/wiab-room-state/assets/images/large.png",
