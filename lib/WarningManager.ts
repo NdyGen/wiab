@@ -25,6 +25,31 @@
 import { Logger, WarningState } from './ErrorTypes';
 
 /**
+ * WarningStateError - Thrown when warning state operations fail
+ *
+ * Custom error type for warning state management failures. Preserves
+ * context about the operation (set/clear) and error ID for tracking.
+ */
+export class WarningStateError extends Error {
+  public readonly errorId: string | null;
+  public readonly operation: 'set' | 'clear';
+  public readonly cause?: Error;
+
+  constructor(operation: 'set' | 'clear', errorId: string | null, cause?: Error) {
+    const opName = operation === 'set' ? 'set warning' : 'clear warning';
+    const idStr = errorId ? ` [${errorId}]` : '';
+    super(`Failed to ${opName}${idStr}: ${cause?.message || 'Unknown error'}`);
+
+    this.name = 'WarningStateError';
+    this.errorId = errorId;
+    this.operation = operation;
+    this.cause = cause;
+
+    Object.setPrototypeOf(this, WarningStateError.prototype);
+  }
+}
+
+/**
  * Homey Device interface for warning methods
  */
 export interface DeviceWithWarnings {
@@ -61,13 +86,20 @@ export class WarningManager {
    * is already active with the same message, this is a no-op to prevent
    * redundant API calls.
    *
+   * State is only updated after successful device API call to prevent
+   * state corruption on failure.
+   *
    * @param errorId - Error ID for tracking
    * @param message - User-friendly warning message
-   * @returns Promise that resolves when warning is set
+   * @throws {WarningStateError} If device API call fails
    *
    * @example
    * ```typescript
-   * await warningManager.setWarning('DEVICE_001', 'Cannot connect to sensors');
+   * try {
+   *   await warningManager.setWarning('DEVICE_001', 'Cannot connect to sensors');
+   * } catch (error) {
+   *   this.error('Failed to set warning:', error);
+   * }
    * ```
    */
   public async setWarning(errorId: string, message: string): Promise<void> {
@@ -80,12 +112,13 @@ export class WarningManager {
       this.logger.log(
         `Warning already active: [${errorId}] ${message} - skipping redundant update`
       );
-      return;
+      return; // Already in correct state
     }
 
     try {
       await this.device.setWarning(message);
 
+      // Only update state after successful API call
       this.state = {
         isActive: true,
         message,
@@ -96,7 +129,8 @@ export class WarningManager {
       this.logger.log(`Warning set: [${errorId}] ${message}`);
     } catch (error) {
       this.logger.error(`Failed to set warning [${errorId}]:`, error);
-      // Don't throw - warning failure shouldn't break device operation
+      // State remains unchanged on failure - prevents corruption
+      throw new WarningStateError('set', errorId, error instanceof Error ? error : undefined);
     }
   }
 
@@ -106,17 +140,24 @@ export class WarningManager {
    * Removes the warning message from the device card in Homey UI. If no
    * warning is active, this is a no-op.
    *
-   * @returns Promise that resolves when warning is cleared
+   * State is only updated after successful device API call to prevent
+   * state corruption on failure.
+   *
+   * @throws {WarningStateError} If device API call fails
    *
    * @example
    * ```typescript
-   * await warningManager.clearWarning();
+   * try {
+   *   await warningManager.clearWarning();
+   * } catch (error) {
+   *   this.error('Failed to clear warning:', error);
+   * }
    * ```
    */
   public async clearWarning(): Promise<void> {
     if (!this.state.isActive) {
       this.logger.log('No active warning to clear - skipping');
-      return;
+      return; // Already in correct state
     }
 
     const previousErrorId = this.state.errorId;
@@ -124,6 +165,7 @@ export class WarningManager {
     try {
       await this.device.unsetWarning();
 
+      // Only update state after successful API call
       this.state = {
         isActive: false,
         message: null,
@@ -134,7 +176,8 @@ export class WarningManager {
       this.logger.log(`Warning cleared: [${previousErrorId}]`);
     } catch (error) {
       this.logger.error('Failed to clear warning:', error);
-      // Don't throw - warning failure shouldn't break device operation
+      // State remains unchanged on failure - prevents corruption
+      throw new WarningStateError('clear', previousErrorId, error instanceof Error ? error : undefined);
     }
   }
 

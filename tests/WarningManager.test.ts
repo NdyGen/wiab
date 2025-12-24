@@ -119,7 +119,7 @@ describe('WarningManager', () => {
       expect(warningManager.getState()?.errorId).toBe(secondErrorId);
     });
 
-    it('should handle setWarning failure gracefully', async () => {
+    it('should throw WarningStateError when setWarning fails', async () => {
       // Arrange
       const error = new Error('Device setWarning failed');
       mockDevice.setWarning.mockRejectedValue(error);
@@ -127,8 +127,8 @@ describe('WarningManager', () => {
       const errorId = 'TEST_001';
       const message = 'Test warning';
 
-      // Act & Assert - should not throw
-      await expect(warningManager.setWarning(errorId, message)).resolves.toBeUndefined();
+      // Act & Assert
+      await expect(warningManager.setWarning(errorId, message)).rejects.toThrow('Failed to set warning');
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to set warning'),
@@ -180,15 +180,15 @@ describe('WarningManager', () => {
       expect(mockLogger.log).toHaveBeenCalledWith('No active warning to clear - skipping');
     });
 
-    it('should handle unsetWarning failure gracefully', async () => {
+    it('should throw WarningStateError when unsetWarning fails', async () => {
       // Arrange
       const error = new Error('Device unsetWarning failed');
       mockDevice.unsetWarning.mockRejectedValue(error);
 
       await warningManager.setWarning('TEST_001', 'Test warning');
 
-      // Act & Assert - should not throw
-      await expect(warningManager.clearWarning()).resolves.toBeUndefined();
+      // Act & Assert
+      await expect(warningManager.clearWarning()).rejects.toThrow('Failed to clear warning');
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to clear warning'),

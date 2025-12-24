@@ -49,7 +49,13 @@ class WIABApp extends Homey.App {
     );
 
     if (!result.success) {
-      this.error('Failed to initialize HomeyAPI client after retries:', result.error);
+      const errorContext = result.isPermanentError
+        ? ` (permanent error: ${result.errorCategory}:${result.errorReasonCode})`
+        : '';
+      this.error(
+        `Failed to initialize HomeyAPI client after ${result.attempts} attempt(s)${errorContext}:`,
+        result.error
+      );
       throw result.error || new Error('HomeyAPI initialization failed');
     }
 

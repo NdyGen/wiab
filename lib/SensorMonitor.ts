@@ -13,9 +13,12 @@
  * than the configured timeout, it's marked as stale and excluded from initial
  * occupancy calculation. Stale sensors continue to be monitored during runtime.
  *
- * The monitor uses event-driven monitoring via HomeyAPI's WebSocket connection,
- * providing real-time updates without polling. This is reliable and works with
- * all Homey devices that support capability change events.
+ * **Event-Driven Monitoring:**
+ * The monitor uses HomeyAPI's makeCapabilityInstance() to subscribe to real-time
+ * capability change events. HomeyAPI maintains a local device cache that is updated
+ * via WebSocket connections, providing real-time state changes without application-level
+ * polling. This approach is reliable and works with all Homey devices that support
+ * capability change events.
  *
  * @example
  * ```typescript
@@ -68,7 +71,10 @@ interface ExtendedHomeyAPIDevice extends HomeyAPIDevice {
 }
 
 /**
- * SensorMonitor class for polling-based sensor state monitoring
+ * SensorMonitor class for event-driven sensor state monitoring
+ *
+ * Uses HomeyAPI's WebSocket-updated device cache and makeCapabilityInstance()
+ * for real-time capability change notifications. No application-level polling required.
  *
  * @class SensorMonitor
  * @example
@@ -162,11 +168,21 @@ export class SensorMonitor {
   /**
    * Starts the sensor monitoring process
    *
-   * Initializes the polling interval and begins monitoring all configured sensors.
-   * This method should be called after the SensorMonitor is constructed and ready to operate.
+   * Initializes event-driven capability monitoring for all configured sensors.
+   * This method:
+   * 1. Loads device cache from HomeyAPI
+   * 2. Initializes sensor values and detects stale sensors
+   * 3. Sets initial occupancy state
+   * 4. Subscribes to real-time capability change events via makeCapabilityInstance()
+   *
+   * **Design Decision:**
+   * Uses HomeyAPI's WebSocket-updated device cache for real-time state changes.
+   * This approach provides reliable state updates without application-level polling.
    *
    * @public
-   * @returns {void}
+   * @returns {Promise<void>} Promise that resolves when monitoring is started
+   * @throws {Error} If device cache cannot be loaded from HomeyAPI
+   * @throws {Error} If sensor devices are not found in device cache
    */
   public async start(): Promise<void> {
     if (this.capabilityInstances.size > 0) {

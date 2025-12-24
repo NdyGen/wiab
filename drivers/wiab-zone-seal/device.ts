@@ -12,6 +12,7 @@ import { WarningManager } from '../../lib/WarningManager';
 import { ErrorReporter } from '../../lib/ErrorReporter';
 import { FlowCardErrorHandler } from '../../lib/FlowCardErrorHandler';
 import { RetryManager } from '../../lib/RetryManager';
+import { ErrorClassifier } from '../../lib/ErrorClassifier';
 import { ZoneSealErrorId } from '../../constants/errorIds';
 import { ErrorSeverity } from '../../lib/ErrorTypes';
 
@@ -80,6 +81,7 @@ class WIABZoneSealDevice extends Homey.Device {
   private errorReporter?: ErrorReporter;
   private flowCardHandler?: FlowCardErrorHandler;
   private retryManager?: RetryManager;
+  private errorClassifier?: ErrorClassifier;
 
   /**
    * Initializes the WIAB Zone Seal device.
@@ -108,6 +110,7 @@ class WIABZoneSealDevice extends Homey.Device {
     this.errorReporter = new ErrorReporter(this);
     this.flowCardHandler = new FlowCardErrorHandler(this.homey, this);
     this.retryManager = new RetryManager(this);
+    this.errorClassifier = new ErrorClassifier(this);
 
     try {
       // Setup sensor monitoring with current settings
@@ -117,23 +120,33 @@ class WIABZoneSealDevice extends Homey.Device {
       this.registerFlowCardHandlers();
 
       // Clear any previous warning on successful initialization
-      await this.warningManager.clearWarning();
+      try {
+        await this.warningManager.clearWarning();
+      } catch (warningError) {
+        this.error('Failed to clear warning after successful initialization:', warningError);
+      }
 
       this.log('WIAB Zone Seal device initialization complete');
     } catch (error) {
-      // Issue #1 FIX: Report error with structured logging and set device warning
+      // Issue #1 FIX: Report error with stack trace and set device warning
+      const err = error instanceof Error ? error : new Error(String(error));
+
       this.errorReporter.reportError({
         errorId: ZoneSealErrorId.DEVICE_INIT_FAILED,
         severity: ErrorSeverity.CRITICAL,
         userMessage: 'Device initialization failed. Check sensor configuration.',
-        technicalMessage: `Failed to initialize Zone Seal device: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        technicalMessage: `Failed to initialize Zone Seal device: ${err.message}\n${err.stack || 'No stack trace available'}`,
         context: { deviceId: this.getData().id },
       });
 
-      await this.warningManager.setWarning(
-        ZoneSealErrorId.DEVICE_INIT_FAILED,
-        'Device initialization failed. Check sensor configuration in settings.'
-      );
+      try {
+        await this.warningManager.setWarning(
+          ZoneSealErrorId.DEVICE_INIT_FAILED,
+          'Device initialization failed. Check sensor configuration in settings.'
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning on device:', warningError);
+      }
 
       // Don't throw - allow device to exist in degraded mode
     }
@@ -177,7 +190,11 @@ class WIABZoneSealDevice extends Homey.Device {
         await this.setupSensorMonitoring();
 
         // Clear warning on successful settings update
-        await this.warningManager!.clearWarning();
+        try {
+          await this.warningManager!.clearWarning();
+        } catch (warningError) {
+          this.error('Failed to clear warning after settings update:', warningError);
+        }
 
         this.log('Settings applied successfully');
       } else if (delaySettingsChanged) {
@@ -216,10 +233,14 @@ class WIABZoneSealDevice extends Homey.Device {
         },
       });
 
-      await this.warningManager!.setWarning(
-        ZoneSealErrorId.SETTINGS_UPDATE_FAILED,
-        'Failed to apply settings. Check sensor configuration and try again.'
-      );
+      try {
+        await this.warningManager!.setWarning(
+          ZoneSealErrorId.SETTINGS_UPDATE_FAILED,
+          'Failed to apply settings. Check sensor configuration and try again.'
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning after settings error:', warningError);
+      }
 
       throw error; // Re-throw to show error in Homey settings UI
     }
@@ -400,10 +421,14 @@ class WIABZoneSealDevice extends Homey.Device {
         context: { deviceId: this.getData().id },
       });
 
-      await this.warningManager!.setWarning(
-        ZoneSealErrorId.SENSOR_MONITORING_SETUP_FAILED,
-        'Cannot connect to sensors. Check device configuration in settings.'
-      );
+      try {
+        await this.warningManager!.setWarning(
+          ZoneSealErrorId.SENSOR_MONITORING_SETUP_FAILED,
+          'Cannot connect to sensors. Check device configuration in settings.'
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning for sensor monitoring setup failure:', warningError);
+      }
 
       throw error; // Re-throw to propagate to onInit or onSettings
     }
@@ -691,10 +716,14 @@ class WIABZoneSealDevice extends Homey.Device {
         technicalMessage: `Failed to update zone seal state to ${state}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         context: { deviceId: this.getData().id, targetState: state },
       });
-      await this.warningManager!.setWarning(
-        ZoneSealErrorId.STATE_UPDATE_FAILED,
-        'Failed to update zone state. Device may be out of sync with sensor states.'
-      );
+      try {
+        await this.warningManager!.setWarning(
+          ZoneSealErrorId.STATE_UPDATE_FAILED,
+          'Failed to update zone state. Device may be out of sync with sensor states.'
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning for state update failure:', warningError);
+      }
     }
   }
 
