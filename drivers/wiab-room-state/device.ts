@@ -1,13 +1,11 @@
 import Homey from 'homey';
 import { RoomStateEngine } from '../../lib/RoomStateEngine';
-import type { StateConfig, RoomStateSettings, HomeyAPI, HomeyAPIZone } from '../../lib/types';
+import type { StateConfig, RoomStateSettings, HomeyAPI } from '../../lib/types';
 import { RoomStateErrorId } from '../../constants/errorIds';
 import { WarningManager } from '../../lib/WarningManager';
 import { ErrorReporter } from '../../lib/ErrorReporter';
 import { RetryManager } from '../../lib/RetryManager';
-import { AsyncIntervalManager } from '../../lib/AsyncIntervalManager';
 import { ErrorSeverity } from '../../lib/ErrorTypes';
-import { executeAsync } from '../../lib/AsyncHelpers';
 
 /**
  * Interface for WIABApp with HomeyAPI
@@ -17,53 +15,37 @@ interface WIABApp extends Homey.App {
 }
 
 /**
- * Extended HomeyAPIZone with active property
- */
-interface ExtendedHomeyAPIZone extends HomeyAPIZone {
-  active?: boolean;
-}
-
-/**
  * Room State Manager Device
  *
- * Manages room states based on zone activity with configurable state hierarchies
- * and timer-based transitions. Monitors a Homey zone for activity and transitions
+ * Manages room states based on WIAB device occupancy with configurable state hierarchies
+ * and timer-based transitions. Monitors a WIAB device for occupancy changes and transitions
  * between user-defined states based on active/inactive timers.
  *
  * Features:
- * - Polling-based zone activity monitoring (every 5 seconds)
+ * - Event-driven WIAB device occupancy monitoring
  * - 2-level state hierarchy (parent + child)
  * - Timer-based state transitions for both active and inactive states
  * - Manual state override with indefinite duration
  * - Flow card integration for triggers, conditions, and actions
  *
  * Lifecycle:
- * 1. onInit() - Load settings, setup zone monitoring, initialize state
+ * 1. onInit() - Load settings, setup WIAB device monitoring, initialize state
  * 2. onSettings() - Reconfigure when settings change
- * 3. onDeleted() - Cleanup timers and polling intervals
+ * 3. onDeleted() - Cleanup timers and capability listeners
  */
 class RoomStateDevice extends Homey.Device {
   private stateEngine?: RoomStateEngine;
-  private zone?: ExtendedHomeyAPIZone;
+  private wiabDevice?: { id: string; name: string };
+  private wiabCapabilityListener?: (() => void) | null;
   private stateTimer?: NodeJS.Timeout;
   private lastActivityTimestamp: number | null = null;
   private isZoneActive: boolean = false;
   private manualOverride: boolean = false;
-  private lastZoneActive: boolean = false;
-  private currentZoneId?: string;
-  private zonePollingInterval?: NodeJS.Timeout;
-  private zoneChangeDetectionInterval?: NodeJS.Timeout;
-  private zonePollingManager?: AsyncIntervalManager;
 
   // Error handling utilities
   private warningManager?: WarningManager;
   private errorReporter?: ErrorReporter;
   private retryManager?: RetryManager;
-
-  // Failure tracking
-  private zonePollingFailureCount: number = 0;
-  private zoneChangeDetectionFailureCount: number = 0;
-  private static readonly MAX_FAILURES_BEFORE_RECOVERY = 3;
 
   // Debug logging control
   private static readonly ENABLE_DEBUG_LOGGING = false;
@@ -144,8 +126,8 @@ class RoomStateDevice extends Homey.Device {
     this.log('Settings changed:', event.changedKeys);
 
     try {
-      // If timer settings changed, reinitialize
-      const criticalKeys = ['idleTimeout', 'occupiedTimeout'];
+      // If WIAB device or timer settings changed, reinitialize
+      const criticalKeys = ['wiabDeviceId', 'idleTimeout', 'occupiedTimeout'];
       const needsReinit = event.changedKeys.some((key) => criticalKeys.includes(key));
 
       if (needsReinit) {
@@ -205,122 +187,53 @@ class RoomStateDevice extends Homey.Device {
   }
 
   /**
-   * Gets the zone ID this device is assigned to.
+   * Gets the WIAB device this Room State Manager monitors.
    *
-   * Uses HomeyAPI to get device information including zone assignment.
-   * In Homey, ALL devices are always assigned to a zone - they cannot exist without one.
-   *
-   * @private
-   * @returns {Promise<string>} Zone ID
-   * @throws {Error} If zone lookup fails
+   * @returns WIAB device information
+   * @throws Error if WIAB device not found or not accessible
    */
-  private async getDeviceZone(): Promise<string> {
+  private async getWiabDevice(): Promise<{ id: string; name: string; occupancy: boolean }> {
     try {
+      const settings = this.getSettings() as RoomStateSettings;
+      const wiabDeviceId = settings.wiabDeviceId;
+
+      if (!wiabDeviceId) {
+        throw new Error('No WIAB device ID configured in settings');
+      }
+
       const app = this.homey.app as WIABApp;
-      const homeyApi = app.homeyApi;
-
-      if (!homeyApi) {
-        const error = new Error('HomeyAPI not available');
-        this.error(`[${RoomStateErrorId.ZONE_LOOKUP_FAILED}] HomeyAPI not available`);
-        throw error;
+      if (!app.homeyApi) {
+        throw new Error('HomeyAPI not available');
       }
 
-      // Get all devices from HomeyAPI
-      const devices = await homeyApi.devices.getDevices();
-      if (RoomStateDevice.ENABLE_DEBUG_LOGGING) {
-        this.log(`[DEBUG] Found ${Object.keys(devices).length} total devices in Homey`);
+      const devices = await app.homeyApi.devices.getDevices();
+      const device = devices[wiabDeviceId];
+
+      if (!device) {
+        throw new Error(`WIAB device not found: ${wiabDeviceId}`);
       }
 
-      // Get our unique pairing ID to identify ourselves
-      const ourPairingId = this.getData().id;
-      if (RoomStateDevice.ENABLE_DEBUG_LOGGING) {
-        this.log(`[DEBUG] Our pairing ID: ${ourPairingId}`);
-        this.log(`[DEBUG] Looking for Room State Manager device in HomeyAPI...`);
-      }
+      const deviceObj = device as { name?: string; capabilitiesObj?: Record<string, { value: unknown }> };
+      const name = deviceObj.name || 'Unknown WIAB Device';
 
-      // Get our current settings to use as additional matching criteria
-      const ourSettings = this.getSettings() as RoomStateSettings;
+      // Get current occupancy state
+      const occupancy = deviceObj.capabilitiesObj?.['alarm_occupancy']?.value === true;
 
-      // Find ourselves by matching the device ID directly
-      // The deviceId from HomeyAPI should match the device's Homey ID
-      let device: unknown | null = null;
-      let matchedDeviceId: string | null = null;
+      this.log(`Found WIAB device: ${name} (${wiabDeviceId}), current occupancy: ${occupancy}`);
 
-      for (const [deviceId, dev] of Object.entries(devices)) {
-        const deviceObj = dev as unknown as {
-          id?: string;
-          name?: string;
-          zone?: string;
-          driverId?: string;
-          data?: { id?: string };
-          settings?: RoomStateSettings;
-        };
-
-        // Only check devices from our driver
-        // driverId format: "homey:app:net.dongen.wiab:wiab-room-state"
-        if (!deviceObj.driverId?.endsWith(':wiab-room-state')) {
-          continue;
-        }
-
-        // Try to match by device ID (deviceId key from HomeyAPI)
-        // This is the most reliable way to identify ourselves
-        if (deviceId === this.getData().id || deviceObj.id === this.getData().id) {
-          if (RoomStateDevice.ENABLE_DEBUG_LOGGING) {
-            this.log(`[DEBUG] Matched device by ID: ${deviceId}`);
-          }
-          device = deviceObj;
-          matchedDeviceId = deviceId;
-          break;
-        }
-
-        // Fallback: Match by pairing ID in device data
-        if (deviceObj.data?.id === ourPairingId) {
-          if (RoomStateDevice.ENABLE_DEBUG_LOGGING) {
-            this.log(`[DEBUG] Matched device by pairing ID in data: ${deviceId}`);
-          }
-          device = deviceObj;
-          matchedDeviceId = deviceId;
-          break;
-        }
-      }
-
-      if (!device || !matchedDeviceId) {
-        const error = new Error(`Could not find device in HomeyAPI (pairing ID: ${ourPairingId})`);
-        this.error(`[${RoomStateErrorId.ZONE_LOOKUP_FAILED}] Could not find ourselves in HomeyAPI devices`);
-        this.error(`Our pairing ID: ${ourPairingId}, settings: idle=${ourSettings.idleTimeout}, occupied=${ourSettings.occupiedTimeout}`);
-        throw error;
-      }
-
-      const deviceObj = device as unknown as {
-        name?: string;
-        zone?: string;
-      };
-
-      if (RoomStateDevice.ENABLE_DEBUG_LOGGING) {
-        this.log(`[DEBUG] Found our device: ${deviceObj.name}`);
-        this.log(`[DEBUG] Device zone: ${deviceObj.zone}`);
-      }
-
-      if (!deviceObj.zone) {
-        const error = new Error(`No zone assigned to device "${deviceObj.name}"`);
-        this.error(`[${RoomStateErrorId.ZONE_LOOKUP_FAILED}] No zone assigned to device "${deviceObj.name}"`);
-        this.error('Device needs to be manually assigned to a zone in Homey settings');
-        throw error;
-      }
-
-      this.log(`Device is in zone: ${deviceObj.zone}`);
-      return deviceObj.zone;
+      return { id: wiabDeviceId, name, occupancy };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 
       this.errorReporter?.reportError({
-        errorId: RoomStateErrorId.ZONE_LOOKUP_FAILED,
+        errorId: RoomStateErrorId.ZONE_LOOKUP_FAILED, // Reuse error ID
         severity: ErrorSeverity.CRITICAL,
-        userMessage: 'Failed to find device zone. Check zone assignment.',
-        technicalMessage: `Zone lookup failed: ${err.message}\n${err.stack || 'No stack trace available'}`,
-        context: { deviceId: this.getData().id },
+        userMessage: 'Failed to find WIAB device. Check device configuration.',
+        technicalMessage: `WIAB device lookup failed: ${err.message}\n${err.stack || 'No stack trace available'}`,
+        context: { deviceId: this.getData().id, wiabDeviceId: this.getSettings().wiabDeviceId },
       });
-      throw error; // Re-throw to propagate to caller
+
+      throw error;
     }
   }
 
@@ -330,61 +243,53 @@ class RoomStateDevice extends Homey.Device {
    * Steps:
    * 1. Load and parse settings
    * 2. Validate state configuration
-   * 3. Create RoomStateEngine
-   * 4. Setup zone monitoring
-   * 5. Check current zone activity
-   * 6. Initialize state based on actual zone activity
-   * 7. Initialize capabilities
+   * 3. Get WIAB device and check current occupancy
+   * 4. Create RoomStateEngine with correct initial state
+   * 5. Setup WIAB device monitoring
+   * 6. Initialize capabilities
    */
   private async setupRoomStateManagement(): Promise<void> {
     try {
-      // Get zone from device assignment via HomeyAPI
-      const zoneId = await this.getDeviceZone();
-
-      if (!zoneId) {
-        this.error('No zone assigned - please assign this device to a zone in device settings');
-        throw new Error('No zone assigned to device');
-      }
-
-      this.log(`Monitoring zone: ${zoneId}`);
-
-      // Store current zone ID for change detection
-      this.currentZoneId = zoneId;
-
       // Load settings
       const settings = this.getSettings() as RoomStateSettings;
+      const wiabDeviceId = settings.wiabDeviceId;
       const idleTimeout = settings.idleTimeout || 0;
       const occupiedTimeout = settings.occupiedTimeout || 0;
+
+      if (!wiabDeviceId) {
+        throw new Error('No WIAB device configured - please check device settings');
+      }
+
+      // Get WIAB device and check current occupancy
+      const wiabDevice = await this.getWiabDevice();
+
+      this.log(`Monitoring WIAB device: ${wiabDevice.name} (${wiabDevice.id})`);
 
       // Build fixed 4-state configuration based on timer settings
       const stateConfigs = this.buildStateConfiguration(idleTimeout, occupiedTimeout);
 
-      // Setup zone monitoring FIRST to get zone object
-      await this.setupZoneMonitoring(zoneId);
-
-      // Check current zone activity to determine initial state
-      const isZoneActive = this.zone?.active || false;
-      const initialState = isZoneActive ? 'occupied' : 'idle';
-      this.log(`Zone is currently ${isZoneActive ? 'ACTIVE' : 'INACTIVE'}, starting in state: ${initialState}`);
+      // Determine initial state based on current WIAB occupancy
+      const initialState = wiabDevice.occupancy ? 'occupied' : 'idle';
+      this.log(`WIAB device is currently ${wiabDevice.occupancy ? 'OCCUPIED' : 'UNOCCUPIED'}, starting in state: ${initialState}`);
 
       // Create state engine with correct initial state
       this.stateEngine = new RoomStateEngine(stateConfigs, initialState);
       this.log(`State engine created with timers: idle=${idleTimeout}min, occupied=${occupiedTimeout}min`);
 
-      // Set initial zone activity state
-      this.isZoneActive = isZoneActive;
-      if (isZoneActive) {
+      // Set initial activity state
+      this.isZoneActive = wiabDevice.occupancy;
+      if (wiabDevice.occupancy) {
         this.lastActivityTimestamp = Date.now();
       }
+
+      // Setup WIAB device monitoring
+      await this.setupWiabMonitoring(wiabDevice.id);
 
       // Initialize capabilities
       await this.initializeCapabilities();
 
       // Schedule next transition if needed
       this.evaluateAndScheduleTransition();
-
-      // Start periodic zone change detection (check every 30 seconds)
-      this.startZoneChangeDetection();
 
       this.log('Room state management setup complete');
     } catch (error) {
@@ -396,98 +301,17 @@ class RoomStateDevice extends Homey.Device {
     }
   }
 
-  /**
-   * Starts periodic zone change detection.
-   *
-   * Checks every 30 seconds if the device has been moved to a different zone.
-   * If a zone change is detected, reinitializes the device with the new zone.
-   */
-  private startZoneChangeDetection(): void {
-    // Clear any existing interval
-    if (this.zoneChangeDetectionInterval) {
-      clearInterval(this.zoneChangeDetectionInterval);
-    }
-
-    // Check for zone changes every 30 seconds
-    this.zoneChangeDetectionInterval = setInterval(async () => {
-      try {
-        const newZoneId = await this.getDeviceZone();
-
-        if (newZoneId && newZoneId !== this.currentZoneId) {
-          this.log(`Zone change detected: ${this.currentZoneId} → ${newZoneId}`);
-          this.log('Reinitializing with new zone...');
-
-          // Reinitialize with new zone
-          this.teardownRoomStateManagement();
-          await this.setupRoomStateManagement();
-        }
-
-        // Success - reset failure counter and clear warning if recovering
-        if (this.zoneChangeDetectionFailureCount > 0) {
-          this.log(`Zone change detection recovered after ${this.zoneChangeDetectionFailureCount} failures`);
-          this.zoneChangeDetectionFailureCount = 0;
-
-          try {
-            await this.warningManager?.clearWarning();
-          } catch (warningError) {
-            this.error('Failed to clear warning after zone change detection recovery:', warningError);
-          }
-        }
-      } catch (error) {
-        this.zoneChangeDetectionFailureCount++;
-        const err = error instanceof Error ? error : new Error(String(error));
-
-        this.errorReporter?.reportError({
-          errorId: RoomStateErrorId.ZONE_CHANGE_DETECTION_FAILED,
-          severity: ErrorSeverity.MEDIUM,
-          userMessage: 'Zone change detection temporarily unavailable',
-          technicalMessage: `Zone change detection failed (${this.zoneChangeDetectionFailureCount}/${RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY}): ${err.message}\n${err.stack || 'No stack trace available'}`,
-          context: {
-            deviceId: this.getData().id,
-            currentZoneId: this.currentZoneId,
-            failureCount: this.zoneChangeDetectionFailureCount,
-          },
-        });
-
-        // Set warning after hitting failure threshold
-        if (this.zoneChangeDetectionFailureCount >= RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY) {
-          try {
-            await this.warningManager?.setWarning(
-              RoomStateErrorId.ZONE_CHANGE_DETECTION_FAILED,
-              'Zone change detection unavailable. Manual zone reassignment may not be detected.'
-            );
-          } catch (warningError) {
-            this.error('Failed to set warning after zone change detection failures:', warningError);
-          }
-        }
-      }
-    }, 30000); // Check every 30 seconds
-  }
 
   /**
    * Tears down room state management.
    *
-   * Clears zone polling interval and state timers.
+   * Clears WIAB monitoring and state timers.
    */
   private teardownRoomStateManagement(): void {
     try {
-      // Stop zone polling manager (Issue #3 FIX)
-      if (this.zonePollingManager) {
-        this.zonePollingManager.stop();
-        this.zonePollingManager = undefined;
-      }
-
-      // Clear zone polling interval (legacy, if still exists)
-      if (this.zonePollingInterval) {
-        clearInterval(this.zonePollingInterval);
-        this.zonePollingInterval = undefined;
-      }
-
-      // Clear zone change detection interval
-      if (this.zoneChangeDetectionInterval) {
-        clearInterval(this.zoneChangeDetectionInterval);
-        this.zoneChangeDetectionInterval = undefined;
-      }
+      // Remove WIAB capability listener
+      this.wiabCapabilityListener = null;
+      this.wiabDevice = undefined;
 
       // Clear state timer
       if (this.stateTimer) {
@@ -495,17 +319,9 @@ class RoomStateDevice extends Homey.Device {
         this.stateTimer = undefined;
       }
 
-      // Clear references
-      this.zone = undefined;
-      this.stateEngine = undefined;
-      this.lastActivityTimestamp = null;
-      this.isZoneActive = false;
-      this.manualOverride = false;
-      this.currentZoneId = undefined;
-
       this.log('Room state management torn down');
     } catch (error) {
-      this.error('Failed to teardown room state management:', error);
+      this.error('Error tearing down room state management:', error);
     }
   }
 
@@ -572,184 +388,85 @@ class RoomStateDevice extends Homey.Device {
   }
 
   /**
-   * Sets up zone activity monitoring using polling.
+   * Sets up WIAB device monitoring via capability listener.
    *
-   * Retrieves the zone from HomeyAPI and starts polling zone.active every 5 seconds.
-   * Zone update events do not fire when zone.active changes, so polling is required.
-   *
-   * @param zoneId - Homey zone ID to monitor
+   * @param wiabDeviceId - ID of the WIAB device to monitor
    */
-  private async setupZoneMonitoring(zoneId: string): Promise<void> {
+  private async setupWiabMonitoring(wiabDeviceId: string): Promise<void> {
     try {
       const app = this.homey.app as WIABApp;
-      const homeyApi = app.homeyApi;
-
-      if (!homeyApi) {
+      if (!app.homeyApi) {
         throw new Error('HomeyAPI not available');
       }
 
-      // Get zone from HomeyAPI
-      const zone = await homeyApi.zones.getZone({ id: zoneId });
+      const devices = await app.homeyApi.devices.getDevices();
+      const device = devices[wiabDeviceId];
 
-      if (!zone) {
-        this.error(`[${RoomStateErrorId.ZONE_NOT_FOUND}] Zone not found: ${zoneId}`);
-        throw new Error(`Zone not found: ${zoneId}`);
+      if (!device) {
+        throw new Error(`WIAB device not found: ${wiabDeviceId}`);
       }
 
-      // Cast to ExtendedHomeyAPIZone to access active property
-      this.zone = zone as ExtendedHomeyAPIZone;
+      const deviceObj = device as { name?: string; makeCapabilityInstance?: (capabilityId: string, callback: (value: boolean) => void) => void };
 
-      this.log(`Monitoring zone: ${this.zone.name} (${zoneId})`);
-      this.log(`Current zone active status: ${this.zone.active}`);
+      this.log(`Setting up monitoring for WIAB device: ${deviceObj.name || wiabDeviceId}`);
 
-      // Track last known active state
-      this.lastZoneActive = this.zone.active ?? false;
+      // Store device info
+      this.wiabDevice = {
+        id: wiabDeviceId,
+        name: deviceObj.name || 'Unknown WIAB Device',
+      };
 
-      // Issue #3 FIX: Use AsyncIntervalManager for safe async polling
-      this.zonePollingManager = new AsyncIntervalManager({
-        operation: async () => {
-          if (!this.zone) {
-            throw new Error('Zone is undefined');
-          }
-
-          const currentActive = this.zone.active ?? false;
-
-          // Only handle changes
-          if (currentActive !== this.lastZoneActive) {
-            this.log(`Zone activity changed: ${currentActive ? 'ACTIVE' : 'INACTIVE'}`);
-            this.lastZoneActive = currentActive;
-            this.handleZoneActivityChange(currentActive);
-          }
-        },
-        intervalMs: 5000,
-        logger: this,
-        name: 'ZonePolling',
-        onSuccess: () => {
-          // Success - reset failure counter and clear warning if recovering
-          if (this.zonePollingFailureCount > 0) {
-            this.log(`Zone polling recovered after ${this.zonePollingFailureCount} failures`);
-            this.zonePollingFailureCount = 0;
-
-            // Clear warning using structured error handling
-            if (this.warningManager && this.errorReporter) {
-              executeAsync(
-                async () => {
-                  await this.warningManager!.clearWarning();
-                },
-                this.errorReporter,
-                {
-                  errorId: RoomStateErrorId.WARNING_CLEAR_FAILED,
-                  severity: ErrorSeverity.LOW,
-                  userMessage: 'Failed to clear device warning',
-                  operationName: 'clearWarningAfterRecovery',
-                  context: {
-                    deviceId: this.getData().id,
-                    previousFailureCount: this.zonePollingFailureCount,
-                  },
-                }
-              );
-            }
-          }
-        },
-        onError: (error: Error) => {
-          this.zonePollingFailureCount++;
-
-          this.errorReporter?.reportError({
-            errorId: RoomStateErrorId.ZONE_POLLING_FAILED,
-            severity: ErrorSeverity.HIGH,
-            userMessage: 'Zone monitoring temporarily unavailable',
-            technicalMessage: `Zone polling failed (${this.zonePollingFailureCount}/${RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY}): ${error.message}`,
-            context: {
-              deviceId: this.getData().id,
-              zoneId: this.currentZoneId,
-              failureCount: this.zonePollingFailureCount,
-            },
+      // Set up capability listener for alarm_occupancy changes
+      if (deviceObj.makeCapabilityInstance) {
+        this.wiabCapabilityListener = () => {
+          deviceObj.makeCapabilityInstance?.('alarm_occupancy', (value: boolean) => {
+            this.log(`WIAB occupancy changed: ${value ? 'OCCUPIED' : 'UNOCCUPIED'}`);
+            this.handleOccupancyChange(value);
           });
+        };
 
-          // Set warning after hitting failure threshold
-          if (this.zonePollingFailureCount >= RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY) {
-            // Set warning using structured error handling
-            if (this.warningManager && this.errorReporter) {
-              executeAsync(
-                async () => {
-                  await this.warningManager!.setWarning(
-                    RoomStateErrorId.ZONE_POLLING_FAILED,
-                    'Zone monitoring unavailable. Check Homey system status.'
-                  );
-                },
-                this.errorReporter,
-                {
-                  errorId: RoomStateErrorId.WARNING_SET_FAILED,
-                  severity: ErrorSeverity.MEDIUM,
-                  userMessage: 'Failed to set device warning',
-                  operationName: 'setWarningAfterFailures',
-                  context: {
-                    deviceId: this.getData().id,
-                    failureCount: this.zonePollingFailureCount,
-                    threshold: RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY,
-                  },
-                }
-              );
-            }
-          }
-        },
+        this.wiabCapabilityListener();
+      } else {
+        this.log('Warning: makeCapabilityInstance not available, will rely on state engine timers only');
+      }
+
+      this.log(`WIAB device monitoring setup complete`);
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.ZONE_NOT_FOUND, // Reuse error ID
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'Failed to setup WIAB device monitoring',
+        technicalMessage: `WIAB monitoring setup failed: ${err.message}\n${err.stack || 'No stack trace available'}`,
+        context: { deviceId: this.getData().id, wiabDeviceId },
       });
 
-      // Start polling
-      this.zonePollingManager.start();
-
-      this.log(`Zone monitoring setup complete - polling zone.active every 5 seconds`);
-    } catch (error) {
-      this.error(
-        `[${RoomStateErrorId.ZONE_MONITOR_SETUP_FAILED}] Failed to setup zone monitoring:`,
-        error
-      );
       throw error;
     }
   }
 
   /**
-   * Handles zone activity changes.
+   * Handles WIAB device occupancy changes.
    *
-   * When zone activity changes:
-   * 1. Update activity state and timestamp
-   * 2. Clear existing timers
-   * 3. Evaluate state transitions
-   * 4. Schedule next transition if needed
-   *
-   * @param active - Whether the zone is currently active
+   * @param occupied - Whether WIAB device shows occupied (true) or unoccupied (false)
    */
-  private handleZoneActivityChange(active: boolean): void {
-    try {
-      if (this.manualOverride) {
-        this.log('Manual override active, ignoring zone activity change');
-        return;
-      }
-
-      this.log(`Zone activity changed: ${active ? 'ACTIVE' : 'INACTIVE'}`);
-
-      // Update activity state
-      this.isZoneActive = active;
-
-      if (active) {
-        // Zone became active - record timestamp
-        this.lastActivityTimestamp = Date.now();
-      }
-
-      // Clear existing timer
-      if (this.stateTimer) {
-        clearTimeout(this.stateTimer);
-        this.stateTimer = undefined;
-      }
-
-      // Check for immediate transitions and schedule next timer
-      this.evaluateAndScheduleTransition();
-    } catch (error) {
-      this.error(
-        `[${RoomStateErrorId.ZONE_ACTIVITY_HANDLER_FAILED}] Failed to handle zone activity change:`,
-        error
-      );
+  private handleOccupancyChange(occupied: boolean): void {
+    // Ignore if manual override is active
+    if (this.manualOverride) {
+      this.log('Manual override active - ignoring WIAB occupancy change');
+      return;
     }
+
+    // Update activity state
+    this.isZoneActive = occupied;
+
+    if (occupied) {
+      this.lastActivityTimestamp = Date.now();
+    }
+
+    // Evaluate state transition
+    this.evaluateAndScheduleTransition();
   }
 
   /**

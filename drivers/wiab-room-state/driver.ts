@@ -202,15 +202,76 @@ class RoomStateDriver extends Homey.Driver {
   /**
    * Handles pairing flow.
    *
-   * Guides users through configuring zone and states during pairing.
+   * Guides users through:
+   * 1. Selecting a WIAB device to monitor
+   * 2. Configuring extended state timers
    */
   async onPair(session: Homey.Driver.PairSession): Promise<void> {
     this.log('Pairing session started');
 
     const pairingData = {
+      wiabDeviceId: '',
       idleTimeout: 0,
       occupiedTimeout: 0,
     };
+
+    // Handle WIAB device list request
+    session.setHandler('get_wiab_devices', async (): Promise<Array<{ id: string; name: string }>> => {
+      this.log('get_wiab_devices handler called');
+      try {
+        const app = this.homey.app as { homeyApi?: { devices: { getDevices(): Promise<Record<string, unknown>> }; zones: { getZone(params: { id: string }): Promise<{ name?: string }> } } };
+
+        if (!app.homeyApi) {
+          this.log('HomeyAPI not available yet during pairing - returning empty array');
+          return [];
+        }
+
+        this.log('Fetching devices from HomeyAPI...');
+        const devices = await app.homeyApi.devices.getDevices();
+        this.log(`Retrieved ${Object.keys(devices).length} total devices`);
+
+        const wiabDevices: Array<{ id: string; name: string }> = [];
+
+        for (const [deviceId, device] of Object.entries(devices)) {
+          const deviceObj = device as { driverId?: string; name?: string; zone?: string };
+
+          // Filter for WIAB devices only
+          if (deviceObj.driverId?.endsWith(':wiab-device')) {
+            let displayName = deviceObj.name || 'Unknown WIAB Device';
+
+            // Try to get zone name if device has a zone
+            if (deviceObj.zone) {
+              try {
+                const zone = await app.homeyApi.zones.getZone({ id: deviceObj.zone });
+                if (zone.name) {
+                  displayName = `${displayName} (${zone.name})`;
+                }
+              } catch (zoneError) {
+                this.log(`Could not fetch zone for device ${deviceId}:`, zoneError);
+              }
+            }
+
+            this.log(`Found WIAB device: ${displayName} (${deviceId})`);
+            wiabDevices.push({
+              id: deviceId,
+              name: displayName,
+            });
+          }
+        }
+
+        this.log(`Returning ${wiabDevices.length} WIAB devices to pairing screen`);
+        return wiabDevices;
+      } catch (error) {
+        this.error('Failed to get WIAB devices:', error);
+        return [];
+      }
+    });
+
+    // Handle WIAB device selection
+    session.setHandler('wiab_device_selected', async (data: { wiabDeviceId: string }): Promise<void> => {
+      pairingData.wiabDeviceId = data.wiabDeviceId;
+      this.log('WIAB device selected:', data.wiabDeviceId);
+    });
 
     // Handle timer configuration from pairing page
     session.setHandler('set_timers', async (data: { idleTimeout: number; occupiedTimeout: number }): Promise<void> => {
@@ -221,6 +282,12 @@ class RoomStateDriver extends Homey.Driver {
 
     // Handler for list_devices - returns device with pairing data
     session.setHandler('list_devices', async (): Promise<Array<{ name: string; data: { id: string }; settings: Record<string, unknown> }>> => {
+      // Validate that WIAB device was selected
+      if (!pairingData.wiabDeviceId) {
+        this.error('No WIAB device selected during pairing');
+        throw new Error('Please select a WIAB device');
+      }
+
       return [
         {
           name: 'Room State Manager',
@@ -228,6 +295,7 @@ class RoomStateDriver extends Homey.Driver {
             id: `room-state-${Date.now()}`,
           },
           settings: {
+            wiabDeviceId: pairingData.wiabDeviceId,
             idleTimeout: pairingData.idleTimeout,
             occupiedTimeout: pairingData.occupiedTimeout,
           },
