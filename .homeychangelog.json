@@ -34,5 +34,8 @@
   },
   "1.2.0": {
     "en": "Added Zone Seal Monitor driver that aggregates door/window sensors to detect when zones are sealed or leaky, enabling automated heating control based on room seal status. Room State Manager improved with pulsing occupancy indicator."
+  },
+  "1.2.1": {
+    "en": "Improved device reliability with automatic error recovery and self-healing capabilities. Devices now provide clearer warning messages when issues occur and continue functioning even with partial failures."
   }
 }
