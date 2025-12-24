@@ -127,9 +127,11 @@ describe('WarningManager', () => {
       const errorId = 'TEST_001';
       const message = 'Test warning';
 
-      // Act & Assert - should not throw
-      await expect(warningManager.setWarning(errorId, message)).resolves.toBeUndefined();
+      // Act
+      const result = await warningManager.setWarning(errorId, message);
 
+      // Assert
+      expect(result).toBe(false);
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to set warning'),
         error
@@ -187,9 +189,11 @@ describe('WarningManager', () => {
 
       await warningManager.setWarning('TEST_001', 'Test warning');
 
-      // Act & Assert - should not throw
-      await expect(warningManager.clearWarning()).resolves.toBeUndefined();
+      // Act
+      const result = await warningManager.clearWarning();
 
+      // Assert
+      expect(result).toBe(false);
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to clear warning'),
         error
