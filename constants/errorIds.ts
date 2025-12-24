@@ -146,6 +146,21 @@ export enum RoomStateErrorId {
 
   /** Invalid state configuration in settings */
   INVALID_STATE_CONFIG = 'ROOM_STATE_008',
+
+  /** Device initialization failed */
+  DEVICE_INIT_FAILED = 'ROOM_STATE_009',
+
+  /** Settings update failed */
+  SETTINGS_UPDATE_FAILED = 'ROOM_STATE_010',
+
+  /** Zone lookup failed */
+  ZONE_LOOKUP_FAILED = 'ROOM_STATE_011',
+
+  /** Zone polling failed */
+  ZONE_POLLING_FAILED = 'ROOM_STATE_012',
+
+  /** Zone change detection failed */
+  ZONE_CHANGE_DETECTION_FAILED = 'ROOM_STATE_013',
 }
 
 /**
