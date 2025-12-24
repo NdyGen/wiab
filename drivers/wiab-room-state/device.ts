@@ -1,6 +1,7 @@
 import Homey from 'homey';
 import { RoomStateEngine } from '../../lib/RoomStateEngine';
 import type { StateConfig, RoomStateSettings, HomeyAPI } from '../../lib/types';
+import { validateRoomStateSettings } from '../../lib/types';
 import { RoomStateErrorId } from '../../constants/errorIds';
 import { WarningManager } from '../../lib/WarningManager';
 import { ErrorReporter } from '../../lib/ErrorReporter';
@@ -194,7 +195,7 @@ class RoomStateDevice extends Homey.Device {
    */
   private async getWiabDevice(): Promise<{ id: string; name: string; occupancy: boolean }> {
     try {
-      const settings = this.getSettings() as RoomStateSettings;
+      const settings = validateRoomStateSettings(this.getSettings());
       const wiabDeviceId = settings.wiabDeviceId;
 
       if (!wiabDeviceId) {
@@ -210,7 +211,19 @@ class RoomStateDevice extends Homey.Device {
       const device = devices[wiabDeviceId];
 
       if (!device) {
-        throw new Error(`WIAB device not found: ${wiabDeviceId}`);
+        // Count available WIAB devices for better error message
+        const allDeviceIds = Object.keys(devices);
+        const wiabDeviceCount = allDeviceIds.filter(id => {
+          const dev = devices[id] as { driverId?: string };
+          return dev.driverId?.endsWith(':wiab-device');
+        }).length;
+
+        throw new Error(
+          `WIAB device not found: ${wiabDeviceId}. ` +
+          `The device may have been deleted. ` +
+          `Found ${wiabDeviceCount} other WIAB devices. ` +
+          `Please delete this Room State Manager and create a new one.`
+        );
       }
 
       const deviceObj = device as { name?: string; capabilitiesObj?: Record<string, { value: unknown }> };
@@ -225,12 +238,15 @@ class RoomStateDevice extends Homey.Device {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 
+      // Note: settings variable is out of scope here, get wiabDeviceId from error context
+      const wiabDeviceId = (this.getSettings() as Partial<RoomStateSettings>).wiabDeviceId || 'unknown';
+
       this.errorReporter?.reportError({
-        errorId: RoomStateErrorId.ZONE_LOOKUP_FAILED, // Reuse error ID
+        errorId: RoomStateErrorId.WIAB_DEVICE_LOOKUP_FAILED,
         severity: ErrorSeverity.CRITICAL,
         userMessage: 'Failed to find WIAB device. Check device configuration.',
         technicalMessage: `WIAB device lookup failed: ${err.message}\n${err.stack || 'No stack trace available'}`,
-        context: { deviceId: this.getData().id, wiabDeviceId: this.getSettings().wiabDeviceId },
+        context: { deviceId: this.getData().id, wiabDeviceId },
       });
 
       throw error;
@@ -250,15 +266,10 @@ class RoomStateDevice extends Homey.Device {
    */
   private async setupRoomStateManagement(): Promise<void> {
     try {
-      // Load settings
-      const settings = this.getSettings() as RoomStateSettings;
-      const wiabDeviceId = settings.wiabDeviceId;
-      const idleTimeout = settings.idleTimeout || 0;
-      const occupiedTimeout = settings.occupiedTimeout || 0;
-
-      if (!wiabDeviceId) {
-        throw new Error('No WIAB device configured - please check device settings');
-      }
+      // Load and validate settings
+      const settings = validateRoomStateSettings(this.getSettings());
+      const idleTimeout = settings.idleTimeout;
+      const occupiedTimeout = settings.occupiedTimeout;
 
       // Get WIAB device and check current occupancy
       const wiabDevice = await this.getWiabDevice();
@@ -305,11 +316,18 @@ class RoomStateDevice extends Homey.Device {
   /**
    * Tears down room state management.
    *
-   * Clears WIAB monitoring and state timers.
+   * Clears WIAB monitoring, state timers, and resets all state variables.
+   *
+   * Note on capability listener cleanup:
+   * The WIAB device capability listener is managed via makeCapabilityInstance(),
+   * which doesn't provide an explicit cleanup mechanism. Setting the reference
+   * to null prevents re-registration, and the actual listener will be garbage
+   * collected when the device is deleted. This pattern is consistent with
+   * HomeyAPI's GC-based lifecycle management.
    */
   private teardownRoomStateManagement(): void {
     try {
-      // Remove WIAB capability listener
+      // Remove WIAB capability listener reference (GC-based cleanup)
       this.wiabCapabilityListener = null;
       this.wiabDevice = undefined;
 
@@ -318,6 +336,12 @@ class RoomStateDevice extends Homey.Device {
         clearTimeout(this.stateTimer);
         this.stateTimer = undefined;
       }
+
+      // Reset state variables to prevent stale state
+      this.stateEngine = undefined;
+      this.isZoneActive = false;
+      this.lastActivityTimestamp = null;
+      this.manualOverride = false;
 
       this.log('Room state management torn down');
     } catch (error) {
@@ -427,7 +451,8 @@ class RoomStateDevice extends Homey.Device {
 
         this.wiabCapabilityListener();
       } else {
-        this.log('Warning: makeCapabilityInstance not available, will rely on state engine timers only');
+        // makeCapabilityInstance unavailable - this is a critical error
+        throw new Error('makeCapabilityInstance not available on WIAB device - cannot monitor occupancy changes');
       }
 
       this.log(`WIAB device monitoring setup complete`);
@@ -463,6 +488,12 @@ class RoomStateDevice extends Homey.Device {
 
     if (occupied) {
       this.lastActivityTimestamp = Date.now();
+    }
+
+    // Clear any existing timer before evaluating new transition
+    if (this.stateTimer) {
+      clearTimeout(this.stateTimer);
+      this.stateTimer = undefined;
     }
 
     // Evaluate state transition
@@ -639,7 +670,7 @@ class RoomStateDevice extends Homey.Device {
   /**
    * Returns the device to automatic mode.
    *
-   * Deactivates manual override and resumes zone-based state management.
+   * Deactivates manual override and resumes WIAB device-based state management.
    * Public method called from flow cards.
    */
   public async returnToAutomatic(): Promise<void> {
@@ -648,7 +679,7 @@ class RoomStateDevice extends Homey.Device {
 
       this.manualOverride = false;
 
-      // Re-evaluate state based on current zone activity
+      // Re-evaluate state based on current WIAB device activity
       this.evaluateAndScheduleTransition();
     } catch (error) {
       this.error('Failed to return to automatic mode:', error);
@@ -908,12 +939,22 @@ class RoomStateDevice extends Homey.Device {
         this.log(`Flow triggered: state changed to "${newState}"`);
       }
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.FLOW_TRIGGER_FAILED,
+        severity: ErrorSeverity.MEDIUM,
+        userMessage: 'Flow card trigger failed',
+        technicalMessage: `Failed to trigger room_state_changed flow: ${err.message}\n${err.stack || 'No stack trace available'}`,
+        context: { deviceId: this.getData().id, oldState, newState },
+      });
+
       this.error('Failed to trigger state changed flow:', error);
     }
   }
 
   /**
-   * Gets minutes since last zone activity.
+   * Gets minutes since last WIAB device activity.
    *
    * @returns Minutes since last activity, or 0 if no activity recorded
    */

@@ -216,14 +216,14 @@ class RoomStateDriver extends Homey.Driver {
     };
 
     // Handle WIAB device list request
-    session.setHandler('get_wiab_devices', async (): Promise<Array<{ id: string; name: string }>> => {
+    session.setHandler('get_wiab_devices', async (): Promise<Array<{ id: string; name: string }> | { error: string }> => {
       this.log('get_wiab_devices handler called');
       try {
         const app = this.homey.app as { homeyApi?: { devices: { getDevices(): Promise<Record<string, unknown>> }; zones: { getZone(params: { id: string }): Promise<{ name?: string }> } } };
 
         if (!app.homeyApi) {
-          this.log('HomeyAPI not available yet during pairing - returning empty array');
-          return [];
+          this.error('HomeyAPI not available during pairing');
+          return { error: 'System not ready. Please wait a moment and try again.' };
         }
 
         this.log('Fetching devices from HomeyAPI...');
@@ -263,7 +263,8 @@ class RoomStateDriver extends Homey.Driver {
         return wiabDevices;
       } catch (error) {
         this.error('Failed to get WIAB devices:', error);
-        return [];
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        return { error: `Failed to load WIAB devices: ${errorMessage}` };
       }
     });
 
@@ -286,6 +287,48 @@ class RoomStateDriver extends Homey.Driver {
       if (!pairingData.wiabDeviceId) {
         this.error('No WIAB device selected during pairing');
         throw new Error('Please select a WIAB device');
+      }
+
+      // Validate timer values
+      if (typeof pairingData.idleTimeout !== 'number' || pairingData.idleTimeout < 0 || pairingData.idleTimeout > 1440) {
+        this.error('Invalid idle timeout:', pairingData.idleTimeout);
+        throw new Error('Idle timeout must be between 0 and 1440 minutes');
+      }
+
+      if (typeof pairingData.occupiedTimeout !== 'number' || pairingData.occupiedTimeout < 0 || pairingData.occupiedTimeout > 1440) {
+        this.error('Invalid occupied timeout:', pairingData.occupiedTimeout);
+        throw new Error('Occupied timeout must be between 0 and 1440 minutes');
+      }
+
+      // Verify that the WIAB device still exists
+      try {
+        const app = this.homey.app as { homeyApi?: { devices: { getDevices(): Promise<Record<string, unknown>> } } };
+
+        if (!app.homeyApi) {
+          throw new Error('System not ready. Please try pairing again.');
+        }
+
+        const devices = await app.homeyApi.devices.getDevices();
+        const device = devices[pairingData.wiabDeviceId];
+
+        if (!device) {
+          this.error('Selected WIAB device no longer exists:', pairingData.wiabDeviceId);
+          throw new Error('Selected WIAB device not found. It may have been deleted. Please start pairing again.');
+        }
+
+        const deviceObj = device as { driverId?: string };
+        if (!deviceObj.driverId?.endsWith(':wiab-device')) {
+          this.error('Selected device is not a WIAB device:', pairingData.wiabDeviceId);
+          throw new Error('Selected device is not a valid WIAB device. Please start pairing again.');
+        }
+      } catch (error) {
+        // Re-throw validation errors
+        if (error instanceof Error) {
+          throw error;
+        }
+        // Wrap unexpected errors
+        this.error('Failed to validate WIAB device:', error);
+        throw new Error('Failed to validate selected WIAB device. Please try again.');
       }
 
       return [
