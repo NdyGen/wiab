@@ -11,12 +11,10 @@ interface WIABApp extends Homey.App {
 }
 
 /**
- * Extended HomeyAPIZone with event emitter methods
+ * Extended HomeyAPIZone with active property
  */
 interface ExtendedHomeyAPIZone extends HomeyAPIZone {
   active?: boolean;
-  on(event: 'update', listener: (update: { active: boolean }) => void): void;
-  removeListener(event: 'update', listener: (update: { active: boolean }) => void): void;
 }
 
 /**
@@ -27,7 +25,7 @@ interface ExtendedHomeyAPIZone extends HomeyAPIZone {
  * between user-defined states based on active/inactive timers.
  *
  * Features:
- * - Event-driven zone activity monitoring
+ * - Polling-based zone activity monitoring (every 5 seconds)
  * - 2-level state hierarchy (parent + child)
  * - Timer-based state transitions for both active and inactive states
  * - Manual state override with indefinite duration
@@ -36,18 +34,18 @@ interface ExtendedHomeyAPIZone extends HomeyAPIZone {
  * Lifecycle:
  * 1. onInit() - Load settings, setup zone monitoring, initialize state
  * 2. onSettings() - Reconfigure when settings change
- * 3. onDeleted() - Cleanup timers and event listeners
+ * 3. onDeleted() - Cleanup timers and polling intervals
  */
 class RoomStateDevice extends Homey.Device {
   private stateEngine?: RoomStateEngine;
   private zone?: ExtendedHomeyAPIZone;
-  private zoneActivityListener?: (update: { active: boolean }) => void;
   private stateTimer?: NodeJS.Timeout;
   private lastActivityTimestamp: number | null = null;
   private isZoneActive: boolean = false;
   private manualOverride: boolean = false;
   private currentZoneId?: string;
-  private zoneCheckInterval?: NodeJS.Timeout;
+  private zonePollingInterval?: NodeJS.Timeout;
+  private zoneChangeDetectionInterval?: NodeJS.Timeout;
 
   /**
    * Initializes the Room State device.
@@ -323,12 +321,12 @@ class RoomStateDevice extends Homey.Device {
    */
   private startZoneChangeDetection(): void {
     // Clear any existing interval
-    if (this.zoneCheckInterval) {
-      clearInterval(this.zoneCheckInterval);
+    if (this.zoneChangeDetectionInterval) {
+      clearInterval(this.zoneChangeDetectionInterval);
     }
 
     // Check for zone changes every 30 seconds
-    this.zoneCheckInterval = setInterval(async () => {
+    this.zoneChangeDetectionInterval = setInterval(async () => {
       try {
         const newZoneId = await this.getDeviceZone();
 
@@ -349,26 +347,26 @@ class RoomStateDevice extends Homey.Device {
   /**
    * Tears down room state management.
    *
-   * Removes zone event listener and clears timers.
+   * Clears zone polling interval and state timers.
    */
   private teardownRoomStateManagement(): void {
     try {
-      // Remove zone event listener
-      if (this.zone && this.zoneActivityListener) {
-        this.zone.removeListener('update', this.zoneActivityListener);
-        this.zoneActivityListener = undefined;
+      // Clear zone polling interval
+      if (this.zonePollingInterval) {
+        clearInterval(this.zonePollingInterval);
+        this.zonePollingInterval = undefined;
+      }
+
+      // Clear zone change detection interval
+      if (this.zoneChangeDetectionInterval) {
+        clearInterval(this.zoneChangeDetectionInterval);
+        this.zoneChangeDetectionInterval = undefined;
       }
 
       // Clear state timer
       if (this.stateTimer) {
         clearTimeout(this.stateTimer);
         this.stateTimer = undefined;
-      }
-
-      // Clear zone check interval
-      if (this.zoneCheckInterval) {
-        clearInterval(this.zoneCheckInterval);
-        this.zoneCheckInterval = undefined;
       }
 
       // Clear references
@@ -448,10 +446,10 @@ class RoomStateDevice extends Homey.Device {
   }
 
   /**
-   * Sets up zone activity monitoring using HomeyAPI events.
+   * Sets up zone activity monitoring using polling.
    *
-   * Retrieves the zone from HomeyAPI and registers an event listener
-   * for zone activity changes. Uses event-driven approach (not polling).
+   * Retrieves the zone from HomeyAPI and starts polling zone.active every 5 seconds.
+   * Zone update events do not fire when zone.active changes, so polling is required.
    *
    * @param zoneId - Homey zone ID to monitor
    */
@@ -472,20 +470,33 @@ class RoomStateDevice extends Homey.Device {
         throw new Error(`Zone not found: ${zoneId}`);
       }
 
-      // Cast to ExtendedHomeyAPIZone to access event emitter methods
+      // Cast to ExtendedHomeyAPIZone to access active property
       this.zone = zone as ExtendedHomeyAPIZone;
 
       this.log(`Monitoring zone: ${this.zone.name} (${zoneId})`);
-
-      // Register zone activity listener
-      this.zoneActivityListener = (update: { active: boolean }) => {
-        this.handleZoneActivityChange(update.active);
-      };
-
-      this.zone.on('update', this.zoneActivityListener);
-
-      this.log(`Zone monitoring setup complete - listening for updates on zone: ${this.zone.name}`);
       this.log(`Current zone active status: ${this.zone.active}`);
+
+      // Track last known active state
+      let lastActive = this.zone.active ?? false;
+
+      // Start polling zone.active every 5 seconds
+      this.zonePollingInterval = setInterval(() => {
+        if (!this.zone) {
+          this.error('Zone polling failed: zone is undefined');
+          return;
+        }
+
+        const currentActive = this.zone.active ?? false;
+
+        // Only handle changes
+        if (currentActive !== lastActive) {
+          this.log(`Zone activity changed: ${currentActive ? 'ACTIVE' : 'INACTIVE'}`);
+          lastActive = currentActive;
+          this.handleZoneActivityChange(currentActive);
+        }
+      }, 5000); // Poll every 5 seconds
+
+      this.log(`Zone monitoring setup complete - polling zone.active every 5 seconds`);
     } catch (error) {
       this.error(
         `[${RoomStateErrorId.ZONE_MONITOR_SETUP_FAILED}] Failed to setup zone monitoring:`,
