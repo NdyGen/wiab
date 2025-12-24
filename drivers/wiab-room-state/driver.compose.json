@@ -8,7 +8,8 @@
   },
   "class": "sensor",
   "capabilities": [
-    "room_state"
+    "room_state",
+    "alarm_room_occupied"
   ],
   "capabilitiesOptions": {
     "room_state": {
@@ -18,6 +19,15 @@
         "de": "Zustand",
         "no": "Tilstand",
         "sv": "Tillstånd"
+      }
+    },
+    "alarm_room_occupied": {
+      "title": {
+        "en": "Occupied",
+        "nl": "Bezet",
+        "de": "Besetzt",
+        "no": "Opptatt",
+        "sv": "Upptagen"
       }
     }
   },

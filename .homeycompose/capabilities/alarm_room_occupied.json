@@ -1,0 +1,22 @@
+{
+  "type": "boolean",
+  "title": {
+    "en": "Room Occupied",
+    "nl": "Kamer Bezet",
+    "de": "Raum Besetzt",
+    "no": "Rom Opptatt",
+    "sv": "Rum Upptagen"
+  },
+  "desc": {
+    "en": "Indicates room occupancy with pulsing alarm when occupied or extended occupied",
+    "nl": "Geeft kamerbezetting aan met pulserend alarm wanneer bezet of verlengd bezet",
+    "de": "Zeigt Raumbelegung mit pulsierendem Alarm bei besetzt oder erweitert besetzt an",
+    "no": "Indikerer romopptatthet med pulserende alarm når opptatt eller utvidet opptatt",
+    "sv": "Indikerar rumsbeläggning med pulserande alarm när upptagen eller utökad upptagen"
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "uiQuickAction": false,
+  "icon": "/assets/room_state.svg"
+}
