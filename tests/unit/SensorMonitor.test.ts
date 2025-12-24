@@ -962,7 +962,7 @@ describe('SensorMonitor', () => {
     /**
      * Test 5: Missing lastUpdated timestamp handling
      */
-    it('should treat sensor as fresh when lastUpdated timestamp is missing', async () => {
+    it('should treat sensor as stale when lastUpdated timestamp is missing', async () => {
       const pir = createMockDevice({
         id: 'pir-no-timestamp',
         name: 'PIR No Timestamp',
@@ -991,8 +991,10 @@ describe('SensorMonitor', () => {
 
       await monitor.start();
 
-      // Should treat as fresh (conservative approach)
-      expect(onTriggered).toHaveBeenCalledWith('', true);
+      // Should treat as stale (fail-safe approach to prevent false occupancy)
+      // Sensor excluded from initial calculation = no active triggers = occupancy FALSE
+      expect(onTriggered).not.toHaveBeenCalled();
+      expect(onReset).toHaveBeenCalledWith('', false);
       expect(homey.log).toHaveBeenCalledWith(
         expect.stringContaining('[INIT] No lastUpdated timestamp for PIR No Timestamp')
       );
