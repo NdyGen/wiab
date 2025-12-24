@@ -154,48 +154,89 @@ class RoomStateDevice extends Homey.Device {
         return null;
       }
 
-      // Get our Homey device ID (the UUID that Homey assigns, not our custom pairing ID)
-      const customDeviceId = this.getData().id;
-      this.log(`[DEBUG] Custom device ID from pairing: ${customDeviceId}`);
-
       // Get all devices from HomeyAPI
       const devices = await homeyApi.devices.getDevices();
       this.log(`[DEBUG] Found ${Object.keys(devices).length} total devices in Homey`);
 
-      // Search through all devices to find ours by matching the device name
-      // Since we're looking for a device named "Room State Manager" created by this driver,
-      // we can match by name. The device object will have a zone property.
-      let foundZoneId: string | null = null;
-      const ourDeviceName = this.getName();
+      // Get our unique pairing ID to identify ourselves
+      const ourPairingId = this.getData().id;
+      this.log(`[DEBUG] Our pairing ID: ${ourPairingId}`);
+      this.log(`[DEBUG] Looking for Room State Manager device in HomeyAPI...`);
 
-      this.log(`[DEBUG] Looking for device named: "${ourDeviceName}"`);
+      // Get our current settings to use as additional matching criteria
+      const ourSettings = this.getSettings() as RoomStateSettings;
 
-      for (const [deviceId, device] of Object.entries(devices)) {
-        const deviceObj = device as unknown as {
+      // Find ourselves by matching the device ID directly
+      // The deviceId from HomeyAPI should match the device's Homey ID
+      let device: unknown | null = null;
+      let matchedDeviceId: string | null = null;
+
+      for (const [deviceId, dev] of Object.entries(devices)) {
+        const deviceObj = dev as unknown as {
+          id?: string;
           name?: string;
           zone?: string;
+          driverId?: string;
+          data?: { id?: string };
+          settings?: RoomStateSettings;
         };
 
-        // Match by device name
-        if (deviceObj.name === ourDeviceName) {
-          this.log(`[DEBUG] Found matching device: ${deviceId}`);
-          this.log(`[DEBUG] Device zone: ${deviceObj.zone}`);
+        // Only check devices from our driver
+        // driverId format: "homey:app:net.dongen.wiab:wiab-room-state"
+        if (!deviceObj.driverId?.endsWith(':wiab-room-state')) {
+          continue;
+        }
 
-          // Take the first match with a zone (should only be one device with this name)
-          if (deviceObj.zone) {
-            foundZoneId = deviceObj.zone;
-            this.log(`Device is in zone: ${foundZoneId}`);
-            break;
-          }
+        // Try to match by device ID (deviceId key from HomeyAPI)
+        // This is the most reliable way to identify ourselves
+        if (deviceId === this.getData().id || deviceObj.id === this.getData().id) {
+          this.log(`[DEBUG] Matched device by ID: ${deviceId}`);
+          device = deviceObj;
+          matchedDeviceId = deviceId;
+          break;
+        }
+
+        // Fallback: Match by pairing ID in device data
+        if (deviceObj.data?.id === ourPairingId) {
+          this.log(`[DEBUG] Matched device by pairing ID in data: ${deviceId}`);
+          device = deviceObj;
+          matchedDeviceId = deviceId;
+          break;
+        }
+
+        // Final fallback: Match by unique settings combination
+        if (deviceObj.settings &&
+            deviceObj.settings.idleTimeout === ourSettings.idleTimeout &&
+            deviceObj.settings.occupiedTimeout === ourSettings.occupiedTimeout) {
+          this.log(`[DEBUG] Matched device by settings: ${deviceId}`);
+          device = deviceObj;
+          matchedDeviceId = deviceId;
+          break;
         }
       }
 
-      if (!foundZoneId) {
-        this.error(`Could not find zone for device "${ourDeviceName}"`);
-        this.error('Device may need to be manually assigned to a zone in Homey settings');
+      if (!device || !matchedDeviceId) {
+        this.error(`Could not find ourselves in HomeyAPI devices`);
+        this.error(`Our pairing ID: ${ourPairingId}, settings: idle=${ourSettings.idleTimeout}, occupied=${ourSettings.occupiedTimeout}`);
+        return null;
       }
 
-      return foundZoneId;
+      const deviceObj = device as unknown as {
+        name?: string;
+        zone?: string;
+      };
+
+      this.log(`[DEBUG] Found our device: ${deviceObj.name}`);
+      this.log(`[DEBUG] Device zone: ${deviceObj.zone}`);
+
+      if (!deviceObj.zone) {
+        this.error(`No zone assigned to device "${deviceObj.name}"`);
+        this.error('Device needs to be manually assigned to a zone in Homey settings');
+        return null;
+      }
+
+      this.log(`Device is in zone: ${deviceObj.zone}`);
+      return deviceObj.zone;
     } catch (error) {
       this.error('Failed to get device zone:', error);
       return null;
@@ -443,7 +484,8 @@ class RoomStateDevice extends Homey.Device {
 
       this.zone.on('update', this.zoneActivityListener);
 
-      this.log('Zone monitoring setup complete');
+      this.log(`Zone monitoring setup complete - listening for updates on zone: ${this.zone.name}`);
+      this.log(`Current zone active status: ${this.zone.active}`);
     } catch (error) {
       this.error(
         `[${RoomStateErrorId.ZONE_MONITOR_SETUP_FAILED}] Failed to setup zone monitoring:`,
