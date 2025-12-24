@@ -709,11 +709,13 @@ export class SensorMonitor {
       // Check if lastUpdated timestamp is available
       const lastUpdated = capabilityObj?.lastUpdated;
       if (!lastUpdated || typeof lastUpdated !== 'number') {
-        // No timestamp available - treat as non-stale (conservative)
+        // No timestamp available - treat as STALE (fail-safe)
+        // This prevents false occupancy from sensors stuck in TRUE state
+        // Runtime monitoring will still work if sensor changes state
         this.logger.log(
-          `[INIT] No lastUpdated timestamp for ${sensor.deviceName || sensor.deviceId}, treating as fresh`
+          `[INIT] No lastUpdated timestamp for ${sensor.deviceName || sensor.deviceId}, treating as STALE (fail-safe)`
         );
-        return false;
+        return true;
       }
 
       // Calculate time since last update
