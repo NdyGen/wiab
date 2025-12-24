@@ -31,5 +31,8 @@
   },
   "1.1.0": {
     "en": "New Device: Room State Manager for zone-based state tracking with state hierarchies and timer-based transitions. Occupancy Device Improvements: Event-driven sensor monitoring (replacing polling), room type templates for quick setup, stale sensor detection, and UI improvements."
+  },
+  "1.2.0": {
+    "en": "Added Zone Seal Monitor driver that aggregates door/window sensors to detect when zones are sealed or leaky, enabling automated heating control based on room seal status. Room State Manager improved with pulsing occupancy indicator."
   }
 }
