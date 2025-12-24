@@ -21,7 +21,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "homey": "^3.0.0",
+    "homey": "^3.12.0",
     "homey-api": "^3.14.23"
   },
   "devDependencies": {
