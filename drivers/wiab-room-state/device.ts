@@ -734,34 +734,83 @@ class RoomStateDevice extends Homey.Device {
    * Initializes device capabilities.
    *
    * Sets the initial room_state capability value to display current state.
+   * Uses retry logic with automatic repair for capability migration.
    */
   private async initializeCapabilities(): Promise<void> {
-    try {
-      if (!this.stateEngine) {
-        return;
+    if (!this.stateEngine) {
+      this.error('Cannot initialize capabilities: state engine not initialized');
+      return;
+    }
+
+    const currentState = this.stateEngine.getCurrentState();
+    this.log(`Initializing capabilities with state: ${currentState}`);
+
+    // Initialize room_state capability with retry
+    await this.ensureCapabilityWithRetry('room_state', currentState);
+
+    // Initialize alarm_room_occupied capability with retry
+    const occupied = this.computeOccupancyIndicator(currentState);
+    await this.ensureCapabilityWithRetry('alarm_room_occupied', occupied);
+
+    this.log(`Capabilities initialized successfully: state=${currentState}, occupied=${occupied}`);
+  }
+
+  /**
+   * Ensures a capability exists and is set, with automatic retry on failure.
+   *
+   * Attempts to add the capability if missing, then sets its value.
+   * Retries up to 3 times with exponential backoff on failure.
+   * Falls back to graceful degradation if all retries fail.
+   *
+   * @param capability - Capability ID to ensure
+   * @param value - Initial value to set
+   * @param maxRetries - Maximum number of retry attempts (default: 3)
+   * @private
+   */
+  private async ensureCapabilityWithRetry(
+    capability: string,
+    value: unknown,
+    maxRetries: number = 3
+  ): Promise<void> {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Check if capability exists
+        if (!this.hasCapability(capability)) {
+          this.log(`Adding missing capability: ${capability} (attempt ${attempt}/${maxRetries})`);
+          await this.addCapability(capability);
+
+          // Verify capability was added successfully
+          if (!this.hasCapability(capability)) {
+            throw new Error(`Capability ${capability} not added successfully`);
+          }
+
+          this.log(`Capability ${capability} added successfully`);
+        }
+
+        // Set capability value
+        await this.setCapabilityValue(capability, value);
+        this.log(`Capability ${capability} set to: ${value}`);
+        return; // Success - exit retry loop
+
+      } catch (error) {
+        this.error(
+          `Failed to ensure capability ${capability} (attempt ${attempt}/${maxRetries}):`,
+          error
+        );
+
+        if (attempt < maxRetries) {
+          // Exponential backoff: 100ms, 200ms, 400ms
+          const delayMs = 100 * Math.pow(2, attempt - 1);
+          this.log(`Retrying in ${delayMs}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        } else {
+          // All retries exhausted - log warning and continue
+          this.error(
+            `Failed to initialize capability ${capability} after ${maxRetries} attempts. ` +
+            `Device will continue with degraded functionality.`
+          );
+        }
       }
-
-      // Add capability if it doesn't exist
-      if (!this.hasCapability('room_state')) {
-        await this.addCapability('room_state');
-      }
-
-      // Set initial state value
-      const currentState = this.stateEngine.getCurrentState();
-      await this.setCapabilityValue('room_state', currentState);
-
-      // Add alarm_room_occupied capability if it doesn't exist (migration)
-      if (!this.hasCapability('alarm_room_occupied')) {
-        await this.addCapability('alarm_room_occupied');
-      }
-
-      // Set initial occupancy indicator
-      const occupied = this.computeOccupancyIndicator(currentState);
-      await this.setCapabilityValue('alarm_room_occupied', occupied);
-
-      this.log(`Capabilities initialized: state=${currentState}, occupied=${occupied}`);
-    } catch (error) {
-      this.error('Failed to initialize capabilities:', error);
     }
   }
 
@@ -769,21 +818,33 @@ class RoomStateDevice extends Homey.Device {
    * Updates device capabilities after state change.
    *
    * Updates the room_state capability to display the new state.
+   * Uses defensive checks and automatic repair for missing capabilities.
    *
    * @param newState - New state ID
    */
   private async updateCapabilities(newState: string): Promise<void> {
     try {
-      // Update room_state capability
-      await this.setCapabilityValue('room_state', newState);
+      // Update room_state capability with retry if missing
+      if (!this.hasCapability('room_state')) {
+        this.log('room_state capability missing during update, attempting repair');
+        await this.ensureCapabilityWithRetry('room_state', newState);
+      } else {
+        await this.setCapabilityValue('room_state', newState);
+      }
 
-      // Update occupancy indicator alarm
+      // Update occupancy indicator alarm with retry if missing
       const occupied = this.computeOccupancyIndicator(newState);
-      await this.setCapabilityValue('alarm_room_occupied', occupied);
+      if (!this.hasCapability('alarm_room_occupied')) {
+        this.log('alarm_room_occupied capability missing during update, attempting repair');
+        await this.ensureCapabilityWithRetry('alarm_room_occupied', occupied);
+      } else {
+        await this.setCapabilityValue('alarm_room_occupied', occupied);
+      }
 
       this.log(`Capabilities updated: state=${newState}, occupied=${occupied}`);
     } catch (error) {
       this.error('Failed to update capabilities:', error);
+      // Don't rethrow - device should continue functioning even if capability updates fail
     }
   }
 
