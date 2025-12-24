@@ -25,6 +25,31 @@
 import { Logger, WarningState } from './ErrorTypes';
 
 /**
+ * WarningStateError - Thrown when warning state operations fail
+ *
+ * Custom error type for warning state management failures. Preserves
+ * context about the operation (set/clear) and error ID for tracking.
+ */
+export class WarningStateError extends Error {
+  public readonly errorId: string | null;
+  public readonly operation: 'set' | 'clear';
+  public readonly cause?: Error;
+
+  constructor(operation: 'set' | 'clear', errorId: string | null, cause?: Error) {
+    const opName = operation === 'set' ? 'set warning' : 'clear warning';
+    const idStr = errorId ? ` [${errorId}]` : '';
+    super(`Failed to ${opName}${idStr}: ${cause?.message || 'Unknown error'}`);
+
+    this.name = 'WarningStateError';
+    this.errorId = errorId;
+    this.operation = operation;
+    this.cause = cause;
+
+    Object.setPrototypeOf(this, WarningStateError.prototype);
+  }
+}
+
+/**
  * Homey Device interface for warning methods
  */
 export interface DeviceWithWarnings {
@@ -66,17 +91,18 @@ export class WarningManager {
    *
    * @param errorId - Error ID for tracking
    * @param message - User-friendly warning message
-   * @returns Promise resolving to true if warning was set successfully, false on failure
+   * @throws {WarningStateError} If device API call fails
    *
    * @example
    * ```typescript
-   * const success = await warningManager.setWarning('DEVICE_001', 'Cannot connect to sensors');
-   * if (!success) {
-   *   this.error('Warning state may be out of sync');
+   * try {
+   *   await warningManager.setWarning('DEVICE_001', 'Cannot connect to sensors');
+   * } catch (error) {
+   *   this.error('Failed to set warning:', error);
    * }
    * ```
    */
-  public async setWarning(errorId: string, message: string): Promise<boolean> {
+  public async setWarning(errorId: string, message: string): Promise<void> {
     // Skip if same warning already active
     if (
       this.state.isActive &&
@@ -86,7 +112,7 @@ export class WarningManager {
       this.logger.log(
         `Warning already active: [${errorId}] ${message} - skipping redundant update`
       );
-      return true; // Already in correct state
+      return; // Already in correct state
     }
 
     try {
@@ -101,11 +127,10 @@ export class WarningManager {
       };
 
       this.logger.log(`Warning set: [${errorId}] ${message}`);
-      return true;
     } catch (error) {
       this.logger.error(`Failed to set warning [${errorId}]:`, error);
       // State remains unchanged on failure - prevents corruption
-      return false;
+      throw new WarningStateError('set', errorId, error instanceof Error ? error : undefined);
     }
   }
 
@@ -118,20 +143,21 @@ export class WarningManager {
    * State is only updated after successful device API call to prevent
    * state corruption on failure.
    *
-   * @returns Promise resolving to true if warning was cleared successfully, false on failure
+   * @throws {WarningStateError} If device API call fails
    *
    * @example
    * ```typescript
-   * const success = await warningManager.clearWarning();
-   * if (!success) {
-   *   this.error('Warning state may be out of sync');
+   * try {
+   *   await warningManager.clearWarning();
+   * } catch (error) {
+   *   this.error('Failed to clear warning:', error);
    * }
    * ```
    */
-  public async clearWarning(): Promise<boolean> {
+  public async clearWarning(): Promise<void> {
     if (!this.state.isActive) {
       this.logger.log('No active warning to clear - skipping');
-      return true; // Already in correct state
+      return; // Already in correct state
     }
 
     const previousErrorId = this.state.errorId;
@@ -148,11 +174,10 @@ export class WarningManager {
       };
 
       this.logger.log(`Warning cleared: [${previousErrorId}]`);
-      return true;
     } catch (error) {
       this.logger.error('Failed to clear warning:', error);
       // State remains unchanged on failure - prevents corruption
-      return false;
+      throw new WarningStateError('clear', previousErrorId, error instanceof Error ? error : undefined);
     }
   }
 

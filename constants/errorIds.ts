@@ -161,6 +161,12 @@ export enum RoomStateErrorId {
 
   /** Zone change detection failed */
   ZONE_CHANGE_DETECTION_FAILED = 'ROOM_STATE_013',
+
+  /** Failed to set device warning */
+  WARNING_SET_FAILED = 'ROOM_STATE_014',
+
+  /** Failed to clear device warning */
+  WARNING_CLEAR_FAILED = 'ROOM_STATE_015',
 }
 
 /**
@@ -207,4 +213,10 @@ export enum ZoneSealErrorId {
 
   /** Capability update partially failed */
   CAPABILITY_UPDATE_PARTIAL_FAILURE = 'ZONE_SEAL_010',
+
+  /** Failed to set device warning */
+  WARNING_SET_FAILED = 'ZONE_SEAL_011',
+
+  /** Failed to clear device warning */
+  WARNING_CLEAR_FAILED = 'ZONE_SEAL_012',
 }

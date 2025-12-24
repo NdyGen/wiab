@@ -7,6 +7,7 @@ import { ErrorReporter } from '../../lib/ErrorReporter';
 import { RetryManager } from '../../lib/RetryManager';
 import { AsyncIntervalManager } from '../../lib/AsyncIntervalManager';
 import { ErrorSeverity } from '../../lib/ErrorTypes';
+import { executeAsync } from '../../lib/AsyncHelpers';
 
 /**
  * Interface for WIABApp with HomeyAPI
@@ -93,9 +94,10 @@ class RoomStateDevice extends Homey.Device {
       await this.setupRoomStateManagement();
 
       // Clear any previous warning on successful initialization
-      const warningCleared = await this.warningManager.clearWarning();
-      if (!warningCleared) {
-        this.error('Failed to clear warning after successful initialization - warning state may be out of sync');
+      try {
+        await this.warningManager.clearWarning();
+      } catch (warningError) {
+        this.error('Failed to clear warning after successful initialization:', warningError);
       }
 
       this.log('Room State device initialized successfully');
@@ -111,13 +113,13 @@ class RoomStateDevice extends Homey.Device {
         context: { deviceId: this.getData().id },
       });
 
-      const warningSet = await this.warningManager.setWarning(
-        RoomStateErrorId.DEVICE_INIT_FAILED,
-        'Initialization failed. Check device settings and zone assignment.'
-      );
-
-      if (!warningSet) {
-        this.error('Failed to set warning on device - warning state may be out of sync');
+      try {
+        await this.warningManager.setWarning(
+          RoomStateErrorId.DEVICE_INIT_FAILED,
+          'Initialization failed. Check device settings and zone assignment.'
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning on device:', warningError);
       }
 
       // Don't throw - allow device to exist in degraded mode with visible warning
@@ -152,9 +154,10 @@ class RoomStateDevice extends Homey.Device {
         await this.setupRoomStateManagement();
 
         // Clear warning on successful settings update
-        const warningCleared = await this.warningManager?.clearWarning();
-        if (warningCleared === false) {
-          this.error('Failed to clear warning after settings update - warning state may be out of sync');
+        try {
+          await this.warningManager?.clearWarning();
+        } catch (error) {
+          this.error('Failed to clear warning after settings update:', error);
         }
       }
     } catch (error) {
@@ -168,13 +171,13 @@ class RoomStateDevice extends Homey.Device {
         context: { deviceId: this.getData().id, changedKeys: event.changedKeys },
       });
 
-      const warningSet = await this.warningManager?.setWarning(
-        RoomStateErrorId.SETTINGS_UPDATE_FAILED,
-        'Failed to apply settings. Check configuration and try again.'
-      );
-
-      if (warningSet === false) {
-        this.error('Failed to set warning after settings error - warning state may be out of sync');
+      try {
+        await this.warningManager?.setWarning(
+          RoomStateErrorId.SETTINGS_UPDATE_FAILED,
+          'Failed to apply settings. Check configuration and try again.'
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning after settings error:', warningError);
       }
 
       throw error; // Re-throw to show error in Homey settings UI
@@ -424,9 +427,10 @@ class RoomStateDevice extends Homey.Device {
           this.log(`Zone change detection recovered after ${this.zoneChangeDetectionFailureCount} failures`);
           this.zoneChangeDetectionFailureCount = 0;
 
-          const warningCleared = await this.warningManager?.clearWarning();
-          if (warningCleared === false) {
-            this.error('Failed to clear warning after zone change detection recovery - warning state may be out of sync');
+          try {
+            await this.warningManager?.clearWarning();
+          } catch (warningError) {
+            this.error('Failed to clear warning after zone change detection recovery:', warningError);
           }
         }
       } catch (error) {
@@ -447,13 +451,13 @@ class RoomStateDevice extends Homey.Device {
 
         // Set warning after hitting failure threshold
         if (this.zoneChangeDetectionFailureCount >= RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY) {
-          const warningSet = await this.warningManager?.setWarning(
-            RoomStateErrorId.ZONE_CHANGE_DETECTION_FAILED,
-            'Zone change detection unavailable. Manual zone reassignment may not be detected.'
-          );
-
-          if (warningSet === false) {
-            this.error('Failed to set warning after zone change detection failures - warning state may be out of sync');
+          try {
+            await this.warningManager?.setWarning(
+              RoomStateErrorId.ZONE_CHANGE_DETECTION_FAILED,
+              'Zone change detection unavailable. Manual zone reassignment may not be detected.'
+            );
+          } catch (warningError) {
+            this.error('Failed to set warning after zone change detection failures:', warningError);
           }
         }
       }
@@ -626,15 +630,25 @@ class RoomStateDevice extends Homey.Device {
             this.log(`Zone polling recovered after ${this.zonePollingFailureCount} failures`);
             this.zonePollingFailureCount = 0;
 
-            // Use async IIFE to properly handle warning clearing
-            (async () => {
-              const warningCleared = await this.warningManager?.clearWarning();
-              if (warningCleared === false) {
-                this.error('Failed to clear warning after polling recovery - warning state may be out of sync');
-              }
-            })().catch((err) => {
-              this.error('Unexpected error clearing warning after polling recovery:', err);
-            });
+            // Clear warning using structured error handling
+            if (this.warningManager && this.errorReporter) {
+              executeAsync(
+                async () => {
+                  await this.warningManager!.clearWarning();
+                },
+                this.errorReporter,
+                {
+                  errorId: RoomStateErrorId.WARNING_CLEAR_FAILED,
+                  severity: ErrorSeverity.LOW,
+                  userMessage: 'Failed to clear device warning',
+                  operationName: 'clearWarningAfterRecovery',
+                  context: {
+                    deviceId: this.getData().id,
+                    previousFailureCount: this.zonePollingFailureCount,
+                  },
+                }
+              );
+            }
           }
         },
         onError: (error: Error) => {
@@ -654,19 +668,29 @@ class RoomStateDevice extends Homey.Device {
 
           // Set warning after hitting failure threshold
           if (this.zonePollingFailureCount >= RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY) {
-            // Use async IIFE to properly handle warning setting
-            (async () => {
-              const warningSet = await this.warningManager?.setWarning(
-                RoomStateErrorId.ZONE_POLLING_FAILED,
-                'Zone monitoring unavailable. Check Homey system status.'
+            // Set warning using structured error handling
+            if (this.warningManager && this.errorReporter) {
+              executeAsync(
+                async () => {
+                  await this.warningManager!.setWarning(
+                    RoomStateErrorId.ZONE_POLLING_FAILED,
+                    'Zone monitoring unavailable. Check Homey system status.'
+                  );
+                },
+                this.errorReporter,
+                {
+                  errorId: RoomStateErrorId.WARNING_SET_FAILED,
+                  severity: ErrorSeverity.MEDIUM,
+                  userMessage: 'Failed to set device warning',
+                  operationName: 'setWarningAfterFailures',
+                  context: {
+                    deviceId: this.getData().id,
+                    failureCount: this.zonePollingFailureCount,
+                    threshold: RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY,
+                  },
+                }
               );
-
-              if (warningSet === false) {
-                this.error('Failed to set warning after polling failures - warning state may be out of sync');
-              }
-            })().catch((err) => {
-              this.error('Unexpected error setting warning after polling failures:', err);
-            });
+            }
           }
         },
       });
@@ -1044,10 +1068,14 @@ class RoomStateDevice extends Homey.Device {
         context: { deviceId: this.getData().id, capability, attempts: result.attempts },
       });
 
-      await this.warningManager?.setWarning(
-        RoomStateErrorId.CAPABILITY_UPDATE_FAILED,
-        `Capability ${capability} unavailable. Device may have reduced functionality.`
-      );
+      try {
+        await this.warningManager?.setWarning(
+          RoomStateErrorId.CAPABILITY_UPDATE_FAILED,
+          `Capability ${capability} unavailable. Device may have reduced functionality.`
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning for capability update failure:', warningError);
+      }
     }
   }
 

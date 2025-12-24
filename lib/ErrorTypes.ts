@@ -5,6 +5,8 @@
  * This module serves as the foundation for all error handling utilities.
  */
 
+import type { ErrorCategory, ErrorReasonCode } from './ErrorClassifier';
+
 /**
  * Logger interface compatible with Homey SDK logging
  */
@@ -41,6 +43,12 @@ export interface RetryResult<T> {
   attempts: number;
   /** Total time spent retrying in milliseconds */
   totalDurationMs: number;
+  /** Whether the error is permanent (won't succeed with retry) */
+  isPermanentError?: boolean;
+  /** Category of the error (PERMANENT, TRANSIENT, TIMEOUT, UNKNOWN) */
+  errorCategory?: ErrorCategory;
+  /** Specific reason code for detailed error tracking */
+  errorReasonCode?: ErrorReasonCode;
 }
 
 /**

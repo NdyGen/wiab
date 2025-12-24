@@ -120,7 +120,11 @@ class WIABZoneSealDevice extends Homey.Device {
       this.registerFlowCardHandlers();
 
       // Clear any previous warning on successful initialization
-      await this.warningManager.clearWarning();
+      try {
+        await this.warningManager.clearWarning();
+      } catch (warningError) {
+        this.error('Failed to clear warning after successful initialization:', warningError);
+      }
 
       this.log('WIAB Zone Seal device initialization complete');
     } catch (error) {
@@ -135,14 +139,13 @@ class WIABZoneSealDevice extends Homey.Device {
         context: { deviceId: this.getData().id },
       });
 
-      // Issue #2 FIX: Check WarningManager return value
-      const warningSet = await this.warningManager.setWarning(
-        ZoneSealErrorId.DEVICE_INIT_FAILED,
-        'Device initialization failed. Check sensor configuration in settings.'
-      );
-
-      if (!warningSet) {
-        this.error('Failed to set warning on device - warning state may be out of sync');
+      try {
+        await this.warningManager.setWarning(
+          ZoneSealErrorId.DEVICE_INIT_FAILED,
+          'Device initialization failed. Check sensor configuration in settings.'
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning on device:', warningError);
       }
 
       // Don't throw - allow device to exist in degraded mode
@@ -187,7 +190,11 @@ class WIABZoneSealDevice extends Homey.Device {
         await this.setupSensorMonitoring();
 
         // Clear warning on successful settings update
-        await this.warningManager!.clearWarning();
+        try {
+          await this.warningManager!.clearWarning();
+        } catch (warningError) {
+          this.error('Failed to clear warning after settings update:', warningError);
+        }
 
         this.log('Settings applied successfully');
       } else if (delaySettingsChanged) {
@@ -226,10 +233,14 @@ class WIABZoneSealDevice extends Homey.Device {
         },
       });
 
-      await this.warningManager!.setWarning(
-        ZoneSealErrorId.SETTINGS_UPDATE_FAILED,
-        'Failed to apply settings. Check sensor configuration and try again.'
-      );
+      try {
+        await this.warningManager!.setWarning(
+          ZoneSealErrorId.SETTINGS_UPDATE_FAILED,
+          'Failed to apply settings. Check sensor configuration and try again.'
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning after settings error:', warningError);
+      }
 
       throw error; // Re-throw to show error in Homey settings UI
     }
@@ -410,10 +421,14 @@ class WIABZoneSealDevice extends Homey.Device {
         context: { deviceId: this.getData().id },
       });
 
-      await this.warningManager!.setWarning(
-        ZoneSealErrorId.SENSOR_MONITORING_SETUP_FAILED,
-        'Cannot connect to sensors. Check device configuration in settings.'
-      );
+      try {
+        await this.warningManager!.setWarning(
+          ZoneSealErrorId.SENSOR_MONITORING_SETUP_FAILED,
+          'Cannot connect to sensors. Check device configuration in settings.'
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning for sensor monitoring setup failure:', warningError);
+      }
 
       throw error; // Re-throw to propagate to onInit or onSettings
     }
@@ -701,10 +716,14 @@ class WIABZoneSealDevice extends Homey.Device {
         technicalMessage: `Failed to update zone seal state to ${state}: ${error instanceof Error ? error.message : 'Unknown error'}`,
         context: { deviceId: this.getData().id, targetState: state },
       });
-      await this.warningManager!.setWarning(
-        ZoneSealErrorId.STATE_UPDATE_FAILED,
-        'Failed to update zone state. Device may be out of sync with sensor states.'
-      );
+      try {
+        await this.warningManager!.setWarning(
+          ZoneSealErrorId.STATE_UPDATE_FAILED,
+          'Failed to update zone state. Device may be out of sync with sensor states.'
+        );
+      } catch (warningError) {
+        this.error('Failed to set warning for state update failure:', warningError);
+      }
     }
   }
 

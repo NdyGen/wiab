@@ -88,7 +88,20 @@
       "Bash(npm install)",
       "Bash(wc:*)",
       "Skill(execute-tasks)",
-      "Bash(npx jest:*)"
+      "Bash(npx jest:*)",
+      "Bash(sudo rm:*)",
+      "Bash(timeout 120 npx homey app run:*)",
+      "Bash(tee:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(timeout 120 npm run test:coverage:*)",
+      "Skill(pr-review-toolkit:review-pr)",
+      "Bash(git merge-base:*)",
+      "Bash(kill:*)",
+      "Bash(timeout 120 homey app run:*)",
+      "WebFetch(domain:api.developer.homey.app)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh pr edit:*)",
+      "Skill(git:commit)"
     ],
     "deny": [],
     "ask": []

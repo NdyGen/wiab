@@ -110,6 +110,9 @@ export class RetryManager {
             error: lastError,
             attempts: attempt,
             totalDurationMs,
+            isPermanentError: true,
+            errorCategory: classification.category,
+            errorReasonCode: classification.reasonCode,
           };
         }
 
@@ -135,11 +138,17 @@ export class RetryManager {
       lastError
     );
 
+    // Classify the final error to provide context to caller
+    const classification = lastError ? this.errorClassifier.classifyError(lastError) : undefined;
+
     return {
       success: false,
       error: lastError,
       attempts: finalConfig.maxAttempts,
       totalDurationMs,
+      isPermanentError: classification ? classification.category === 'PERMANENT' : undefined,
+      errorCategory: classification?.category,
+      errorReasonCode: classification?.reasonCode,
     };
   }
 
