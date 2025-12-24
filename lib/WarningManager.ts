@@ -61,16 +61,22 @@ export class WarningManager {
    * is already active with the same message, this is a no-op to prevent
    * redundant API calls.
    *
+   * State is only updated after successful device API call to prevent
+   * state corruption on failure.
+   *
    * @param errorId - Error ID for tracking
    * @param message - User-friendly warning message
-   * @returns Promise that resolves when warning is set
+   * @returns Promise resolving to true if warning was set successfully, false on failure
    *
    * @example
    * ```typescript
-   * await warningManager.setWarning('DEVICE_001', 'Cannot connect to sensors');
+   * const success = await warningManager.setWarning('DEVICE_001', 'Cannot connect to sensors');
+   * if (!success) {
+   *   this.error('Warning state may be out of sync');
+   * }
    * ```
    */
-  public async setWarning(errorId: string, message: string): Promise<void> {
+  public async setWarning(errorId: string, message: string): Promise<boolean> {
     // Skip if same warning already active
     if (
       this.state.isActive &&
@@ -80,12 +86,13 @@ export class WarningManager {
       this.logger.log(
         `Warning already active: [${errorId}] ${message} - skipping redundant update`
       );
-      return;
+      return true; // Already in correct state
     }
 
     try {
       await this.device.setWarning(message);
 
+      // Only update state after successful API call
       this.state = {
         isActive: true,
         message,
@@ -94,9 +101,11 @@ export class WarningManager {
       };
 
       this.logger.log(`Warning set: [${errorId}] ${message}`);
+      return true;
     } catch (error) {
       this.logger.error(`Failed to set warning [${errorId}]:`, error);
-      // Don't throw - warning failure shouldn't break device operation
+      // State remains unchanged on failure - prevents corruption
+      return false;
     }
   }
 
@@ -106,17 +115,23 @@ export class WarningManager {
    * Removes the warning message from the device card in Homey UI. If no
    * warning is active, this is a no-op.
    *
-   * @returns Promise that resolves when warning is cleared
+   * State is only updated after successful device API call to prevent
+   * state corruption on failure.
+   *
+   * @returns Promise resolving to true if warning was cleared successfully, false on failure
    *
    * @example
    * ```typescript
-   * await warningManager.clearWarning();
+   * const success = await warningManager.clearWarning();
+   * if (!success) {
+   *   this.error('Warning state may be out of sync');
+   * }
    * ```
    */
-  public async clearWarning(): Promise<void> {
+  public async clearWarning(): Promise<boolean> {
     if (!this.state.isActive) {
       this.logger.log('No active warning to clear - skipping');
-      return;
+      return true; // Already in correct state
     }
 
     const previousErrorId = this.state.errorId;
@@ -124,6 +139,7 @@ export class WarningManager {
     try {
       await this.device.unsetWarning();
 
+      // Only update state after successful API call
       this.state = {
         isActive: false,
         message: null,
@@ -132,9 +148,11 @@ export class WarningManager {
       };
 
       this.logger.log(`Warning cleared: [${previousErrorId}]`);
+      return true;
     } catch (error) {
       this.logger.error('Failed to clear warning:', error);
-      // Don't throw - warning failure shouldn't break device operation
+      // State remains unchanged on failure - prevents corruption
+      return false;
     }
   }
 

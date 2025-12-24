@@ -22,9 +22,11 @@
  */
 
 import { Logger, RetryConfig, RetryResult, DEFAULT_RETRY_CONFIG } from './ErrorTypes';
+import { ErrorClassifier } from './ErrorClassifier';
 
 export class RetryManager {
   private logger: Logger;
+  private errorClassifier: ErrorClassifier;
 
   /**
    * Creates a new RetryManager instance.
@@ -33,6 +35,7 @@ export class RetryManager {
    */
   constructor(logger: Logger) {
     this.logger = logger;
+    this.errorClassifier = new ErrorClassifier(logger);
   }
 
   /**
@@ -93,6 +96,22 @@ export class RetryManager {
           `${operationName} - attempt ${attempt} failed:`,
           error
         );
+
+        // Issue #10 FIX: Don't retry permanent errors
+        if (this.errorClassifier.isPermanentError(error)) {
+          const classification = this.errorClassifier.classifyError(error);
+          this.logger.error(
+            `${operationName} - permanent error detected (${classification.reasonCode}), stopping retries`
+          );
+
+          const totalDurationMs = Date.now() - startTime;
+          return {
+            success: false,
+            error: lastError,
+            attempts: attempt,
+            totalDurationMs,
+          };
+        }
 
         // If we have more attempts, wait and retry
         if (attempt < finalConfig.maxAttempts) {

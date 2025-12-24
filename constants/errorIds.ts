@@ -204,4 +204,7 @@ export enum ZoneSealErrorId {
 
   /** Flow card registration failed */
   FLOW_CARD_REGISTRATION_FAILED = 'ZONE_SEAL_009',
+
+  /** Capability update partially failed */
+  CAPABILITY_UPDATE_PARTIAL_FAILURE = 'ZONE_SEAL_010',
 }

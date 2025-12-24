@@ -5,6 +5,8 @@ import { RoomStateErrorId } from '../../constants/errorIds';
 import { WarningManager } from '../../lib/WarningManager';
 import { ErrorReporter } from '../../lib/ErrorReporter';
 import { RetryManager } from '../../lib/RetryManager';
+import { ErrorClassifier } from '../../lib/ErrorClassifier';
+import { AsyncIntervalManager } from '../../lib/AsyncIntervalManager';
 import { ErrorSeverity } from '../../lib/ErrorTypes';
 
 /**
@@ -47,14 +49,17 @@ class RoomStateDevice extends Homey.Device {
   private lastActivityTimestamp: number | null = null;
   private isZoneActive: boolean = false;
   private manualOverride: boolean = false;
+  private lastZoneActive: boolean = false;
   private currentZoneId?: string;
   private zonePollingInterval?: NodeJS.Timeout;
   private zoneChangeDetectionInterval?: NodeJS.Timeout;
+  private zonePollingManager?: AsyncIntervalManager;
 
   // Error handling utilities
   private warningManager?: WarningManager;
   private errorReporter?: ErrorReporter;
   private retryManager?: RetryManager;
+  private errorClassifier?: ErrorClassifier;
 
   // Failure tracking
   private zonePollingFailureCount: number = 0;
@@ -435,7 +440,13 @@ class RoomStateDevice extends Homey.Device {
    */
   private teardownRoomStateManagement(): void {
     try {
-      // Clear zone polling interval
+      // Stop zone polling manager (Issue #3 FIX)
+      if (this.zonePollingManager) {
+        this.zonePollingManager.stop();
+        this.zonePollingManager = undefined;
+      }
+
+      // Clear zone polling interval (legacy, if still exists)
       if (this.zonePollingInterval) {
         clearInterval(this.zonePollingInterval);
         this.zonePollingInterval = undefined;
@@ -561,11 +572,11 @@ class RoomStateDevice extends Homey.Device {
       this.log(`Current zone active status: ${this.zone.active}`);
 
       // Track last known active state
-      let lastActive = this.zone.active ?? false;
+      this.lastZoneActive = this.zone.active ?? false;
 
-      // Start polling zone.active every 5 seconds
-      this.zonePollingInterval = setInterval(() => {
-        try {
+      // Issue #3 FIX: Use AsyncIntervalManager for safe async polling
+      this.zonePollingManager = new AsyncIntervalManager({
+        operation: async () => {
           if (!this.zone) {
             throw new Error('Zone is undefined');
           }
@@ -573,12 +584,16 @@ class RoomStateDevice extends Homey.Device {
           const currentActive = this.zone.active ?? false;
 
           // Only handle changes
-          if (currentActive !== lastActive) {
+          if (currentActive !== this.lastZoneActive) {
             this.log(`Zone activity changed: ${currentActive ? 'ACTIVE' : 'INACTIVE'}`);
-            lastActive = currentActive;
+            this.lastZoneActive = currentActive;
             this.handleZoneActivityChange(currentActive);
           }
-
+        },
+        intervalMs: 5000,
+        logger: this,
+        name: 'ZonePolling',
+        onSuccess: () => {
           // Success - reset failure counter and clear warning if recovering
           if (this.zonePollingFailureCount > 0) {
             this.log(`Zone polling recovered after ${this.zonePollingFailureCount} failures`);
@@ -587,14 +602,15 @@ class RoomStateDevice extends Homey.Device {
               this.error('Failed to clear warning after polling recovery:', err);
             });
           }
-        } catch (error) {
+        },
+        onError: (error: Error) => {
           this.zonePollingFailureCount++;
 
           this.errorReporter?.reportError({
             errorId: RoomStateErrorId.ZONE_POLLING_FAILED,
             severity: ErrorSeverity.HIGH,
             userMessage: 'Zone monitoring temporarily unavailable',
-            technicalMessage: `Zone polling failed (${this.zonePollingFailureCount}/${RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY}): ${error instanceof Error ? error.message : 'Unknown error'}`,
+            technicalMessage: `Zone polling failed (${this.zonePollingFailureCount}/${RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY}): ${error.message}`,
             context: {
               deviceId: this.getData().id,
               zoneId: this.currentZoneId,
@@ -611,8 +627,11 @@ class RoomStateDevice extends Homey.Device {
               this.error('Failed to set warning after polling failures:', err);
             });
           }
-        }
-      }, 5000); // Poll every 5 seconds
+        },
+      });
+
+      // Start polling
+      this.zonePollingManager.start();
 
       this.log(`Zone monitoring setup complete - polling zone.active every 5 seconds`);
     } catch (error) {

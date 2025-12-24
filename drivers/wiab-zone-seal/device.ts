@@ -12,6 +12,7 @@ import { WarningManager } from '../../lib/WarningManager';
 import { ErrorReporter } from '../../lib/ErrorReporter';
 import { FlowCardErrorHandler } from '../../lib/FlowCardErrorHandler';
 import { RetryManager } from '../../lib/RetryManager';
+import { ErrorClassifier } from '../../lib/ErrorClassifier';
 import { ZoneSealErrorId } from '../../constants/errorIds';
 import { ErrorSeverity } from '../../lib/ErrorTypes';
 
@@ -80,6 +81,7 @@ class WIABZoneSealDevice extends Homey.Device {
   private errorReporter?: ErrorReporter;
   private flowCardHandler?: FlowCardErrorHandler;
   private retryManager?: RetryManager;
+  private errorClassifier?: ErrorClassifier;
 
   /**
    * Initializes the WIAB Zone Seal device.
@@ -108,6 +110,7 @@ class WIABZoneSealDevice extends Homey.Device {
     this.errorReporter = new ErrorReporter(this);
     this.flowCardHandler = new FlowCardErrorHandler(this.homey, this);
     this.retryManager = new RetryManager(this);
+    this.errorClassifier = new ErrorClassifier(this);
 
     try {
       // Setup sensor monitoring with current settings
@@ -121,19 +124,26 @@ class WIABZoneSealDevice extends Homey.Device {
 
       this.log('WIAB Zone Seal device initialization complete');
     } catch (error) {
-      // Issue #1 FIX: Report error with structured logging and set device warning
+      // Issue #1 FIX: Report error with stack trace and set device warning
+      const err = error instanceof Error ? error : new Error(String(error));
+
       this.errorReporter.reportError({
         errorId: ZoneSealErrorId.DEVICE_INIT_FAILED,
         severity: ErrorSeverity.CRITICAL,
         userMessage: 'Device initialization failed. Check sensor configuration.',
-        technicalMessage: `Failed to initialize Zone Seal device: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        technicalMessage: `Failed to initialize Zone Seal device: ${err.message}\n${err.stack || 'No stack trace available'}`,
         context: { deviceId: this.getData().id },
       });
 
-      await this.warningManager.setWarning(
+      // Issue #2 FIX: Check WarningManager return value
+      const warningSet = await this.warningManager.setWarning(
         ZoneSealErrorId.DEVICE_INIT_FAILED,
         'Device initialization failed. Check sensor configuration in settings.'
       );
+
+      if (!warningSet) {
+        this.error('Failed to set warning on device - warning state may be out of sync');
+      }
 
       // Don't throw - allow device to exist in degraded mode
     }
