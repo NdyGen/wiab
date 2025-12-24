@@ -2,6 +2,10 @@ import Homey from 'homey';
 import { RoomStateEngine } from '../../lib/RoomStateEngine';
 import type { StateConfig, RoomStateSettings, HomeyAPI, HomeyAPIZone } from '../../lib/types';
 import { RoomStateErrorId } from '../../constants/errorIds';
+import { WarningManager } from '../../lib/WarningManager';
+import { ErrorReporter } from '../../lib/ErrorReporter';
+import { RetryManager } from '../../lib/RetryManager';
+import { ErrorSeverity } from '../../lib/ErrorTypes';
 
 /**
  * Interface for WIABApp with HomeyAPI
@@ -47,6 +51,19 @@ class RoomStateDevice extends Homey.Device {
   private zonePollingInterval?: NodeJS.Timeout;
   private zoneChangeDetectionInterval?: NodeJS.Timeout;
 
+  // Error handling utilities
+  private warningManager?: WarningManager;
+  private errorReporter?: ErrorReporter;
+  private retryManager?: RetryManager;
+
+  // Failure tracking
+  private zonePollingFailureCount: number = 0;
+  private zoneChangeDetectionFailureCount: number = 0;
+  private static readonly MAX_FAILURES_BEFORE_RECOVERY = 3;
+
+  // Debug logging control
+  private static readonly ENABLE_DEBUG_LOGGING = false;
+
   /**
    * Initializes the Room State device.
    *
@@ -60,6 +77,11 @@ class RoomStateDevice extends Homey.Device {
   async onInit(): Promise<void> {
     this.log('Room State device initializing');
 
+    // Initialize error handling utilities FIRST
+    this.warningManager = new WarningManager(this, this);
+    this.errorReporter = new ErrorReporter(this);
+    this.retryManager = new RetryManager(this);
+
     try {
       // Register capability listeners for manual state changes
       this.registerCapabilityListeners();
@@ -67,13 +89,26 @@ class RoomStateDevice extends Homey.Device {
       // Setup zone monitoring and state engine
       await this.setupRoomStateManagement();
 
+      // Clear any previous warning on successful initialization
+      await this.warningManager.clearWarning();
+
       this.log('Room State device initialized successfully');
     } catch (error) {
-      this.error(
-        `[${RoomStateErrorId.STATE_ENGINE_VALIDATION_FAILED}] Failed to initialize device:`,
-        error
+      // Structured error reporting with user feedback
+      this.errorReporter.reportError({
+        errorId: RoomStateErrorId.DEVICE_INIT_FAILED,
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'Device initialization failed. Check zone assignment.',
+        technicalMessage: `Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: { deviceId: this.getData().id },
+      });
+
+      await this.warningManager.setWarning(
+        RoomStateErrorId.DEVICE_INIT_FAILED,
+        'Initialization failed. Check device settings and zone assignment.'
       );
-      throw error;
+
+      // Don't throw - allow device to exist in degraded mode with visible warning
     }
   }
 
@@ -103,13 +138,25 @@ class RoomStateDevice extends Homey.Device {
         this.log('Timer settings changed, reinitializing...');
         this.teardownRoomStateManagement();
         await this.setupRoomStateManagement();
+
+        // Clear warning on successful settings update
+        await this.warningManager?.clearWarning();
       }
     } catch (error) {
-      this.error(
-        `[${RoomStateErrorId.STATE_ENGINE_VALIDATION_FAILED}] Failed to apply settings:`,
-        error
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.SETTINGS_UPDATE_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to apply settings. Check configuration.',
+        technicalMessage: `Settings update failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: { deviceId: this.getData().id, changedKeys: event.changedKeys },
+      });
+
+      await this.warningManager?.setWarning(
+        RoomStateErrorId.SETTINGS_UPDATE_FAILED,
+        'Failed to apply settings. Check configuration and try again.'
       );
-      throw error;
+
+      throw error; // Re-throw to show error in Homey settings UI
     }
   }
 
@@ -140,26 +187,32 @@ class RoomStateDevice extends Homey.Device {
    * In Homey, ALL devices are always assigned to a zone - they cannot exist without one.
    *
    * @private
-   * @returns {Promise<string | null>} Zone ID or null if lookup fails
+   * @returns {Promise<string>} Zone ID
+   * @throws {Error} If zone lookup fails
    */
-  private async getDeviceZone(): Promise<string | null> {
+  private async getDeviceZone(): Promise<string> {
     try {
       const app = this.homey.app as WIABApp;
       const homeyApi = app.homeyApi;
 
       if (!homeyApi) {
-        this.error('HomeyAPI not available');
-        return null;
+        const error = new Error('HomeyAPI not available');
+        this.error(`[${RoomStateErrorId.ZONE_LOOKUP_FAILED}] HomeyAPI not available`);
+        throw error;
       }
 
       // Get all devices from HomeyAPI
       const devices = await homeyApi.devices.getDevices();
-      this.log(`[DEBUG] Found ${Object.keys(devices).length} total devices in Homey`);
+      if (RoomStateDevice.ENABLE_DEBUG_LOGGING) {
+        this.log(`[DEBUG] Found ${Object.keys(devices).length} total devices in Homey`);
+      }
 
       // Get our unique pairing ID to identify ourselves
       const ourPairingId = this.getData().id;
-      this.log(`[DEBUG] Our pairing ID: ${ourPairingId}`);
-      this.log(`[DEBUG] Looking for Room State Manager device in HomeyAPI...`);
+      if (RoomStateDevice.ENABLE_DEBUG_LOGGING) {
+        this.log(`[DEBUG] Our pairing ID: ${ourPairingId}`);
+        this.log(`[DEBUG] Looking for Room State Manager device in HomeyAPI...`);
+      }
 
       // Get our current settings to use as additional matching criteria
       const ourSettings = this.getSettings() as RoomStateSettings;
@@ -188,7 +241,9 @@ class RoomStateDevice extends Homey.Device {
         // Try to match by device ID (deviceId key from HomeyAPI)
         // This is the most reliable way to identify ourselves
         if (deviceId === this.getData().id || deviceObj.id === this.getData().id) {
-          this.log(`[DEBUG] Matched device by ID: ${deviceId}`);
+          if (RoomStateDevice.ENABLE_DEBUG_LOGGING) {
+            this.log(`[DEBUG] Matched device by ID: ${deviceId}`);
+          }
           device = deviceObj;
           matchedDeviceId = deviceId;
           break;
@@ -196,17 +251,9 @@ class RoomStateDevice extends Homey.Device {
 
         // Fallback: Match by pairing ID in device data
         if (deviceObj.data?.id === ourPairingId) {
-          this.log(`[DEBUG] Matched device by pairing ID in data: ${deviceId}`);
-          device = deviceObj;
-          matchedDeviceId = deviceId;
-          break;
-        }
-
-        // Final fallback: Match by unique settings combination
-        if (deviceObj.settings &&
-            deviceObj.settings.idleTimeout === ourSettings.idleTimeout &&
-            deviceObj.settings.occupiedTimeout === ourSettings.occupiedTimeout) {
-          this.log(`[DEBUG] Matched device by settings: ${deviceId}`);
+          if (RoomStateDevice.ENABLE_DEBUG_LOGGING) {
+            this.log(`[DEBUG] Matched device by pairing ID in data: ${deviceId}`);
+          }
           device = deviceObj;
           matchedDeviceId = deviceId;
           break;
@@ -214,9 +261,10 @@ class RoomStateDevice extends Homey.Device {
       }
 
       if (!device || !matchedDeviceId) {
-        this.error(`Could not find ourselves in HomeyAPI devices`);
+        const error = new Error(`Could not find device in HomeyAPI (pairing ID: ${ourPairingId})`);
+        this.error(`[${RoomStateErrorId.ZONE_LOOKUP_FAILED}] Could not find ourselves in HomeyAPI devices`);
         this.error(`Our pairing ID: ${ourPairingId}, settings: idle=${ourSettings.idleTimeout}, occupied=${ourSettings.occupiedTimeout}`);
-        return null;
+        throw error;
       }
 
       const deviceObj = device as unknown as {
@@ -224,20 +272,29 @@ class RoomStateDevice extends Homey.Device {
         zone?: string;
       };
 
-      this.log(`[DEBUG] Found our device: ${deviceObj.name}`);
-      this.log(`[DEBUG] Device zone: ${deviceObj.zone}`);
+      if (RoomStateDevice.ENABLE_DEBUG_LOGGING) {
+        this.log(`[DEBUG] Found our device: ${deviceObj.name}`);
+        this.log(`[DEBUG] Device zone: ${deviceObj.zone}`);
+      }
 
       if (!deviceObj.zone) {
-        this.error(`No zone assigned to device "${deviceObj.name}"`);
+        const error = new Error(`No zone assigned to device "${deviceObj.name}"`);
+        this.error(`[${RoomStateErrorId.ZONE_LOOKUP_FAILED}] No zone assigned to device "${deviceObj.name}"`);
         this.error('Device needs to be manually assigned to a zone in Homey settings');
-        return null;
+        throw error;
       }
 
       this.log(`Device is in zone: ${deviceObj.zone}`);
       return deviceObj.zone;
     } catch (error) {
-      this.error('Failed to get device zone:', error);
-      return null;
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.ZONE_LOOKUP_FAILED,
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'Failed to find device zone. Check zone assignment.',
+        technicalMessage: `Zone lookup failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: { deviceId: this.getData().id },
+      });
+      throw error; // Re-throw to propagate to caller
     }
   }
 
@@ -338,8 +395,35 @@ class RoomStateDevice extends Homey.Device {
           this.teardownRoomStateManagement();
           await this.setupRoomStateManagement();
         }
+
+        // Success - reset failure counter and clear warning if recovering
+        if (this.zoneChangeDetectionFailureCount > 0) {
+          this.log(`Zone change detection recovered after ${this.zoneChangeDetectionFailureCount} failures`);
+          this.zoneChangeDetectionFailureCount = 0;
+          await this.warningManager?.clearWarning();
+        }
       } catch (error) {
-        this.error('Failed to check for zone changes:', error);
+        this.zoneChangeDetectionFailureCount++;
+
+        this.errorReporter?.reportError({
+          errorId: RoomStateErrorId.ZONE_CHANGE_DETECTION_FAILED,
+          severity: ErrorSeverity.MEDIUM,
+          userMessage: 'Zone change detection temporarily unavailable',
+          technicalMessage: `Zone change detection failed (${this.zoneChangeDetectionFailureCount}/${RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY}): ${error instanceof Error ? error.message : 'Unknown error'}`,
+          context: {
+            deviceId: this.getData().id,
+            currentZoneId: this.currentZoneId,
+            failureCount: this.zoneChangeDetectionFailureCount,
+          },
+        });
+
+        // Set warning after hitting failure threshold
+        if (this.zoneChangeDetectionFailureCount >= RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY) {
+          await this.warningManager?.setWarning(
+            RoomStateErrorId.ZONE_CHANGE_DETECTION_FAILED,
+            'Zone change detection unavailable. Manual zone reassignment may not be detected.'
+          );
+        }
       }
     }, 30000); // Check every 30 seconds
   }
@@ -481,18 +565,52 @@ class RoomStateDevice extends Homey.Device {
 
       // Start polling zone.active every 5 seconds
       this.zonePollingInterval = setInterval(() => {
-        if (!this.zone) {
-          this.error('Zone polling failed: zone is undefined');
-          return;
-        }
+        try {
+          if (!this.zone) {
+            throw new Error('Zone is undefined');
+          }
 
-        const currentActive = this.zone.active ?? false;
+          const currentActive = this.zone.active ?? false;
 
-        // Only handle changes
-        if (currentActive !== lastActive) {
-          this.log(`Zone activity changed: ${currentActive ? 'ACTIVE' : 'INACTIVE'}`);
-          lastActive = currentActive;
-          this.handleZoneActivityChange(currentActive);
+          // Only handle changes
+          if (currentActive !== lastActive) {
+            this.log(`Zone activity changed: ${currentActive ? 'ACTIVE' : 'INACTIVE'}`);
+            lastActive = currentActive;
+            this.handleZoneActivityChange(currentActive);
+          }
+
+          // Success - reset failure counter and clear warning if recovering
+          if (this.zonePollingFailureCount > 0) {
+            this.log(`Zone polling recovered after ${this.zonePollingFailureCount} failures`);
+            this.zonePollingFailureCount = 0;
+            this.warningManager?.clearWarning().catch((err) => {
+              this.error('Failed to clear warning after polling recovery:', err);
+            });
+          }
+        } catch (error) {
+          this.zonePollingFailureCount++;
+
+          this.errorReporter?.reportError({
+            errorId: RoomStateErrorId.ZONE_POLLING_FAILED,
+            severity: ErrorSeverity.HIGH,
+            userMessage: 'Zone monitoring temporarily unavailable',
+            technicalMessage: `Zone polling failed (${this.zonePollingFailureCount}/${RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY}): ${error instanceof Error ? error.message : 'Unknown error'}`,
+            context: {
+              deviceId: this.getData().id,
+              zoneId: this.currentZoneId,
+              failureCount: this.zonePollingFailureCount,
+            },
+          });
+
+          // Set warning after hitting failure threshold
+          if (this.zonePollingFailureCount >= RoomStateDevice.MAX_FAILURES_BEFORE_RECOVERY) {
+            this.warningManager?.setWarning(
+              RoomStateErrorId.ZONE_POLLING_FAILED,
+              'Zone monitoring unavailable. Check Homey system status.'
+            ).catch((err) => {
+              this.error('Failed to set warning after polling failures:', err);
+            });
+          }
         }
       }, 5000); // Poll every 5 seconds
 
@@ -812,24 +930,27 @@ class RoomStateDevice extends Homey.Device {
    * Ensures a capability exists and is set, with automatic retry on failure.
    *
    * Attempts to add the capability if missing, then sets its value.
-   * Retries up to 3 times with exponential backoff on failure.
-   * Falls back to graceful degradation if all retries fail.
+   * Uses RetryManager for exponential backoff retry orchestration.
+   * Sets device warning if all retries fail.
    *
    * @param capability - Capability ID to ensure
    * @param value - Initial value to set
-   * @param maxRetries - Maximum number of retry attempts (default: 3)
    * @private
    */
   private async ensureCapabilityWithRetry(
     capability: string,
-    value: unknown,
-    maxRetries: number = 3
+    value: unknown
   ): Promise<void> {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
+    if (!this.retryManager) {
+      this.error('RetryManager not initialized, skipping capability setup');
+      return;
+    }
+
+    const result = await this.retryManager.retryWithBackoff<void>(
+      async () => {
         // Check if capability exists
         if (!this.hasCapability(capability)) {
-          this.log(`Adding missing capability: ${capability} (attempt ${attempt}/${maxRetries})`);
+          this.log(`Adding missing capability: ${capability}`);
           await this.addCapability(capability);
 
           // Verify capability was added successfully
@@ -843,27 +964,30 @@ class RoomStateDevice extends Homey.Device {
         // Set capability value
         await this.setCapabilityValue(capability, value);
         this.log(`Capability ${capability} set to: ${value}`);
-        return; // Success - exit retry loop
-
-      } catch (error) {
-        this.error(
-          `Failed to ensure capability ${capability} (attempt ${attempt}/${maxRetries}):`,
-          error
-        );
-
-        if (attempt < maxRetries) {
-          // Exponential backoff: 100ms, 200ms, 400ms
-          const delayMs = 100 * Math.pow(2, attempt - 1);
-          this.log(`Retrying in ${delayMs}ms...`);
-          await new Promise(resolve => setTimeout(resolve, delayMs));
-        } else {
-          // All retries exhausted - log warning and continue
-          this.error(
-            `Failed to initialize capability ${capability} after ${maxRetries} attempts. ` +
-            `Device will continue with degraded functionality.`
-          );
-        }
+      },
+      `Ensure capability ${capability}`,
+      {
+        maxAttempts: 3,
+        initialDelayMs: 100,
+        maxDelayMs: 5000,
+        backoffMultiplier: 2,
       }
+    );
+
+    if (!result.success) {
+      // All retries exhausted - set warning and continue with degraded functionality
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.CAPABILITY_UPDATE_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: `Capability ${capability} unavailable`,
+        technicalMessage: `Failed to initialize capability after ${result.attempts} attempts: ${result.error instanceof Error ? result.error.message : 'Unknown error'}`,
+        context: { deviceId: this.getData().id, capability, attempts: result.attempts },
+      });
+
+      await this.warningManager?.setWarning(
+        RoomStateErrorId.CAPABILITY_UPDATE_FAILED,
+        `Capability ${capability} unavailable. Device may have reduced functionality.`
+      );
     }
   }
 
@@ -872,20 +996,35 @@ class RoomStateDevice extends Homey.Device {
    *
    * Updates the room_state capability to display the new state.
    * Uses defensive checks and automatic repair for missing capabilities.
+   * Tracks failures and propagates errors if critical capabilities fail.
    *
    * @param newState - New state ID
    */
   private async updateCapabilities(newState: string): Promise<void> {
+    let roomStateSuccess = false;
+    let occupiedSuccess = false;
+
+    // Update room_state capability with retry if missing
     try {
-      // Update room_state capability with retry if missing
       if (!this.hasCapability('room_state')) {
         this.log('room_state capability missing during update, attempting repair');
         await this.ensureCapabilityWithRetry('room_state', newState);
       } else {
         await this.setCapabilityValue('room_state', newState);
       }
+      roomStateSuccess = true;
+    } catch (error) {
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.CAPABILITY_UPDATE_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Room state display unavailable',
+        technicalMessage: `Failed to update room_state capability: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: { deviceId: this.getData().id, capability: 'room_state', newState },
+      });
+    }
 
-      // Update occupancy indicator alarm with retry if missing
+    // Update occupancy indicator alarm with retry if missing
+    try {
       const occupied = this.computeOccupancyIndicator(newState);
       if (!this.hasCapability('alarm_room_occupied')) {
         this.log('alarm_room_occupied capability missing during update, attempting repair');
@@ -893,11 +1032,34 @@ class RoomStateDevice extends Homey.Device {
       } else {
         await this.setCapabilityValue('alarm_room_occupied', occupied);
       }
-
-      this.log(`Capabilities updated: state=${newState}, occupied=${occupied}`);
+      occupiedSuccess = true;
     } catch (error) {
-      this.error('Failed to update capabilities:', error);
-      // Don't rethrow - device should continue functioning even if capability updates fail
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.CAPABILITY_UPDATE_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Occupancy indicator unavailable',
+        technicalMessage: `Failed to update alarm_room_occupied capability: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: { deviceId: this.getData().id, capability: 'alarm_room_occupied' },
+      });
+    }
+
+    // If BOTH critical capabilities failed, this is a critical issue
+    if (!roomStateSuccess && !occupiedSuccess) {
+      const error = new Error('All critical capabilities failed to update');
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.CAPABILITY_UPDATE_FAILED,
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'Device display unavailable',
+        technicalMessage: 'Failed to update all critical capabilities',
+        context: { deviceId: this.getData().id, newState },
+      });
+      throw error; // Propagate critical failure
+    }
+
+    if (roomStateSuccess && occupiedSuccess) {
+      this.log(`Capabilities updated successfully: state=${newState}`);
+    } else {
+      this.log(`Capabilities partially updated: room_state=${roomStateSuccess}, occupied=${occupiedSuccess}`);
     }
   }
 
