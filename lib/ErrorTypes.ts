@@ -106,18 +106,3 @@ export const DEFAULT_RETRY_CONFIG: RetryConfig = {
   maxDelayMs: 10000,
   backoffMultiplier: 2,
 };
-
-/**
- * Custom error class for settings validation failures
- * Use this instead of generic Error to enable typed error detection
- */
-export class SettingsValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SettingsValidationError';
-    // Maintain proper stack trace for where error was thrown (only available in V8)
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, SettingsValidationError);
-    }
-  }
-}

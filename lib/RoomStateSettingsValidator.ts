@@ -1,5 +1,17 @@
 import type { RoomStateSettings } from './types';
-import { SettingsValidationError } from './ErrorTypes';
+
+/**
+ * Custom error for settings validation - allows detection of validation vs other errors
+ */
+class SettingsValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SettingsValidationError';
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, SettingsValidationError);
+    }
+  }
+}
 
 /**
  * Validates and normalizes room state settings.
