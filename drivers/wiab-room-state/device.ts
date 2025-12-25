@@ -381,12 +381,14 @@ class RoomStateDevice extends Homey.Device {
    * Clears WIAB monitoring, state timers, and resets all state variables.
    *
    * Note on capability listener cleanup:
-   * The WIAB device capability listener is created via makeCapabilityInstance(),
-   * which returns void and maintains the listener internally. We cannot explicitly
-   * unregister the listener once registered. Clearing the setup function reference
-   * prevents re-registration but does not stop the active listener. The HomeyAPI
-   * manages the active listener lifecycle and will clean up when the device or
-   * capability is removed from the system.
+   * The WIAB device capability listener is registered via makeCapabilityInstance().
+   * This approach:
+   * 1. Does NOT provide a way to explicitly unregister listeners (API limitation)
+   * 2. Clearing the wiabCapabilityListener reference prevents re-registration attempts
+   * 3. The listener may remain active in HomeyAPI until the device/app is removed
+   *
+   * This is a known limitation of the HomeyAPI design. Monitor memory usage if this
+   * device is frequently recreated.
    */
   private teardownRoomStateManagement(): void {
     try {
@@ -445,19 +447,19 @@ class RoomStateDevice extends Homey.Device {
         id: 'idle',
         name: 'Idle',
         activeTransitions: [
-          { targetState: 'occupied', afterMinutes: 0 }, // Immediate transition on activity
+          { targetState: 'occupied', afterMinutes: 0 }, // Triggered when WIAB device becomes occupied
         ],
         inactiveTransitions:
           idleTimeout > 0
             ? [{ targetState: 'extended_idle', afterMinutes: idleTimeout }]
-            : [],
+            : [], // Disabled when idleTimeout=0
       },
       {
         id: 'extended_idle',
         name: 'Extended Idle',
         parent: 'idle', // Child of idle for hierarchy
         activeTransitions: [
-          { targetState: 'occupied', afterMinutes: 0 }, // Immediate transition on activity
+          { targetState: 'occupied', afterMinutes: 0 }, // Triggered when WIAB device becomes occupied
         ],
         inactiveTransitions: [],
       },
@@ -467,9 +469,9 @@ class RoomStateDevice extends Homey.Device {
         activeTransitions:
           occupiedTimeout > 0
             ? [{ targetState: 'extended_occupied', afterMinutes: occupiedTimeout }]
-            : [],
+            : [], // Disabled when occupiedTimeout=0
         inactiveTransitions: [
-          { targetState: 'idle', afterMinutes: 0 }, // Immediate transition on inactivity
+          { targetState: 'idle', afterMinutes: 0 }, // Triggered when WIAB device becomes vacant
         ],
       },
       {
@@ -478,7 +480,7 @@ class RoomStateDevice extends Homey.Device {
         parent: 'occupied', // Child of occupied for hierarchy
         activeTransitions: [],
         inactiveTransitions: [
-          { targetState: 'idle', afterMinutes: 0 }, // Immediate transition on inactivity
+          { targetState: 'idle', afterMinutes: 0 }, // Triggered when WIAB device becomes vacant
         ],
       },
     ];
