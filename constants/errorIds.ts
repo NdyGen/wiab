@@ -141,7 +141,7 @@ export enum RoomStateErrorId {
   /** Failed to update device capabilities */
   CAPABILITY_UPDATE_FAILED = 'ROOM_STATE_006',
 
-  /** Zone not found in Homey */
+  /** Zone not found in Homey (deprecated - use WIAB_DEVICE_NOT_FOUND) */
   ZONE_NOT_FOUND = 'ROOM_STATE_007',
 
   /** Invalid state configuration in settings */
@@ -153,13 +153,13 @@ export enum RoomStateErrorId {
   /** Settings update failed */
   SETTINGS_UPDATE_FAILED = 'ROOM_STATE_010',
 
-  /** Zone lookup failed */
+  /** Zone lookup failed (deprecated - use WIAB_DEVICE_LOOKUP_FAILED) */
   ZONE_LOOKUP_FAILED = 'ROOM_STATE_011',
 
-  /** Zone polling failed */
+  /** Zone polling failed (deprecated - not used with WIAB device monitoring) */
   ZONE_POLLING_FAILED = 'ROOM_STATE_012',
 
-  /** Zone change detection failed */
+  /** Zone change detection failed (deprecated - not used with WIAB device monitoring) */
   ZONE_CHANGE_DETECTION_FAILED = 'ROOM_STATE_013',
 
   /** Failed to set device warning */
@@ -167,6 +167,24 @@ export enum RoomStateErrorId {
 
   /** Failed to clear device warning */
   WARNING_CLEAR_FAILED = 'ROOM_STATE_015',
+
+  /** WIAB device not found in Homey */
+  WIAB_DEVICE_NOT_FOUND = 'ROOM_STATE_016',
+
+  /** WIAB device lookup failed */
+  WIAB_DEVICE_LOOKUP_FAILED = 'ROOM_STATE_017',
+
+  /** Flow trigger failed to execute */
+  FLOW_TRIGGER_FAILED = 'ROOM_STATE_018',
+
+  /** Settings validation failed */
+  SETTINGS_VALIDATION_FAILED = 'ROOM_STATE_019',
+
+  /** Resource teardown/cleanup failed */
+  TEARDOWN_FAILED = 'ROOM_STATE_020',
+
+  /** Failed to return to automatic mode */
+  AUTOMATIC_MODE_FAILED = 'ROOM_STATE_021',
 }
 
 /**

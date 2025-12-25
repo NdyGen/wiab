@@ -43,8 +43,15 @@
   },
   "pair": [
     {
+      "id": "select_wiab",
+      "navigation": {
+        "next": "define_states"
+      }
+    },
+    {
       "id": "define_states",
       "navigation": {
+        "prev": "select_wiab",
         "next": "list_devices"
       }
     },

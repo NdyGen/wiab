@@ -40,11 +40,20 @@ class RoomStateDriver extends Homey.Driver {
         this.log(`Flow action: Set room state to "${targetState}"`);
 
         // Call device method to set state manually
-        if (typeof device.handleManualStateChange === 'function') {
-          await device.handleManualStateChange(targetState);
+        if (typeof device.handleManualStateChange !== 'function') {
+          const errorMsg = `Device missing handleManualStateChange method (device: ${device.getName?.() || 'unknown'})`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
 
-        return true;
+        try {
+          await device.handleManualStateChange(targetState);
+          return true;
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.error(`Flow action failed: ${err.message}`);
+          throw new Error(`Failed to set room state: ${err.message}`);
+        }
       });
     }
 
@@ -57,11 +66,20 @@ class RoomStateDriver extends Homey.Driver {
         this.log('Flow action: Return to automatic mode');
 
         // Call device method to return to automatic
-        if (typeof device.returnToAutomatic === 'function') {
-          await device.returnToAutomatic();
+        if (typeof device.returnToAutomatic !== 'function') {
+          const errorMsg = `Device missing returnToAutomatic method (device: ${device.getName?.() || 'unknown'})`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
 
-        return true;
+        try {
+          await device.returnToAutomatic();
+          return true;
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.error(`Flow action failed: ${err.message}`);
+          throw new Error(`Failed to return to automatic mode: ${err.message}`);
+        }
       });
     }
 
@@ -80,11 +98,19 @@ class RoomStateDriver extends Homey.Driver {
         this.log(`Flow condition: Is in state "${targetState}"?`);
 
         // Check if device is in target state (with hierarchy support)
-        if (typeof device.isInState === 'function') {
-          return device.isInState(targetState);
+        if (typeof device.isInState !== 'function') {
+          const errorMsg = `Device missing isInState method (device: ${device.getName?.() || 'unknown'})`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
 
-        return false;
+        try {
+          return device.isInState(targetState);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.error(`Flow condition check failed: ${err.message}`);
+          throw new Error(`Failed to check room state: ${err.message}`);
+        }
       });
     }
 
@@ -103,11 +129,19 @@ class RoomStateDriver extends Homey.Driver {
         this.log(`Flow condition: Is exactly in state "${targetState}"?`);
 
         // Check if device is exactly in target state (no hierarchy)
-        if (typeof device.isExactlyInState === 'function') {
-          return device.isExactlyInState(targetState);
+        if (typeof device.isExactlyInState !== 'function') {
+          const errorMsg = `Device missing isExactlyInState method (device: ${device.getName?.() || 'unknown'})`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
 
-        return false;
+        try {
+          return device.isExactlyInState(targetState);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.error(`Flow condition check failed: ${err.message}`);
+          throw new Error(`Failed to check exact room state: ${err.message}`);
+        }
       });
     }
 
@@ -120,11 +154,19 @@ class RoomStateDriver extends Homey.Driver {
         this.log('Flow condition: Is manual override active?');
 
         // Check if manual override is active
-        if (typeof device.isManualOverride === 'function') {
-          return device.isManualOverride();
+        if (typeof device.isManualOverride !== 'function') {
+          const errorMsg = `Device missing isManualOverride method (device: ${device.getName?.() || 'unknown'})`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
 
-        return false;
+        try {
+          return device.isManualOverride();
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.error(`Flow condition check failed: ${err.message}`);
+          throw new Error(`Failed to check manual override status: ${err.message}`);
+        }
       });
     }
 
@@ -202,15 +244,77 @@ class RoomStateDriver extends Homey.Driver {
   /**
    * Handles pairing flow.
    *
-   * Guides users through configuring zone and states during pairing.
+   * Guides users through:
+   * 1. Selecting a WIAB device to monitor
+   * 2. Configuring extended state timers
    */
   async onPair(session: Homey.Driver.PairSession): Promise<void> {
     this.log('Pairing session started');
 
     const pairingData = {
+      wiabDeviceId: '',
       idleTimeout: 0,
       occupiedTimeout: 0,
     };
+
+    // Handle WIAB device list request
+    session.setHandler('get_wiab_devices', async (): Promise<Array<{ id: string; name: string }>> => {
+      this.log('get_wiab_devices handler called');
+      try {
+        const app = this.homey.app as { homeyApi?: { devices: { getDevices(): Promise<Record<string, unknown>> }; zones: { getZone(params: { id: string }): Promise<{ name?: string }> } } };
+
+        if (!app.homeyApi) {
+          this.error('HomeyAPI not available during pairing');
+          throw new Error('System not ready. Please wait a moment and try again.');
+        }
+
+        this.log('Fetching devices from HomeyAPI...');
+        const devices = await app.homeyApi.devices.getDevices();
+        this.log(`Retrieved ${Object.keys(devices).length} total devices`);
+
+        const wiabDevices: Array<{ id: string; name: string }> = [];
+
+        for (const [deviceId, device] of Object.entries(devices)) {
+          const deviceObj = device as { driverId?: string; name?: string; zone?: string };
+
+          // Filter for WIAB devices only
+          if (deviceObj.driverId?.endsWith(':wiab-device')) {
+            let displayName = deviceObj.name || 'Unknown WIAB Device';
+
+            // Try to get zone name if device has a zone
+            if (deviceObj.zone) {
+              try {
+                const zone = await app.homeyApi.zones.getZone({ id: deviceObj.zone });
+                if (zone.name) {
+                  displayName = `${displayName} (${zone.name})`;
+                }
+              } catch (zoneError) {
+                this.log(`Could not fetch zone for device ${deviceId}:`, zoneError);
+              }
+            }
+
+            this.log(`Found WIAB device: ${displayName} (${deviceId})`);
+            wiabDevices.push({
+              id: deviceId,
+              name: displayName,
+            });
+          }
+        }
+
+        this.log(`Returning ${wiabDevices.length} WIAB devices to pairing screen`);
+        return wiabDevices;
+      } catch (error) {
+        this.error('Failed to get WIAB devices:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        throw new Error(`Failed to load WIAB devices: ${errorMessage}`);
+      }
+    });
+
+    // Handle WIAB device selection
+    session.setHandler('wiab_device_selected', async (data: { wiabDeviceId: string }): Promise<void> => {
+      pairingData.wiabDeviceId = data.wiabDeviceId;
+      this.log('WIAB device selected:', data.wiabDeviceId);
+    });
 
     // Handle timer configuration from pairing page
     session.setHandler('set_timers', async (data: { idleTimeout: number; occupiedTimeout: number }): Promise<void> => {
@@ -221,6 +325,44 @@ class RoomStateDriver extends Homey.Driver {
 
     // Handler for list_devices - returns device with pairing data
     session.setHandler('list_devices', async (): Promise<Array<{ name: string; data: { id: string }; settings: Record<string, unknown> }>> => {
+      // Validate that WIAB device was selected
+      if (!pairingData.wiabDeviceId) {
+        this.error('No WIAB device selected during pairing');
+        throw new Error('Please select a WIAB device');
+      }
+
+      // Validate timer values
+      if (typeof pairingData.idleTimeout !== 'number' || pairingData.idleTimeout < 0 || pairingData.idleTimeout > 1440) {
+        this.error('Invalid idle timeout:', pairingData.idleTimeout);
+        throw new Error('Idle timeout must be between 0 and 1440 minutes');
+      }
+
+      if (typeof pairingData.occupiedTimeout !== 'number' || pairingData.occupiedTimeout < 0 || pairingData.occupiedTimeout > 1440) {
+        this.error('Invalid occupied timeout:', pairingData.occupiedTimeout);
+        throw new Error('Occupied timeout must be between 0 and 1440 minutes');
+      }
+
+      // Verify that the WIAB device still exists
+      const app = this.homey.app as { homeyApi?: { devices: { getDevices(): Promise<Record<string, unknown>> } } };
+
+      if (!app.homeyApi) {
+        throw new Error('System not ready. Please try pairing again.');
+      }
+
+      const devices = await app.homeyApi.devices.getDevices();
+      const device = devices[pairingData.wiabDeviceId];
+
+      if (!device) {
+        this.error('Selected WIAB device no longer exists:', pairingData.wiabDeviceId);
+        throw new Error('Selected WIAB device not found. It may have been deleted. Please start pairing again.');
+      }
+
+      const deviceObj = device as { driverId?: string };
+      if (!deviceObj.driverId?.endsWith(':wiab-device')) {
+        this.error('Selected device is not a WIAB device:', pairingData.wiabDeviceId);
+        throw new Error('Selected device is not a valid WIAB device. Please start pairing again.');
+      }
+
       return [
         {
           name: 'Room State Manager',
@@ -228,6 +370,7 @@ class RoomStateDriver extends Homey.Driver {
             id: `room-state-${Date.now()}`,
           },
           settings: {
+            wiabDeviceId: pairingData.wiabDeviceId,
             idleTimeout: pairingData.idleTimeout,
             occupiedTimeout: pairingData.occupiedTimeout,
           },

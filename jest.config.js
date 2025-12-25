@@ -5,6 +5,7 @@ module.exports = {
   collectCoverageFrom: [
     'lib/**/*.ts',
     'drivers/wiab-device/device.ts',
+    'drivers/wiab-room-state/device.ts',
     '!lib/types.ts',
     '!**/*.d.ts'
   ],

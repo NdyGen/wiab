@@ -259,22 +259,27 @@ export interface StateConfig {
  * Device settings for room state manager.
  *
  * These settings are stored in the device and control room state behavior.
- * The zone is determined by the device's zone assignment, not stored in settings.
+ * The WIAB device ID determines the occupancy input source for state transitions.
  *
  * The app uses a fixed 4-state model:
- * - idle: Room inactive
+ * - idle: Room inactive (WIAB device shows unoccupied)
  * - extended_idle: Room inactive for idleTimeout minutes (0 = disabled)
- * - occupied: Room active
+ * - occupied: Room active (WIAB device shows occupied)
  * - extended_occupied: Room active for occupiedTimeout minutes (0 = disabled)
  *
  * @interface RoomStateSettings
+ * @property {string} wiabDeviceId - ID of the WIAB device to monitor for occupancy input
  * @property {number} idleTimeout - Minutes before idle → extended_idle (0 = disabled)
  * @property {number} occupiedTimeout - Minutes before occupied → extended_occupied (0 = disabled)
  */
 export interface RoomStateSettings {
+  wiabDeviceId: string;
   idleTimeout: number;
   occupiedTimeout: number;
 }
+
+// Re-export validation function from dedicated module
+export { validateRoomStateSettings } from './RoomStateSettingsValidator';
 
 /**
  * Zone update event from HomeyAPI.
