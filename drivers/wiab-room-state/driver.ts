@@ -40,11 +40,19 @@ class RoomStateDriver extends Homey.Driver {
         this.log(`Flow action: Set room state to "${targetState}"`);
 
         // Call device method to set state manually
-        if (typeof device.handleManualStateChange === 'function') {
-          await device.handleManualStateChange(targetState);
+        if (typeof device.handleManualStateChange !== 'function') {
+          this.error(`Device missing handleManualStateChange method (device: ${device.getName?.() || 'unknown'})`);
+          return false;
         }
 
-        return true;
+        try {
+          await device.handleManualStateChange(targetState);
+          return true;
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.error(`Flow action failed: ${err.message}`);
+          return false;
+        }
       });
     }
 
@@ -57,11 +65,19 @@ class RoomStateDriver extends Homey.Driver {
         this.log('Flow action: Return to automatic mode');
 
         // Call device method to return to automatic
-        if (typeof device.returnToAutomatic === 'function') {
-          await device.returnToAutomatic();
+        if (typeof device.returnToAutomatic !== 'function') {
+          this.error(`Device missing returnToAutomatic method (device: ${device.getName?.() || 'unknown'})`);
+          return false;
         }
 
-        return true;
+        try {
+          await device.returnToAutomatic();
+          return true;
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.error(`Flow action failed: ${err.message}`);
+          return false;
+        }
       });
     }
 
@@ -80,11 +96,18 @@ class RoomStateDriver extends Homey.Driver {
         this.log(`Flow condition: Is in state "${targetState}"?`);
 
         // Check if device is in target state (with hierarchy support)
-        if (typeof device.isInState === 'function') {
-          return device.isInState(targetState);
+        if (typeof device.isInState !== 'function') {
+          this.error(`Device missing isInState method (device: ${device.getName?.() || 'unknown'})`);
+          return false;
         }
 
-        return false;
+        try {
+          return device.isInState(targetState);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.error(`Flow condition check failed: ${err.message}`);
+          return false;
+        }
       });
     }
 
@@ -103,11 +126,18 @@ class RoomStateDriver extends Homey.Driver {
         this.log(`Flow condition: Is exactly in state "${targetState}"?`);
 
         // Check if device is exactly in target state (no hierarchy)
-        if (typeof device.isExactlyInState === 'function') {
-          return device.isExactlyInState(targetState);
+        if (typeof device.isExactlyInState !== 'function') {
+          this.error(`Device missing isExactlyInState method (device: ${device.getName?.() || 'unknown'})`);
+          return false;
         }
 
-        return false;
+        try {
+          return device.isExactlyInState(targetState);
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.error(`Flow condition check failed: ${err.message}`);
+          return false;
+        }
       });
     }
 
@@ -120,11 +150,18 @@ class RoomStateDriver extends Homey.Driver {
         this.log('Flow condition: Is manual override active?');
 
         // Check if manual override is active
-        if (typeof device.isManualOverride === 'function') {
-          return device.isManualOverride();
+        if (typeof device.isManualOverride !== 'function') {
+          this.error(`Device missing isManualOverride method (device: ${device.getName?.() || 'unknown'})`);
+          return false;
         }
 
-        return false;
+        try {
+          return device.isManualOverride();
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error));
+          this.error(`Flow condition check failed: ${err.message}`);
+          return false;
+        }
       });
     }
 
