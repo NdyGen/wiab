@@ -216,14 +216,14 @@ class RoomStateDriver extends Homey.Driver {
     };
 
     // Handle WIAB device list request
-    session.setHandler('get_wiab_devices', async (): Promise<Array<{ id: string; name: string }> | { error: string }> => {
+    session.setHandler('get_wiab_devices', async (): Promise<Array<{ id: string; name: string }>> => {
       this.log('get_wiab_devices handler called');
       try {
         const app = this.homey.app as { homeyApi?: { devices: { getDevices(): Promise<Record<string, unknown>> }; zones: { getZone(params: { id: string }): Promise<{ name?: string }> } } };
 
         if (!app.homeyApi) {
           this.error('HomeyAPI not available during pairing');
-          return { error: 'System not ready. Please wait a moment and try again.' };
+          throw new Error('System not ready. Please wait a moment and try again.');
         }
 
         this.log('Fetching devices from HomeyAPI...');
@@ -264,7 +264,7 @@ class RoomStateDriver extends Homey.Driver {
       } catch (error) {
         this.error('Failed to get WIAB devices:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-        return { error: `Failed to load WIAB devices: ${errorMessage}` };
+        throw new Error(`Failed to load WIAB devices: ${errorMessage}`);
       }
     });
 
@@ -301,34 +301,24 @@ class RoomStateDriver extends Homey.Driver {
       }
 
       // Verify that the WIAB device still exists
-      try {
-        const app = this.homey.app as { homeyApi?: { devices: { getDevices(): Promise<Record<string, unknown>> } } };
+      const app = this.homey.app as { homeyApi?: { devices: { getDevices(): Promise<Record<string, unknown>> } } };
 
-        if (!app.homeyApi) {
-          throw new Error('System not ready. Please try pairing again.');
-        }
+      if (!app.homeyApi) {
+        throw new Error('System not ready. Please try pairing again.');
+      }
 
-        const devices = await app.homeyApi.devices.getDevices();
-        const device = devices[pairingData.wiabDeviceId];
+      const devices = await app.homeyApi.devices.getDevices();
+      const device = devices[pairingData.wiabDeviceId];
 
-        if (!device) {
-          this.error('Selected WIAB device no longer exists:', pairingData.wiabDeviceId);
-          throw new Error('Selected WIAB device not found. It may have been deleted. Please start pairing again.');
-        }
+      if (!device) {
+        this.error('Selected WIAB device no longer exists:', pairingData.wiabDeviceId);
+        throw new Error('Selected WIAB device not found. It may have been deleted. Please start pairing again.');
+      }
 
-        const deviceObj = device as { driverId?: string };
-        if (!deviceObj.driverId?.endsWith(':wiab-device')) {
-          this.error('Selected device is not a WIAB device:', pairingData.wiabDeviceId);
-          throw new Error('Selected device is not a valid WIAB device. Please start pairing again.');
-        }
-      } catch (error) {
-        // Re-throw validation errors
-        if (error instanceof Error) {
-          throw error;
-        }
-        // Wrap unexpected errors
-        this.error('Failed to validate WIAB device:', error);
-        throw new Error('Failed to validate selected WIAB device. Please try again.');
+      const deviceObj = device as { driverId?: string };
+      if (!deviceObj.driverId?.endsWith(':wiab-device')) {
+        this.error('Selected device is not a WIAB device:', pairingData.wiabDeviceId);
+        throw new Error('Selected device is not a valid WIAB device. Please start pairing again.');
       }
 
       return [
