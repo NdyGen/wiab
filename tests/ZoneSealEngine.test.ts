@@ -112,7 +112,7 @@ describe('ZoneSealEngine', () => {
       const transition = engine.handleAnySensorOpened();
 
       // Assert
-      expect(transition.newState).toBe(ZoneSealState.OPEN_DELAY);
+      expect(transition.newState).toBe(ZoneSealState.LEAKY); // Target state after delay
       expect(transition.immediate).toBe(false);
       expect(transition.delaySeconds).toBe(10);
       expect(engine.getCurrentState()).toBe(ZoneSealState.OPEN_DELAY);
@@ -205,7 +205,7 @@ describe('ZoneSealEngine', () => {
       const transition = engine.handleAnySensorOpened();
 
       // Assert
-      expect(transition.newState).toBe(ZoneSealState.OPEN_DELAY);
+      expect(transition.newState).toBe(ZoneSealState.LEAKY); // Target state after delay
       expect(transition.immediate).toBe(false);
       expect(transition.delaySeconds).toBe(10);
       expect(engine.getCurrentState()).toBe(ZoneSealState.OPEN_DELAY);
@@ -264,7 +264,7 @@ describe('ZoneSealEngine', () => {
       const transition = engine.handleAllSensorsClosed();
 
       // Assert
-      expect(transition.newState).toBe(ZoneSealState.CLOSE_DELAY);
+      expect(transition.newState).toBe(ZoneSealState.SEALED); // Target state after delay
       expect(transition.immediate).toBe(false);
       expect(transition.delaySeconds).toBe(5);
       expect(engine.getCurrentState()).toBe(ZoneSealState.CLOSE_DELAY);
@@ -305,7 +305,7 @@ describe('ZoneSealEngine', () => {
       const transition = engine.handleAllSensorsClosed();
 
       // Assert
-      expect(transition.newState).toBe(ZoneSealState.CLOSE_DELAY);
+      expect(transition.newState).toBe(ZoneSealState.SEALED); // Target state after delay
       expect(transition.immediate).toBe(false);
       expect(transition.delaySeconds).toBe(5);
       expect(engine.getCurrentState()).toBe(ZoneSealState.CLOSE_DELAY);
@@ -606,7 +606,7 @@ describe('ZoneSealEngine', () => {
 
       // Act - sensor opens
       const t1 = engine.handleAnySensorOpened();
-      expect(t1.newState).toBe(ZoneSealState.OPEN_DELAY);
+      expect(t1.newState).toBe(ZoneSealState.LEAKY); // Target state after delay
 
       // Device layer would schedule timer and call setCurrentState after delay
       engine.setCurrentState(ZoneSealState.LEAKY);
@@ -621,7 +621,7 @@ describe('ZoneSealEngine', () => {
 
       // Act - all sensors close
       const t1 = engine.handleAllSensorsClosed();
-      expect(t1.newState).toBe(ZoneSealState.CLOSE_DELAY);
+      expect(t1.newState).toBe(ZoneSealState.SEALED); // Target state after delay
 
       // Device layer would schedule timer and call setCurrentState after delay
       engine.setCurrentState(ZoneSealState.SEALED);
