@@ -194,11 +194,11 @@ export function createMockDevice(config: {
       if (capabilitiesObj[capability]) {
         capabilitiesObj[capability].value = value;
       }
-      // Call the capability callback if it exists (for real-time monitoring)
-      const callback = capabilityCallbacks.get(capability);
-      if (callback && typeof value === 'boolean') {
-        callback(value);
-      }
+      // NOTE: Deliberately NOT calling capability callbacks here!
+      // Callbacks registered via makeCapabilityInstance are for monitoring EXTERNAL changes
+      // to the device (e.g., WIAB device occupancy changes from sensors).
+      // When a device sets its OWN capability value, it should not trigger its own listener.
+      // This matches real Homey behavior and prevents infinite callback loops in tests.
     },
     _getCapabilityValues: () => ({ ...capabilityValues }),
     // HomeyAPI compatibility

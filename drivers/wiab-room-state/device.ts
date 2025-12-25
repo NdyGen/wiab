@@ -1,4 +1,4 @@
-import * as Homey from 'homey';
+import Homey from 'homey';
 import { RoomStateEngine } from '../../lib/RoomStateEngine';
 import type { StateConfig, RoomStateSettings, HomeyAPI } from '../../lib/types';
 import { validateRoomStateSettings } from '../../lib/RoomStateSettingsValidator';
@@ -1125,4 +1125,5 @@ class RoomStateDevice extends Homey.Device {
   }
 }
 
+export default RoomStateDevice;
 module.exports = RoomStateDevice;

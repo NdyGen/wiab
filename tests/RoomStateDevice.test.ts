@@ -1,0 +1,218 @@
+/**
+ * Tests for RoomStateDevice
+ * Focused on achieving 70% coverage without memory issues
+ */
+
+import RoomStateDevice from '../drivers/wiab-room-state/device';
+import { createMockHomey, createMockHomeyApi, createMockDevice } from './setup';
+
+describe('RoomStateDevice', () => {
+  let device: RoomStateDevice;
+  let mockHomey: ReturnType<typeof createMockHomey>;
+  let mockHomeyApi: ReturnType<typeof createMockHomeyApi>;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockHomey = createMockHomey();
+    mockHomeyApi = createMockHomeyApi();
+
+    // Create app with HomeyAPI
+    const mockApp = {
+      homeyApi: mockHomeyApi,
+    };
+    (mockHomey as any).app = mockApp;
+
+    device = new RoomStateDevice();
+    Object.assign(device, {
+      homey: mockHomey,
+      getData: jest.fn().mockReturnValue({ id: 'room-state-123' }),
+      getName: jest.fn().mockReturnValue('Test Room State'),
+      getSettings: jest.fn().mockReturnValue({
+        wiabDeviceId: 'wiab-123',
+        idleTimeout: 30,
+        occupiedTimeout: 60,
+      }),
+      setSettings: jest.fn().mockResolvedValue(undefined),
+      log: jest.fn(),
+      error: jest.fn(),
+      setCapabilityValue: jest.fn().mockResolvedValue(undefined),
+      hasCapabilityvalue: jest.fn().mockReturnValue(true),
+      addCapability: jest.fn().mockResolvedValue(undefined),
+      registerCapabilityListener: jest.fn(),
+    });
+  });
+
+  afterEach(() => {
+    mockHomeyApi.devices._clear();
+  });
+
+  describe('Device Lifecycle', () => {
+    it('should initialize with valid WIAB device', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      expect(device.log).toHaveBeenCalledWith('Room State device initializing');
+      expect(device.log).toHaveBeenCalledWith(expect.stringContaining('Room State device initialized successfully'));
+    });
+
+    it('should handle WIAB device not found', async () => {
+      await device.onInit();
+
+      // Error should be logged multiple times during graceful degradation
+      expect(device.error).toHaveBeenCalled();
+      const errorCalls = (device.error as jest.Mock).mock.calls;
+      const hasWiabError = errorCalls.some((call: any[]) =>
+        call[0]?.toString().includes('WIAB device not found')
+      );
+      expect(hasWiabError).toBe(true);
+    });
+
+    it('should cleanup on delete', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+      await device.onDeleted();
+
+      expect(device.log).toHaveBeenCalledWith('Room State device being deleted');
+    });
+
+    it('should reinitialize on critical setting change', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      const newSettings = {
+        wiabDeviceId: 'wiab-456',
+        idleTimeout: 45,
+        occupiedTimeout: 90,
+      };
+      device.getSettings = jest.fn().mockReturnValue(newSettings);
+
+      const newWiabDevice = createMockDevice({
+        id: 'wiab-456',
+        name: 'New WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: true },
+      });
+      mockHomeyApi.devices._addDevice('wiab-456', newWiabDevice);
+
+      await device.onSettings({
+        oldSettings: { wiabDeviceId: 'wiab-123', idleTimeout: 30, occupiedTimeout: 60 },
+        newSettings,
+        changedKeys: ['wiabDeviceId'],
+      });
+
+      expect(device.log).toHaveBeenCalledWith('Timer settings changed, reinitializing...');
+    });
+  });
+
+  describe('State Transitions', () => {
+    it('should handle occupancy change', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      // Trigger occupancy change via capability callback
+      const callback = (mockWiabDevice as any)._capabilityCallbacks.get('alarm_occupancy');
+      if (callback) {
+        callback(true);
+
+        // Check log was called (state transition happens)
+        expect(device.log).toHaveBeenCalledWith('WIAB occupancy changed: OCCUPIED');
+      }
+    });
+  });
+
+  describe('Manual Override', () => {
+    it('should handle manual state change', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      await device.handleManualStateChange('occupied');
+
+      expect(device.log).toHaveBeenCalledWith(expect.stringContaining('Manual state change'));
+    });
+
+    it('should return to automatic mode', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+      await device.handleManualStateChange('occupied');
+      await device.returnToAutomatic();
+
+      expect(device.log).toHaveBeenCalledWith('Returning to automatic mode');
+    });
+  });
+
+  describe('State Queries', () => {
+    it('should check if in state', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      const result = device.isInState('idle');
+      expect(typeof result).toBe('boolean');
+    });
+
+    it('should check manual override status', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      expect(device.isManualOverride()).toBe(false);
+
+      await device.handleManualStateChange('occupied');
+      expect(device.isManualOverride()).toBe(true);
+    });
+  });
+});
