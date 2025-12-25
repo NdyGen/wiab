@@ -1,7 +1,7 @@
 import Homey from 'homey';
 import { RoomStateEngine } from '../../lib/RoomStateEngine';
 import type { StateConfig, RoomStateSettings, HomeyAPI } from '../../lib/types';
-import { validateRoomStateSettings } from '../../lib/types';
+import { validateRoomStateSettings } from '../../lib/RoomStateSettingsValidator';
 import { RoomStateErrorId } from '../../constants/errorIds';
 import { WarningManager } from '../../lib/WarningManager';
 import { ErrorReporter } from '../../lib/ErrorReporter';
@@ -57,7 +57,7 @@ class RoomStateDevice extends Homey.Device {
    * Steps:
    * 1. Load and validate settings
    * 2. Create RoomStateEngine with state configuration
-   * 3. Setup zone activity monitoring
+   * 3. Setup WIAB device activity monitoring
    * 4. Initialize capabilities
    * 5. Set initial state
    */
@@ -73,14 +73,21 @@ class RoomStateDevice extends Homey.Device {
       // Register capability listeners for manual state changes
       this.registerCapabilityListeners();
 
-      // Setup zone monitoring and state engine
+      // Setup WIAB device monitoring and state engine
       await this.setupRoomStateManagement();
 
       // Clear any previous warning on successful initialization
       try {
         await this.warningManager.clearWarning();
       } catch (warningError) {
-        this.error('Failed to clear warning after successful initialization:', warningError);
+        const err = warningError instanceof Error ? warningError : new Error(String(warningError));
+        this.errorReporter.reportError({
+          errorId: RoomStateErrorId.WARNING_CLEAR_FAILED,
+          severity: ErrorSeverity.MEDIUM,
+          userMessage: 'Warning indicator update failed',
+          technicalMessage: `Failed to clear warning after successful initialization: ${err.message}`,
+          context: { deviceId: this.getData().id },
+        });
       }
 
       this.log('Room State device initialized successfully');
@@ -91,7 +98,7 @@ class RoomStateDevice extends Homey.Device {
       this.errorReporter.reportError({
         errorId: RoomStateErrorId.DEVICE_INIT_FAILED,
         severity: ErrorSeverity.CRITICAL,
-        userMessage: 'Device initialization failed. Check zone assignment.',
+        userMessage: 'Device initialization failed. Check WIAB device assignment.',
         technicalMessage: `Failed to initialize: ${err.message}\n${err.stack || 'No stack trace available'}`,
         context: { deviceId: this.getData().id },
       });
@@ -99,10 +106,17 @@ class RoomStateDevice extends Homey.Device {
       try {
         await this.warningManager.setWarning(
           RoomStateErrorId.DEVICE_INIT_FAILED,
-          'Initialization failed. Check device settings and zone assignment.'
+          'Initialization failed. Check device settings and WIAB device assignment.'
         );
       } catch (warningError) {
-        this.error('Failed to set warning on device:', warningError);
+        const err = warningError instanceof Error ? warningError : new Error(String(warningError));
+        this.errorReporter.reportError({
+          errorId: RoomStateErrorId.WARNING_SET_FAILED,
+          severity: ErrorSeverity.MEDIUM,
+          userMessage: 'Warning indicator update failed',
+          technicalMessage: `Failed to set warning after initialization failure: ${err.message}`,
+          context: { deviceId: this.getData().id },
+        });
       }
 
       // Don't throw - allow device to exist in degraded mode with visible warning
@@ -112,9 +126,9 @@ class RoomStateDevice extends Homey.Device {
   /**
    * Handles settings changes.
    *
-   * When timers change or zone assignment changes, teardown
+   * When timers change or WIAB device assignment changes, teardown
    * existing monitoring and reinitialize with new configuration.
-   * This ensures the device re-evaluates zone activity and sets
+   * This ensures the device re-evaluates WIAB device activity and sets
    * the correct initial state.
    *
    * @param event - Settings change event
@@ -126,51 +140,66 @@ class RoomStateDevice extends Homey.Device {
   }): Promise<void> {
     this.log('Settings changed:', event.changedKeys);
 
-    try {
-      // If WIAB device or timer settings changed, reinitialize
-      const criticalKeys = ['wiabDeviceId', 'idleTimeout', 'occupiedTimeout'];
-      const needsReinit = event.changedKeys.some((key) => criticalKeys.includes(key));
+    // If WIAB device or timer settings changed, reinitialize
+    const criticalKeys = ['wiabDeviceId', 'idleTimeout', 'occupiedTimeout'];
+    const needsReinit = event.changedKeys.some((key) => criticalKeys.includes(key));
 
-      if (needsReinit) {
-        this.log('Timer settings changed, reinitializing...');
-        this.teardownRoomStateManagement();
+    if (needsReinit) {
+      this.log('Timer settings changed, reinitializing...');
+      this.teardownRoomStateManagement();
+
+      try {
         await this.setupRoomStateManagement();
 
         // Clear warning on successful settings update
         try {
           await this.warningManager?.clearWarning();
-        } catch (error) {
-          this.error('Failed to clear warning after settings update:', error);
+        } catch (warningError) {
+          const err = warningError instanceof Error ? warningError : new Error(String(warningError));
+          this.errorReporter?.reportError({
+            errorId: RoomStateErrorId.WARNING_CLEAR_FAILED,
+            severity: ErrorSeverity.MEDIUM,
+            userMessage: 'Warning indicator update failed',
+            technicalMessage: `Failed to clear warning after settings update: ${err.message}`,
+            context: { deviceId: this.getData().id },
+          });
         }
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+
+        this.errorReporter?.reportError({
+          errorId: RoomStateErrorId.SETTINGS_UPDATE_FAILED,
+          severity: ErrorSeverity.HIGH,
+          userMessage: 'Failed to apply settings. Check configuration.',
+          technicalMessage: `Settings update failed: ${err.message}\n${err.stack || 'No stack trace available'}`,
+          context: { deviceId: this.getData().id, changedKeys: event.changedKeys },
+        });
+
+        try {
+          await this.warningManager?.setWarning(
+            RoomStateErrorId.SETTINGS_UPDATE_FAILED,
+            'Failed to apply settings. Check configuration and try again.'
+          );
+        } catch (warningError) {
+          const err = warningError instanceof Error ? warningError : new Error(String(warningError));
+          this.errorReporter?.reportError({
+            errorId: RoomStateErrorId.WARNING_SET_FAILED,
+            severity: ErrorSeverity.MEDIUM,
+            userMessage: 'Warning indicator update failed',
+            technicalMessage: `Failed to set warning after settings error: ${err.message}`,
+            context: { deviceId: this.getData().id },
+          });
+        }
+
+        throw error; // Re-throw to show error in Homey settings UI
       }
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-
-      this.errorReporter?.reportError({
-        errorId: RoomStateErrorId.SETTINGS_UPDATE_FAILED,
-        severity: ErrorSeverity.HIGH,
-        userMessage: 'Failed to apply settings. Check configuration.',
-        technicalMessage: `Settings update failed: ${err.message}\n${err.stack || 'No stack trace available'}`,
-        context: { deviceId: this.getData().id, changedKeys: event.changedKeys },
-      });
-
-      try {
-        await this.warningManager?.setWarning(
-          RoomStateErrorId.SETTINGS_UPDATE_FAILED,
-          'Failed to apply settings. Check configuration and try again.'
-        );
-      } catch (warningError) {
-        this.error('Failed to set warning after settings error:', warningError);
-      }
-
-      throw error; // Re-throw to show error in Homey settings UI
     }
   }
 
   /**
    * Cleanup when device is deleted.
    *
-   * Removes zone event listeners and clears all timers.
+   * Removes WIAB device event listeners and clears all timers.
    */
   async onDeleted(): Promise<void> {
     this.log('Room State device being deleted');
@@ -304,10 +333,16 @@ class RoomStateDevice extends Homey.Device {
 
       this.log('Room state management setup complete');
     } catch (error) {
-      this.error(
-        `[${RoomStateErrorId.STATE_ENGINE_VALIDATION_FAILED}] Failed to setup room state management:`,
-        error
-      );
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.STATE_ENGINE_VALIDATION_FAILED,
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'Failed to setup room state management',
+        technicalMessage: `Setup failed: ${err.message}\n${err.stack || 'No stack trace available'}`,
+        context: { deviceId: this.getData().id },
+      });
+
       throw error;
     }
   }
@@ -319,11 +354,11 @@ class RoomStateDevice extends Homey.Device {
    * Clears WIAB monitoring, state timers, and resets all state variables.
    *
    * Note on capability listener cleanup:
-   * The WIAB device capability listener is managed via makeCapabilityInstance(),
+   * The WIAB device capability listener is set up via makeCapabilityInstance(),
    * which doesn't provide an explicit cleanup mechanism. Setting the reference
-   * to null prevents re-registration, and the actual listener will be garbage
-   * collected when the device is deleted. This pattern is consistent with
-   * HomeyAPI's GC-based lifecycle management.
+   * to null prevents re-registration during subsequent calls. HomeyAPI manages
+   * listener lifecycle internally and will clean up when the device or capability
+   * is removed from the system.
    */
   private teardownRoomStateManagement(): void {
     try {
@@ -357,7 +392,7 @@ class RoomStateDevice extends Homey.Device {
    * - occupied → extended_occupied (after occupiedTimeout minutes, or disabled if 0)
    * - extended_idle and extended_occupied are child states for hierarchy support
    *
-   * Zone activity triggers transition between idle ↔ occupied
+   * WIAB device activity triggers transition between idle ↔ occupied
    * Timers trigger transitions to extended states
    *
    * @param idleTimeout - Minutes before idle → extended_idle (0 = disabled)
@@ -417,58 +452,71 @@ class RoomStateDevice extends Homey.Device {
    * @param wiabDeviceId - ID of the WIAB device to monitor
    */
   private async setupWiabMonitoring(wiabDeviceId: string): Promise<void> {
-    try {
-      const app = this.homey.app as WIABApp;
-      if (!app.homeyApi) {
-        throw new Error('HomeyAPI not available');
-      }
+    const app = this.homey.app as WIABApp;
+    if (!app.homeyApi) {
+      throw new Error('HomeyAPI not available');
+    }
 
+    // Get WIAB device with specific error reporting
+    let device;
+    try {
       const devices = await app.homeyApi.devices.getDevices();
-      const device = devices[wiabDeviceId];
+      device = devices[wiabDeviceId];
 
       if (!device) {
-        throw new Error(`WIAB device not found: ${wiabDeviceId}`);
+        const err = new Error(`WIAB device not found: ${wiabDeviceId}`);
+        this.errorReporter?.reportError({
+          errorId: RoomStateErrorId.WIAB_DEVICE_NOT_FOUND,
+          severity: ErrorSeverity.CRITICAL,
+          userMessage: 'WIAB device not found. It may have been deleted.',
+          technicalMessage: `WIAB device lookup failed: ${wiabDeviceId}`,
+          context: { deviceId: this.getData().id, wiabDeviceId },
+        });
+        throw err;
       }
-
-      const deviceObj = device as { name?: string; makeCapabilityInstance?: (capabilityId: string, callback: (value: boolean) => void) => void };
-
-      this.log(`Setting up monitoring for WIAB device: ${deviceObj.name || wiabDeviceId}`);
-
-      // Store device info
-      this.wiabDevice = {
-        id: wiabDeviceId,
-        name: deviceObj.name || 'Unknown WIAB Device',
-      };
-
-      // Set up capability listener for alarm_occupancy changes
-      if (deviceObj.makeCapabilityInstance) {
-        this.wiabCapabilityListener = () => {
-          deviceObj.makeCapabilityInstance?.('alarm_occupancy', (value: boolean) => {
-            this.log(`WIAB occupancy changed: ${value ? 'OCCUPIED' : 'UNOCCUPIED'}`);
-            this.handleOccupancyChange(value);
-          });
-        };
-
-        this.wiabCapabilityListener();
-      } else {
-        // makeCapabilityInstance unavailable - this is a critical error
-        throw new Error('makeCapabilityInstance not available on WIAB device - cannot monitor occupancy changes');
-      }
-
-      this.log(`WIAB device monitoring setup complete`);
     } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
+      // Re-throw if already reported, otherwise report as lookup failure
+      if (error instanceof Error && error.message.includes('WIAB device not found')) {
+        throw error;
+      }
 
+      const err = error instanceof Error ? error : new Error(String(error));
       this.errorReporter?.reportError({
-        errorId: RoomStateErrorId.ZONE_NOT_FOUND, // Reuse error ID
+        errorId: RoomStateErrorId.WIAB_DEVICE_LOOKUP_FAILED,
         severity: ErrorSeverity.CRITICAL,
-        userMessage: 'Failed to setup WIAB device monitoring',
-        technicalMessage: `WIAB monitoring setup failed: ${err.message}\n${err.stack || 'No stack trace available'}`,
+        userMessage: 'Failed to access WIAB device',
+        technicalMessage: `WIAB device lookup failed: ${err.message}\n${err.stack || 'No stack trace available'}`,
         context: { deviceId: this.getData().id, wiabDeviceId },
       });
-
       throw error;
     }
+
+    const deviceObj = device as { name?: string; makeCapabilityInstance?: (capabilityId: string, callback: (value: boolean) => void) => void };
+
+    this.log(`Setting up monitoring for WIAB device: ${deviceObj.name || wiabDeviceId}`);
+
+    // Store device info
+    this.wiabDevice = {
+      id: wiabDeviceId,
+      name: deviceObj.name || 'Unknown WIAB Device',
+    };
+
+    // Set up capability listener for alarm_occupancy changes
+    if (!deviceObj.makeCapabilityInstance) {
+      // makeCapabilityInstance unavailable - this is a critical error
+      throw new Error('makeCapabilityInstance not available on WIAB device - cannot monitor occupancy changes');
+    }
+
+    this.wiabCapabilityListener = () => {
+      deviceObj.makeCapabilityInstance?.('alarm_occupancy', (value: boolean) => {
+        this.log(`WIAB occupancy changed: ${value ? 'OCCUPIED' : 'UNOCCUPIED'}`);
+        this.handleOccupancyChange(value);
+      });
+    };
+
+    this.wiabCapabilityListener();
+
+    this.log(`WIAB device monitoring setup complete`);
   }
 
   /**
