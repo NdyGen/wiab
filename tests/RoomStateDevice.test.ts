@@ -20,7 +20,12 @@ describe('RoomStateDevice', () => {
     const mockApp = {
       homeyApi: mockHomeyApi,
     };
-    (mockHomey as any).app = mockApp;
+    interface MockHomeyWithApp {
+      app?: {
+        homeyApi?: ReturnType<typeof createMockHomeyApi>;
+      };
+    }
+    (mockHomey as MockHomeyWithApp).app = mockApp;
 
     device = new RoomStateDevice();
     Object.assign(device, {
@@ -68,8 +73,8 @@ describe('RoomStateDevice', () => {
       // Error should be logged multiple times during graceful degradation
       expect(device.error).toHaveBeenCalled();
       const errorCalls = (device.error as jest.Mock).mock.calls;
-      const hasWiabError = errorCalls.some((call: any[]) =>
-        call[0]?.toString().includes('WIAB device not found')
+      const hasWiabError = errorCalls.some((call: unknown[]) =>
+        String(call[0]).includes('WIAB device not found')
       );
       expect(hasWiabError).toBe(true);
     });
@@ -138,7 +143,11 @@ describe('RoomStateDevice', () => {
       await device.onInit();
 
       // Trigger occupancy change via capability callback
-      const callback = (mockWiabDevice as any)._capabilityCallbacks.get('alarm_occupancy');
+      interface MockDeviceWithCallbacks {
+        _capabilityCallbacks?: Map<string, (value: boolean) => void>;
+      }
+      const mockDeviceWithCallbacks = mockWiabDevice as MockDeviceWithCallbacks;
+      const callback = mockDeviceWithCallbacks._capabilityCallbacks?.get('alarm_occupancy');
       if (callback) {
         callback(true);
 

@@ -40,7 +40,7 @@ class RoomStateDevice extends Homey.Device {
   private wiabCapabilityListener?: (() => void) | null;
   private stateTimer?: NodeJS.Timeout;
   private lastActivityTimestamp: number | null = null;
-  private isZoneActive: boolean = false;
+  private isWiabOccupied: boolean = false;
   private manualOverride: boolean = false;
 
   // Error handling utilities
@@ -283,8 +283,10 @@ class RoomStateDevice extends Homey.Device {
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
 
-      // Only report if not already reported by validation handler
-      if (!err.message.includes('Settings validation failed') && !err.message.includes('invalid')) {
+      // Only report lookup errors; validation errors are already reported by validation handler
+      // Check error name instead of instanceof to avoid runtime issues
+      const isValidationError = err.name === 'SettingsValidationError';
+      if (!isValidationError) {
         // Determine wiabDeviceId safely (may be undefined if validation failed)
         const deviceIdForContext = wiabDeviceId || (() => {
           try {
@@ -342,7 +344,7 @@ class RoomStateDevice extends Homey.Device {
       this.log(`State engine created with timers: idle=${idleTimeout}min, occupied=${occupiedTimeout}min`);
 
       // Set initial activity state
-      this.isZoneActive = wiabDevice.occupancy;
+      this.isWiabOccupied = wiabDevice.occupancy;
       if (wiabDevice.occupancy) {
         this.lastActivityTimestamp = Date.now();
       }
@@ -401,7 +403,7 @@ class RoomStateDevice extends Homey.Device {
 
       // Reset state variables to prevent stale state
       this.stateEngine = undefined;
-      this.isZoneActive = false;
+      this.isWiabOccupied = false;
       this.lastActivityTimestamp = null;
       this.manualOverride = false;
 
@@ -575,7 +577,7 @@ class RoomStateDevice extends Homey.Device {
     }
 
     // Update activity state
-    this.isZoneActive = occupied;
+    this.isWiabOccupied = occupied;
 
     if (occupied) {
       this.lastActivityTimestamp = Date.now();
@@ -612,7 +614,7 @@ class RoomStateDevice extends Homey.Device {
       // Evaluate if transition should happen now
       const evaluation = this.stateEngine.evaluateStateTransition(
         currentState,
-        this.isZoneActive,
+        this.isWiabOccupied,
         minutesSinceActivity
       );
 
@@ -625,7 +627,7 @@ class RoomStateDevice extends Homey.Device {
       // Get next timed transition
       const nextTransition = this.stateEngine.getNextTimedTransition(
         currentState,
-        this.isZoneActive
+        this.isWiabOccupied
       );
 
       if (nextTransition) {
@@ -642,7 +644,7 @@ class RoomStateDevice extends Homey.Device {
         context: {
           deviceId: this.getData().id,
           currentState: this.stateEngine?.getCurrentState(),
-          isZoneActive: this.isZoneActive,
+          isZoneActive: this.isWiabOccupied,
         },
       });
 

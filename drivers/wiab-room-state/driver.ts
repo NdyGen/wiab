@@ -41,8 +41,9 @@ class RoomStateDriver extends Homey.Driver {
 
         // Call device method to set state manually
         if (typeof device.handleManualStateChange !== 'function') {
-          this.error(`Device missing handleManualStateChange method (device: ${device.getName?.() || 'unknown'})`);
-          return false;
+          const errorMsg = `Device missing handleManualStateChange method (device: ${device.getName?.() || 'unknown'})`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
 
         try {
@@ -51,7 +52,7 @@ class RoomStateDriver extends Homey.Driver {
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
           this.error(`Flow action failed: ${err.message}`);
-          return false;
+          throw new Error(`Failed to set room state: ${err.message}`);
         }
       });
     }
@@ -66,8 +67,9 @@ class RoomStateDriver extends Homey.Driver {
 
         // Call device method to return to automatic
         if (typeof device.returnToAutomatic !== 'function') {
-          this.error(`Device missing returnToAutomatic method (device: ${device.getName?.() || 'unknown'})`);
-          return false;
+          const errorMsg = `Device missing returnToAutomatic method (device: ${device.getName?.() || 'unknown'})`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
 
         try {
@@ -76,7 +78,7 @@ class RoomStateDriver extends Homey.Driver {
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
           this.error(`Flow action failed: ${err.message}`);
-          return false;
+          throw new Error(`Failed to return to automatic mode: ${err.message}`);
         }
       });
     }
@@ -97,8 +99,9 @@ class RoomStateDriver extends Homey.Driver {
 
         // Check if device is in target state (with hierarchy support)
         if (typeof device.isInState !== 'function') {
-          this.error(`Device missing isInState method (device: ${device.getName?.() || 'unknown'})`);
-          return false;
+          const errorMsg = `Device missing isInState method (device: ${device.getName?.() || 'unknown'})`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
 
         try {
@@ -106,7 +109,7 @@ class RoomStateDriver extends Homey.Driver {
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
           this.error(`Flow condition check failed: ${err.message}`);
-          return false;
+          throw new Error(`Failed to check room state: ${err.message}`);
         }
       });
     }
@@ -127,8 +130,9 @@ class RoomStateDriver extends Homey.Driver {
 
         // Check if device is exactly in target state (no hierarchy)
         if (typeof device.isExactlyInState !== 'function') {
-          this.error(`Device missing isExactlyInState method (device: ${device.getName?.() || 'unknown'})`);
-          return false;
+          const errorMsg = `Device missing isExactlyInState method (device: ${device.getName?.() || 'unknown'})`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
 
         try {
@@ -136,7 +140,7 @@ class RoomStateDriver extends Homey.Driver {
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
           this.error(`Flow condition check failed: ${err.message}`);
-          return false;
+          throw new Error(`Failed to check exact room state: ${err.message}`);
         }
       });
     }
@@ -151,8 +155,9 @@ class RoomStateDriver extends Homey.Driver {
 
         // Check if manual override is active
         if (typeof device.isManualOverride !== 'function') {
-          this.error(`Device missing isManualOverride method (device: ${device.getName?.() || 'unknown'})`);
-          return false;
+          const errorMsg = `Device missing isManualOverride method (device: ${device.getName?.() || 'unknown'})`;
+          this.error(errorMsg);
+          throw new Error(errorMsg);
         }
 
         try {
@@ -160,7 +165,7 @@ class RoomStateDriver extends Homey.Driver {
         } catch (error) {
           const err = error instanceof Error ? error : new Error(String(error));
           this.error(`Flow condition check failed: ${err.message}`);
-          return false;
+          throw new Error(`Failed to check manual override status: ${err.message}`);
         }
       });
     }

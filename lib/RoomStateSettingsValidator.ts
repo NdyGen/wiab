@@ -1,4 +1,5 @@
 import type { RoomStateSettings } from './types';
+import { SettingsValidationError } from './ErrorTypes';
 
 /**
  * Validates and normalizes room state settings.
@@ -9,7 +10,7 @@ import type { RoomStateSettings } from './types';
  *
  * @param settings - Unknown settings object to validate
  * @returns Validated and normalized RoomStateSettings
- * @throws Error if validation fails with descriptive message
+ * @throws SettingsValidationError if validation fails with descriptive message
  *
  * @example
  * ```typescript
@@ -18,41 +19,41 @@ import type { RoomStateSettings } from './types';
  */
 export function validateRoomStateSettings(settings: unknown): RoomStateSettings {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
-    throw new Error('Settings must be an object');
+    throw new SettingsValidationError('Settings must be an object');
   }
 
   const obj = settings as Partial<RoomStateSettings>;
 
   // Validate wiabDeviceId
   if (!obj.wiabDeviceId || typeof obj.wiabDeviceId !== 'string') {
-    throw new Error('wiabDeviceId is required and must be a non-empty string');
+    throw new SettingsValidationError('wiabDeviceId is required and must be a non-empty string');
   }
   if (obj.wiabDeviceId.trim() === '') {
-    throw new Error('wiabDeviceId cannot be empty or whitespace');
+    throw new SettingsValidationError('wiabDeviceId cannot be empty or whitespace');
   }
 
   // Validate idleTimeout
   const idleTimeout = obj.idleTimeout ?? 0;
   if (typeof idleTimeout !== 'number' || !Number.isFinite(idleTimeout)) {
-    throw new Error('idleTimeout must be a finite number');
+    throw new SettingsValidationError('idleTimeout must be a finite number');
   }
   if (idleTimeout < 0) {
-    throw new Error('idleTimeout cannot be negative (use 0 to disable)');
+    throw new SettingsValidationError('idleTimeout cannot be negative (use 0 to disable)');
   }
   if (idleTimeout > 1440) {
-    throw new Error('idleTimeout cannot exceed 1440 minutes (24 hours)');
+    throw new SettingsValidationError('idleTimeout cannot exceed 1440 minutes (24 hours)');
   }
 
   // Validate occupiedTimeout
   const occupiedTimeout = obj.occupiedTimeout ?? 0;
   if (typeof occupiedTimeout !== 'number' || !Number.isFinite(occupiedTimeout)) {
-    throw new Error('occupiedTimeout must be a finite number');
+    throw new SettingsValidationError('occupiedTimeout must be a finite number');
   }
   if (occupiedTimeout < 0) {
-    throw new Error('occupiedTimeout cannot be negative (use 0 to disable)');
+    throw new SettingsValidationError('occupiedTimeout cannot be negative (use 0 to disable)');
   }
   if (occupiedTimeout > 1440) {
-    throw new Error('occupiedTimeout cannot exceed 1440 minutes (24 hours)');
+    throw new SettingsValidationError('occupiedTimeout cannot exceed 1440 minutes (24 hours)');
   }
 
   return {
