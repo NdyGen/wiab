@@ -37,5 +37,8 @@
   },
   "1.2.1": {
     "en": "Improved device reliability with automatic error recovery and self-healing capabilities. Devices now provide clearer warning messages when issues occur and continue functioning even with partial failures."
+  },
+  "1.2.2": {
+    "en": "Room State Manager pairing flow simplified: now select an existing WIAB occupancy device instead of configuring individual sensors. Room State Manager monitors WIAB device occupancy changes with configurable timer-based state transitions."
   }
 }
