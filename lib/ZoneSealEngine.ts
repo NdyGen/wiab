@@ -247,7 +247,7 @@ export class ZoneSealEngine {
         this.currentState = ZoneSealState.CLOSE_DELAY;
         this.delayDeadline = Date.now() + closeDelaySeconds * 1000;
         return {
-          newState: ZoneSealState.CLOSE_DELAY,
+          newState: ZoneSealState.SEALED,
           immediate: false,
           delaySeconds: closeDelaySeconds
         };
@@ -266,7 +266,7 @@ export class ZoneSealEngine {
         this.currentState = ZoneSealState.CLOSE_DELAY;
         this.delayDeadline = Date.now() + closeDelaySeconds * 1000;
         return {
-          newState: ZoneSealState.CLOSE_DELAY,
+          newState: ZoneSealState.SEALED,
           immediate: false,
           delaySeconds: closeDelaySeconds
         };
@@ -322,7 +322,7 @@ export class ZoneSealEngine {
         this.currentState = ZoneSealState.OPEN_DELAY;
         this.delayDeadline = Date.now() + openDelaySeconds * 1000;
         return {
-          newState: ZoneSealState.OPEN_DELAY,
+          newState: ZoneSealState.LEAKY,
           immediate: false,
           delaySeconds: openDelaySeconds
         };
@@ -355,7 +355,7 @@ export class ZoneSealEngine {
         this.currentState = ZoneSealState.OPEN_DELAY;
         this.delayDeadline = Date.now() + openDelaySeconds * 1000;
         return {
-          newState: ZoneSealState.OPEN_DELAY,
+          newState: ZoneSealState.LEAKY,
           immediate: false,
           delaySeconds: openDelaySeconds
         };
