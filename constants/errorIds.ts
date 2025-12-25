@@ -179,6 +179,12 @@ export enum RoomStateErrorId {
 
   /** Settings validation failed */
   SETTINGS_VALIDATION_FAILED = 'ROOM_STATE_019',
+
+  /** Resource teardown/cleanup failed */
+  TEARDOWN_FAILED = 'ROOM_STATE_020',
+
+  /** Failed to return to automatic mode */
+  AUTOMATIC_MODE_FAILED = 'ROOM_STATE_021',
 }
 
 /**

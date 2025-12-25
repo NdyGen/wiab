@@ -407,6 +407,17 @@ class RoomStateDevice extends Homey.Device {
 
       this.log('Room state management torn down');
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      // Teardown failure is HIGH severity - resources may not be released
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.TEARDOWN_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Resource cleanup may be incomplete',
+        technicalMessage: `Teardown failed: ${err.message}\n${err.stack || 'No stack trace'}`,
+        context: { deviceId: this.getData().id },
+      });
+
       this.error('Error tearing down room state management:', error);
     }
   }
@@ -621,6 +632,20 @@ class RoomStateDevice extends Homey.Device {
         this.scheduleStateTransition(nextTransition.targetState, nextTransition.afterMinutes);
       }
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.STATE_TRANSITION_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'State transition evaluation failed',
+        technicalMessage: `Failed to evaluate and schedule transition: ${err.message}\n${err.stack || 'No stack trace'}`,
+        context: {
+          deviceId: this.getData().id,
+          currentState: this.stateEngine?.getCurrentState(),
+          isZoneActive: this.isZoneActive,
+        },
+      });
+
       this.error(
         `[${RoomStateErrorId.STATE_TRANSITION_FAILED}] Failed to evaluate and schedule transition:`,
         error
@@ -652,8 +677,22 @@ class RoomStateDevice extends Homey.Device {
         );
       }, delayMs);
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.STATE_TRANSITION_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to schedule state transition',
+        technicalMessage: `Failed to schedule transition to "${targetState}" in ${afterMinutes} minutes: ${err.message}\n${err.stack || 'No stack trace'}`,
+        context: {
+          deviceId: this.getData().id,
+          targetState,
+          afterMinutes,
+        },
+      });
+
       this.error(
-        `[${RoomStateErrorId.TIMER_MANAGEMENT_FAILED}] Failed to schedule state transition:`,
+        `[${RoomStateErrorId.STATE_TRANSITION_FAILED}] Failed to schedule state transition:`,
         error
       );
     }
@@ -698,6 +737,21 @@ class RoomStateDevice extends Homey.Device {
       // Re-evaluate for next transition
       this.evaluateAndScheduleTransition();
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.STATE_TRANSITION_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'State transition execution failed',
+        technicalMessage: `Failed to execute transition from "${this.stateEngine?.getCurrentState()}" to "${newState}": ${err.message}\n${err.stack || 'No stack trace'}`,
+        context: {
+          deviceId: this.getData().id,
+          oldState: this.stateEngine?.getCurrentState(),
+          newState,
+          reason,
+        },
+      });
+
       this.error(
         `[${RoomStateErrorId.STATE_TRANSITION_FAILED}] Failed to execute state transition:`,
         error
@@ -740,10 +794,21 @@ class RoomStateDevice extends Homey.Device {
       // Execute state transition
       await this.executeStateTransition(stateId, 'Manual override');
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.STATE_TRANSITION_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to change state manually',
+        technicalMessage: `handleManualStateChange failed for state "${stateId}": ${err.message}\n${err.stack || 'No stack trace'}`,
+        context: { deviceId: this.getData().id, targetState: stateId },
+      });
+
       this.error(
         `[${RoomStateErrorId.STATE_TRANSITION_FAILED}] Failed to handle manual state change:`,
         error
       );
+      throw error; // Re-throw so flow card fails properly
     }
   }
 
@@ -762,7 +827,18 @@ class RoomStateDevice extends Homey.Device {
       // Re-evaluate state based on current WIAB device activity
       this.evaluateAndScheduleTransition();
     } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.AUTOMATIC_MODE_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to return to automatic mode',
+        technicalMessage: `returnToAutomatic failed: ${err.message}\n${err.stack || 'No stack trace'}`,
+        context: { deviceId: this.getData().id },
+      });
+
       this.error('Failed to return to automatic mode:', error);
+      throw error; // Re-throw so flow card fails properly
     }
   }
 
