@@ -86,17 +86,16 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(devices[0].id).toBe('cb-1');
     });
 
-    it('should return empty array on error', async () => {
+    it('should throw on error', async () => {
       // Arrange
       (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
         new Error('Network error')
       );
 
-      // Act
-      const devices = await manager.getAllCircuitBreakers();
-
-      // Assert
-      expect(devices).toEqual([]);
+      // Act & Assert
+      await expect(manager.getAllCircuitBreakers()).rejects.toThrow(
+        'Cannot fetch circuit breakers. Please try again.'
+      );
       expect(homey.error).toHaveBeenCalled();
     });
   });
@@ -159,17 +158,16 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(children).toEqual([]);
     });
 
-    it('should return empty array on error', async () => {
+    it('should throw on error', async () => {
       // Arrange
       (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
         new Error('Network error')
       );
 
-      // Act
-      const children = await manager.getChildren('parent-1');
-
-      // Assert
-      expect(children).toEqual([]);
+      // Act & Assert
+      await expect(manager.getChildren('parent-1')).rejects.toThrow(
+        'Cannot fetch child circuit breakers. Please try again.'
+      );
       expect(homey.error).toHaveBeenCalled();
     });
   });
@@ -230,7 +228,7 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(chain).toEqual([]);
     });
 
-    it('should detect and stop at cycle in parent chain', async () => {
+    it('should detect and throw error when cycle found in parent chain', async () => {
       // Arrange - Create cycle: a -> b -> c -> a
       const a = createMockDevice({
         id: 'a',
@@ -259,27 +257,25 @@ describe('CircuitBreakerHierarchyManager', () => {
       homeyApi.devices._addDevice('b', b);
       homeyApi.devices._addDevice('c', c);
 
-      // Act
-      const chain = await manager.getParentChain('c');
-
-      // Assert - Should stop when cycle detected
-      expect(chain.length).toBeLessThan(4); // Would be infinite without cycle detection
+      // Act & Assert - Should throw error when cycle detected
+      await expect(manager.getParentChain('c')).rejects.toThrow(
+        'Circuit breaker hierarchy is corrupted'
+      );
       expect(homey.error).toHaveBeenCalledWith(
-        expect.stringContaining('Cycle detected')
+        expect.stringContaining('CIRCUIT_BREAKER_005')
       );
     });
 
-    it('should return empty array on error', async () => {
+    it('should throw on error', async () => {
       // Arrange
       (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
         new Error('Network error')
       );
 
-      // Act
-      const chain = await manager.getParentChain('device-1');
-
-      // Assert
-      expect(chain).toEqual([]);
+      // Act & Assert
+      await expect(manager.getParentChain('device-1')).rejects.toThrow(
+        'Cannot fetch parent hierarchy. Please try again.'
+      );
       expect(homey.error).toHaveBeenCalled();
     });
   });
@@ -396,17 +392,16 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(wouldCycle).toBe(false);
     });
 
-    it('should return false when getAllCircuitBreakers fails', async () => {
+    it('should throw when validation fails', async () => {
       // Arrange
       (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
         new Error('Network error')
       );
 
-      // Act
-      const wouldCycle = await manager.wouldCreateCycle('device-1', 'device-2');
-
-      // Assert - getAllCircuitBreakers catches error and returns [], so no cycle detected
-      expect(wouldCycle).toBe(false);
+      // Act & Assert
+      await expect(manager.wouldCreateCycle('device-1', 'device-2')).rejects.toThrow(
+        'Cannot validate parent assignment. Please try again.'
+      );
       expect(homey.error).toHaveBeenCalled();
     });
   });
@@ -524,17 +519,16 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(descendants.length).toBeGreaterThanOrEqual(0);
     });
 
-    it('should return empty array on error', async () => {
+    it('should throw on error', async () => {
       // Arrange
       (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
         new Error('Network error')
       );
 
-      // Act
-      const descendants = await manager.getDescendants('device-1');
-
-      // Assert
-      expect(descendants).toEqual([]);
+      // Act & Assert
+      await expect(manager.getDescendants('device-1')).rejects.toThrow(
+        'Cannot fetch circuit breaker hierarchy. Please try again.'
+      );
       expect(homey.error).toHaveBeenCalled();
     });
   });
@@ -587,17 +581,16 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null on error', async () => {
+    it('should throw on error', async () => {
       // Arrange
       (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
         new Error('Network error')
       );
 
-      // Act
-      const result = await manager.getDeviceById('device-1');
-
-      // Assert
-      expect(result).toBeNull();
+      // Act & Assert
+      await expect(manager.getDeviceById('device-1')).rejects.toThrow(
+        'Cannot fetch circuit breaker device. Please try again.'
+      );
       expect(homey.error).toHaveBeenCalled();
     });
   });

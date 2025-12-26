@@ -23,6 +23,8 @@
 
 import { HomeyAPI, HomeyAPIDevice } from './types';
 import { CircuitBreakerErrorId } from '../constants/errorIds';
+import { ErrorReporter } from './ErrorReporter';
+import { ErrorSeverity } from './ErrorTypes';
 
 /**
  * Interface for logging instance
@@ -41,12 +43,9 @@ interface Logger {
  * - driverId to identify circuit breakers
  */
 interface CircuitBreakerDevice extends HomeyAPIDevice {
-  id?: string;
-  driverId?: string;
-  settings?: {
+  settings: {
     parentId?: string | null;
   };
-  capabilitiesObj: Record<string, { value: unknown }>;
 }
 
 /**
@@ -86,9 +85,10 @@ export class CircuitBreakerHierarchyManager {
    * Gets all circuit breaker devices from HomeyAPI.
    *
    * Filters devices to only include those with the circuit breaker driver ID.
-   * Handles errors gracefully by logging and returning empty array.
+   * Throws on error with user-friendly message.
    *
    * @returns Array of circuit breaker devices
+   * @throws Error if device query fails
    *
    * @example
    * ```typescript
@@ -96,6 +96,11 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getAllCircuitBreakers(): Promise<CircuitBreakerDevice[]> {
+    // Validate preconditions BEFORE try block
+    if (!this.homeyApi || !this.homeyApi.devices) {
+      throw new Error('HomeyAPI not properly initialized');
+    }
+
     try {
       const allDevices = await this.homeyApi.devices.getDevices();
       const circuitBreakers: CircuitBreakerDevice[] = [];
@@ -113,11 +118,14 @@ export class CircuitBreakerHierarchyManager {
 
       return circuitBreakers;
     } catch (error) {
-      this.logger.error(
-        `[${CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED}] Failed to get circuit breaker devices:`,
-        error
-      );
-      return [];
+      const errorReporter = new ErrorReporter(this.logger);
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Cannot fetch circuit breakers. Please try again.',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new Error(message);
     }
   }
 
@@ -125,7 +133,7 @@ export class CircuitBreakerHierarchyManager {
    * Gets all children of a specific parent circuit breaker.
    *
    * Queries all circuit breaker devices and filters those with matching parentId.
-   * Returns empty array if parent has no children or on error.
+   * Returns empty array if parent has no children. Throws on error.
    *
    * @param parentId - The device ID of the parent circuit breaker
    * @returns Array of child device IDs
@@ -137,6 +145,11 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getChildren(parentId: string): Promise<string[]> {
+    // Validate preconditions BEFORE try block
+    if (!this.homeyApi || !this.homeyApi.devices) {
+      throw new Error('HomeyAPI not properly initialized');
+    }
+
     try {
       const allDevices = await this.getAllCircuitBreakers();
       const children: string[] = [];
@@ -156,11 +169,14 @@ export class CircuitBreakerHierarchyManager {
 
       return children;
     } catch (error) {
-      this.logger.error(
-        `[${CircuitBreakerErrorId.GET_CHILDREN_FAILED}] Failed to get children for ${parentId}:`,
-        error
-      );
-      return [];
+      const errorReporter = new ErrorReporter(this.logger);
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.GET_CHILDREN_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Cannot fetch child circuit breakers. Please try again.',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new Error(message);
     }
   }
 
@@ -169,7 +185,7 @@ export class CircuitBreakerHierarchyManager {
    *
    * Traverses up the hierarchy from the device to the root, collecting all parent IDs.
    * Stops at root devices (parentId = null) or if cycle is detected.
-   * Returns empty array if device has no parent or on error.
+   * Returns empty array if device has no parent. Throws on error.
    *
    * @param deviceId - The device ID to get parent chain for
    * @returns Array of parent device IDs from immediate parent to root
@@ -181,6 +197,11 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getParentChain(deviceId: string): Promise<string[]> {
+    // Validate preconditions BEFORE try block
+    if (!this.homeyApi || !this.homeyApi.devices) {
+      throw new Error('HomeyAPI not properly initialized');
+    }
+
     try {
       const allDevices = await this.getAllCircuitBreakers();
       const deviceMap = this.buildDeviceMap(allDevices);
@@ -205,10 +226,14 @@ export class CircuitBreakerHierarchyManager {
 
         // Cycle detection - stop if we've seen this parent before
         if (visited.has(parentId)) {
-          this.logger.error(
-            `[${CircuitBreakerErrorId.CYCLE_DETECTED}] Cycle detected in parent chain for ${deviceId} at ${parentId}`
-          );
-          break;
+          const errorReporter = new ErrorReporter(this.logger);
+          const message = errorReporter.reportAndGetMessage({
+            errorId: CircuitBreakerErrorId.CYCLE_DETECTED,
+            severity: ErrorSeverity.CRITICAL,
+            userMessage: 'Circuit breaker hierarchy is corrupted. Please contact support.',
+            technicalMessage: `Cycle detected in parent chain for ${deviceId} at ${parentId}`,
+          });
+          throw new Error(message);
         }
 
         chain.push(parentId);
@@ -218,11 +243,19 @@ export class CircuitBreakerHierarchyManager {
 
       return chain;
     } catch (error) {
-      this.logger.error(
-        `[${CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED}] Failed to get parent chain for ${deviceId}:`,
-        error
-      );
-      return [];
+      // Re-throw cycle detection errors without wrapping
+      if (error instanceof Error && error.message.includes('Circuit breaker hierarchy is corrupted')) {
+        throw error;
+      }
+
+      const errorReporter = new ErrorReporter(this.logger);
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Cannot fetch parent hierarchy. Please try again.',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new Error(message);
     }
   }
 
@@ -251,6 +284,11 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async wouldCreateCycle(deviceId: string, proposedParentId: string): Promise<boolean> {
+    // Validate preconditions BEFORE try block
+    if (!this.homeyApi || !this.homeyApi.devices) {
+      throw new Error('HomeyAPI not properly initialized');
+    }
+
     try {
       // Self-parent check
       if (deviceId === proposedParentId) {
@@ -273,12 +311,14 @@ export class CircuitBreakerHierarchyManager {
 
       return false;
     } catch (error) {
-      this.logger.error(
-        `[${CircuitBreakerErrorId.PARENT_VALIDATION_FAILED}] Error checking cycle for ${deviceId} -> ${proposedParentId}:`,
-        error
-      );
-      // Fail-safe: treat as would create cycle to prevent potential cycles
-      return true;
+      const errorReporter = new ErrorReporter(this.logger);
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.PARENT_VALIDATION_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Cannot validate parent assignment. Please try again.',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new Error(message);
     }
   }
 
@@ -287,7 +327,8 @@ export class CircuitBreakerHierarchyManager {
    *
    * Performs depth-first traversal to collect all children, grandchildren, etc.
    * Uses Set-based visited tracking to handle potential cycles gracefully.
-   * Returns empty array if device has no descendants or on error.
+   * Uses iterative approach with a stack for efficient traversal.
+   * Returns empty array if device has no descendants. Throws on error.
    *
    * @param deviceId - The device ID to get descendants for
    * @returns Array of all descendant device IDs
@@ -299,6 +340,11 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getDescendants(deviceId: string): Promise<string[]> {
+    // Validate preconditions BEFORE try block
+    if (!this.homeyApi || !this.homeyApi.devices) {
+      throw new Error('HomeyAPI not properly initialized');
+    }
+
     try {
       const allDevices = await this.getAllCircuitBreakers();
       const descendants: string[] = [];
@@ -331,11 +377,14 @@ export class CircuitBreakerHierarchyManager {
 
       return descendants;
     } catch (error) {
-      this.logger.error(
-        `[${CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED}] Failed to get descendants for ${deviceId}:`,
-        error
-      );
-      return [];
+      const errorReporter = new ErrorReporter(this.logger);
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Cannot fetch circuit breaker hierarchy. Please try again.',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new Error(message);
     }
   }
 
@@ -357,6 +406,11 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getDeviceById(deviceId: string): Promise<CircuitBreakerDevice | null> {
+    // Validate preconditions BEFORE try block
+    if (!this.homeyApi || !this.homeyApi.devices) {
+      throw new Error('HomeyAPI not properly initialized');
+    }
+
     try {
       const allDevices = await this.getAllCircuitBreakers();
 
@@ -369,11 +423,14 @@ export class CircuitBreakerHierarchyManager {
       this.logger.log(`[HIERARCHY] Device ${deviceId} not found or not a circuit breaker`);
       return null;
     } catch (error) {
-      this.logger.error(
-        `[${CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED}] Failed to get device ${deviceId}:`,
-        error
-      );
-      return null;
+      const errorReporter = new ErrorReporter(this.logger);
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Cannot fetch circuit breaker device. Please try again.',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new Error(message);
     }
   }
 

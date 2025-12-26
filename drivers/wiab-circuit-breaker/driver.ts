@@ -1,7 +1,9 @@
 import Homey from 'homey';
 import { CircuitBreakerHierarchyManager } from '../../lib/CircuitBreakerHierarchyManager';
-import { HomeyAPI } from '../../lib/types';
+import { HomeyAPI, HomeyAPIDevice } from '../../lib/types';
 import { CircuitBreakerErrorId } from '../../constants/errorIds';
+import { ErrorReporter } from '../../lib/ErrorReporter';
+import { ErrorSeverity } from '../../lib/ErrorTypes';
 
 /**
  * Interface for WIABApp with HomeyAPI
@@ -56,18 +58,58 @@ class CircuitBreakerDriver extends Homey.Driver {
       // Register flow card condition
       this.homey.flow.getConditionCard('circuit_breaker_is_on')
         .registerRunListener(async (args: { device: Homey.Device }) => {
-          return args.device.getCapabilityValue('onoff') === true;
+          try {
+            const isOn = args.device.getCapabilityValue('onoff');
+            return isOn === true;
+          } catch (error) {
+            this.error(
+              `[${CircuitBreakerErrorId.CAPABILITY_UPDATE_FAILED}] Failed to check circuit breaker state:`,
+              error
+            );
+            // For conditions, return false on error (fail-safe behavior)
+            return false;
+          }
         });
 
       // Register flow card actions
       this.homey.flow.getActionCard('circuit_breaker_turn_on')
         .registerRunListener(async (args: { device: Homey.Device }) => {
-          await args.device.setCapabilityValue('onoff', true);
+          try {
+            await args.device.setCapabilityValue('onoff', true);
+            return true;
+          } catch (error) {
+            const errorReporter = new ErrorReporter({
+              log: this.log.bind(this),
+              error: this.error.bind(this),
+            });
+            const message = errorReporter.reportAndGetMessage({
+              errorId: CircuitBreakerErrorId.CAPABILITY_UPDATE_FAILED,
+              severity: ErrorSeverity.HIGH,
+              userMessage: 'Cannot turn circuit breaker ON. Please try again.',
+              technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+            });
+            throw new Error(message);
+          }
         });
 
       this.homey.flow.getActionCard('circuit_breaker_turn_off')
         .registerRunListener(async (args: { device: Homey.Device }) => {
-          await args.device.setCapabilityValue('onoff', false);
+          try {
+            await args.device.setCapabilityValue('onoff', false);
+            return true;
+          } catch (error) {
+            const errorReporter = new ErrorReporter({
+              log: this.log.bind(this),
+              error: this.error.bind(this),
+            });
+            const message = errorReporter.reportAndGetMessage({
+              errorId: CircuitBreakerErrorId.CAPABILITY_UPDATE_FAILED,
+              severity: ErrorSeverity.HIGH,
+              userMessage: 'Cannot turn circuit breaker OFF. Please try again.',
+              technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+            });
+            throw new Error(message);
+          }
         });
 
       this.log('Circuit breaker driver initialized');
@@ -94,22 +136,38 @@ class CircuitBreakerDriver extends Homey.Driver {
     // Store selected parent ID in session
     let selectedParentId: string | null = null;
 
-    try {
-      // Handler: Get all circuit breakers for parent dropdown
-      session.setHandler('get_circuit_breakers', async () => {
+    // Handler: Get all circuit breakers for parent dropdown
+    session.setHandler('get_circuit_breakers', async () => {
+      try {
         this.log('Fetching circuit breakers for pairing');
         return await this.getAllCircuitBreakers();
-      });
+      } catch (error) {
+        this.error(
+          `[${CircuitBreakerErrorId.PAIRING_HANDLER_FAILED}] Failed to fetch circuit breakers:`,
+          error
+        );
+        throw error;
+      }
+    });
 
-      // Handler: Store selected parent
-      session.setHandler('parent_selected', async (data: { parentId: string | null }) => {
+    // Handler: Store selected parent
+    session.setHandler('parent_selected', async (data: { parentId: string | null }) => {
+      try {
         this.log(`Parent selected: ${data.parentId || 'none'}`);
         selectedParentId = data.parentId;
         return true;
-      });
+      } catch (error) {
+        this.error(
+          `[${CircuitBreakerErrorId.PAIRING_HANDLER_FAILED}] Failed to store parent selection:`,
+          error
+        );
+        throw error;
+      }
+    });
 
-      // Handler: Create device with parent configuration
-      session.setHandler('list_devices', async () => {
+    // Handler: Create device with parent configuration
+    session.setHandler('list_devices', async () => {
+      try {
         this.log('Creating circuit breaker device');
 
         // Generate unique device ID
@@ -127,14 +185,14 @@ class CircuitBreakerDriver extends Homey.Driver {
             capabilities: ['onoff'],
           },
         ];
-      });
-    } catch (error) {
-      this.error(
-        `[${CircuitBreakerErrorId.PAIRING_HANDLER_FAILED}] Pairing failed:`,
-        error
-      );
-      throw error;
-    }
+      } catch (error) {
+        this.error(
+          `[${CircuitBreakerErrorId.PAIRING_HANDLER_FAILED}] Failed to create device list:`,
+          error
+        );
+        throw error;
+      }
+    });
   }
 
   /**
@@ -185,11 +243,17 @@ class CircuitBreakerDriver extends Homey.Driver {
       this.log(`Found ${breakersWithZones.length} circuit breakers`);
       return breakersWithZones;
     } catch (error) {
-      this.error(
-        `[${CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED}] Failed to fetch circuit breakers:`,
-        error
-      );
-      throw error;
+      const errorReporter = new ErrorReporter({
+        log: this.log.bind(this),
+        error: this.error.bind(this),
+      });
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Cannot load circuit breakers for pairing. Please try again.',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new Error(message);
     }
   }
 
@@ -204,7 +268,7 @@ class CircuitBreakerDriver extends Homey.Driver {
   private async getDeviceZoneName(deviceId: string, homeyApi: HomeyAPI): Promise<string | null> {
     try {
       const devices = await homeyApi.devices.getDevices();
-      const device = devices[deviceId] as unknown as { zone?: string };
+      const device = devices[deviceId] as HomeyAPIDevice;
 
       if (!device || !device.zone) {
         return null;

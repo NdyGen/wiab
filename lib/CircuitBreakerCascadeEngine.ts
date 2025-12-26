@@ -22,6 +22,8 @@
 import { HomeyAPI, CascadeResult, DeviceCascadeResult } from './types';
 import { CircuitBreakerHierarchyManager } from './CircuitBreakerHierarchyManager';
 import { CircuitBreakerErrorId } from '../constants/errorIds';
+import { ErrorReporter } from './ErrorReporter';
+import { ErrorSeverity } from './ErrorTypes';
 
 /**
  * Interface for logging instance
@@ -91,7 +93,8 @@ export class CircuitBreakerCascadeEngine {
    *
    * Performs depth-first sequential traversal to update all children, grandchildren, etc.
    * Updates are performed sequentially (not in parallel) to avoid race conditions.
-   * Uses best-effort error handling - logs errors and continues with remaining devices.
+   * Updates descendants one at a time in sequence using await in a for loop.
+   * Continues processing all descendants even if individual updates fail.
    *
    * @param deviceId - The device ID that changed state
    * @param newState - The new state to cascade (true = on, false = off)
@@ -109,6 +112,11 @@ export class CircuitBreakerCascadeEngine {
     this.logger.log(
       `[CASCADE] Starting cascade from ${deviceId} with state=${newState}`
     );
+
+    // Validate preconditions
+    if (!this.hierarchyManager) {
+      throw new Error('HierarchyManager not initialized');
+    }
 
     const result: CascadeResult = {
       success: 0,
@@ -145,10 +153,14 @@ export class CircuitBreakerCascadeEngine {
         `[CASCADE] Cascade complete: ${result.success} succeeded, ${result.failed} failed`
       );
     } catch (error) {
-      this.logger.error(
-        `[${CircuitBreakerErrorId.CASCADE_FAILED}] Critical error during cascade from ${deviceId}:`,
-        error
-      );
+      const errorReporter = new ErrorReporter(this.logger);
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.CASCADE_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to cascade state change. Please try again.',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new Error(message);
     }
 
     return result;
