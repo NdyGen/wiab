@@ -109,7 +109,8 @@
       "Bash(NODE_OPTIONS=\"--max-old-space-size=8192\" npm test:*)",
       "Bash(xattr:*)",
       "Bash(git clean:*)",
-      "Bash(gh label:*)"
+      "Bash(gh label:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

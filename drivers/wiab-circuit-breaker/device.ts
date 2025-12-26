@@ -146,13 +146,9 @@ class CircuitBreakerDevice extends Homey.Device {
                 `${result.failed} of ${totalDevices} child circuit breakers failed to update. Some flows may still execute.`
               );
             } catch (warningError) {
-              this.error('Failed to set cascade failure warning:', warningError);
-              // Fallback: try to set generic alarm as alternative notification
-              try {
-                await this.setCapabilityValue('alarm_generic', true);
-              } catch (fallbackError) {
-                this.error('All warning methods failed - user will not see cascade failure notification:', fallbackError);
-              }
+              // Warning failed - log error but don't throw
+              // Users won't see device warning, but cascade failure is still logged
+              this.error('Failed to set cascade failure warning - user will not see device card warning:', warningError);
             }
           }
         } else {
@@ -160,13 +156,8 @@ class CircuitBreakerDevice extends Homey.Device {
           try {
             await this.unsetWarning();
           } catch (warningError) {
+            // Log but don't throw - warning clear failure is not critical
             this.error('Failed to clear warning after successful cascade:', warningError);
-            // Try to clear alarm as fallback
-            try {
-              await this.setCapabilityValue('alarm_generic', false);
-            } catch (fallbackError) {
-              this.error('Failed to clear all warning indicators:', fallbackError);
-            }
           }
         }
       }
@@ -223,25 +214,9 @@ class CircuitBreakerDevice extends Homey.Device {
 
       this.log(`Flow cards triggered for state=${newState ? 'ON' : 'OFF'}`);
     } catch (error) {
-      // Only suppress expected flow card errors
-      if (error instanceof Error &&
-          (error.message.includes('Flow card not found') ||
-           error.message.includes('No listeners'))) {
-        this.log('Flow card trigger failed (non-critical):', error.message);
-      } else {
-        // Unexpected error - log with high severity
-        const errorReporter = new ErrorReporter({
-          log: this.log.bind(this),
-          error: this.error.bind(this),
-        });
-        const message = errorReporter.reportAndGetMessage({
-          errorId: CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED,
-          severity: ErrorSeverity.HIGH,
-          userMessage: 'Unexpected flow card system error occurred',
-          technicalMessage: error instanceof Error ? error.message : 'Unknown error',
-        });
-        this.error(message);
-      }
+      // Flow card triggers are non-critical - state changes proceed even if triggers fail
+      // Log for debugging but don't throw or report as error
+      this.log('Flow card trigger failed (non-critical):', error);
     }
   }
 

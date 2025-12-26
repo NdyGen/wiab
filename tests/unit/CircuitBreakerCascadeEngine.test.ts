@@ -436,6 +436,60 @@ describe('CircuitBreakerCascadeEngine', () => {
       expect(result.error?.message).toContain('not found');
     });
 
+    it('should treat programming errors as device update failures (not re-throw)', async () => {
+      // Arrange - Make getDevices throw TypeError (simulating programming error)
+      (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
+        new TypeError('Cannot read property "id" of undefined')
+      );
+
+      // Act
+      const result = await engine.updateDeviceState('device-1', false);
+
+      // Assert - Should return failure result, NOT re-throw
+      expect(result.success).toBe(false);
+      expect(result.deviceId).toBe('device-1');
+      expect(result.error).toBeDefined();
+      expect(result.error?.message).toContain('Cannot read property');
+
+      // Verify logged with CHILD_UPDATE_FAILED (not CASCADE_FAILED)
+      expect(homey.error).toHaveBeenCalledWith(
+        expect.stringContaining('[CIRCUIT_BREAKER_003]'),
+        expect.any(TypeError)
+      );
+    });
+
+    it('should set notFound flag when device does not exist', async () => {
+      // Act - Try to update non-existent device
+      const result = await engine.updateDeviceState('non-existent-device', false);
+
+      // Assert - Verify notFound flag is set
+      expect(result.success).toBe(false);
+      expect(result.notFound).toBe(true);
+      expect(result.error?.message).toContain('not found');
+    });
+
+    it('should NOT set notFound flag when device exists but update fails', async () => {
+      // Arrange - Device exists but setCapabilityValue fails
+      const device = createMockDevice({
+        id: 'device-1',
+        name: 'Device 1',
+        capabilities: ['onoff'],
+      });
+      (device.setCapabilityValue as jest.Mock).mockRejectedValue(
+        new Error('Network timeout')
+      );
+      device.driverId = 'wiab-circuit-breaker';
+      homeyApi.devices._addDevice('device-1', device);
+
+      // Act
+      const result = await engine.updateDeviceState('device-1', false);
+
+      // Assert - notFound should NOT be set (device exists, just failed to update)
+      expect(result.success).toBe(false);
+      expect(result.notFound).toBeUndefined();
+      expect(result.error?.message).toContain('Network timeout');
+    });
+
     it('should return error if device lacks setCapabilityValue', async () => {
       // Arrange
       const device = createMockDevice({

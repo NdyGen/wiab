@@ -11,6 +11,7 @@
  * - Error handling and graceful degradation
  */
 
+import type { HomeyAPI } from '../../lib/types';
 import { CircuitBreakerHierarchyManager } from '../../lib/CircuitBreakerHierarchyManager';
 import { createMockHomey, createMockHomeyApi, createMockDevice } from '../setup';
 
@@ -57,6 +58,23 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(devices).toHaveLength(2);
       expect(devices[0].id).toBe('cb-1');
       expect(devices[1].id).toBe('cb-2');
+    });
+
+    it('should throw user-friendly error when HomeyAPI not initialized', async () => {
+      // Arrange - Create manager with null HomeyAPI
+      const uninitializedManager = new CircuitBreakerHierarchyManager(
+        null as unknown as HomeyAPI,
+        homey
+      );
+
+      // Act & Assert
+      await expect(uninitializedManager.getAllCircuitBreakers())
+        .rejects.toThrow('The app is still initializing. Wait and try again.');
+
+      // Verify error was logged with HIERARCHY_QUERY_FAILED error ID
+      expect(homey.error).toHaveBeenCalledWith(
+        expect.stringContaining('[CIRCUIT_BREAKER_013]')
+      );
     });
 
     it('should filter out non-circuit-breaker devices', async () => {
@@ -139,6 +157,22 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(children).toContain('child-2');
     });
 
+    it('should throw user-friendly error when HomeyAPI not initialized', async () => {
+      // Arrange
+      const uninitializedManager = new CircuitBreakerHierarchyManager(
+        null as unknown as HomeyAPI,
+        homey
+      );
+
+      // Act & Assert
+      await expect(uninitializedManager.getChildren('parent-1'))
+        .rejects.toThrow('The app is still initializing. Wait and try again.');
+
+      expect(homey.error).toHaveBeenCalledWith(
+        expect.stringContaining('[CIRCUIT_BREAKER_008]')
+      );
+    });
+
     it('should return empty array for device with no children', async () => {
       // Arrange
       const device = createMockDevice({
@@ -209,6 +243,22 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(chain).toEqual(['middle', 'root']);
     });
 
+    it('should throw user-friendly error when HomeyAPI not initialized', async () => {
+      // Arrange
+      const uninitializedManager = new CircuitBreakerHierarchyManager(
+        null as unknown as HomeyAPI,
+        homey
+      );
+
+      // Act & Assert
+      await expect(uninitializedManager.getParentChain('device-1'))
+        .rejects.toThrow('The app is still initializing. Wait and try again.');
+
+      expect(homey.error).toHaveBeenCalledWith(
+        expect.stringContaining('[CIRCUIT_BREAKER_013]')
+      );
+    });
+
     it('should return empty array for root device', async () => {
       // Arrange
       const root = createMockDevice({
@@ -266,6 +316,36 @@ describe('CircuitBreakerHierarchyManager', () => {
       );
     });
 
+    it('should throw CircuitBreakerCycleError without wrapping when cycle detected', async () => {
+      // Arrange - Create cycle: a -> b -> a
+      const a = createMockDevice({
+        id: 'a',
+        name: 'A',
+        capabilities: ['onoff'],
+        settings: { parentId: 'b' },
+      });
+      const b = createMockDevice({
+        id: 'b',
+        name: 'B',
+        capabilities: ['onoff'],
+        settings: { parentId: 'a' },
+      });
+      a.driverId = 'wiab-circuit-breaker';
+      b.driverId = 'wiab-circuit-breaker';
+      homeyApi.devices._addDevice('a', a);
+      homeyApi.devices._addDevice('b', b);
+
+      // Act & Assert - Should throw error with "Circuit breaker hierarchy is corrupted" message
+      await expect(manager.getParentChain('a')).rejects.toThrow(
+        'Circuit breaker hierarchy is corrupted'
+      );
+
+      // Verify error was logged with CYCLE_DETECTED error ID
+      expect(homey.error).toHaveBeenCalledWith(
+        expect.stringContaining('[CIRCUIT_BREAKER_005]')
+      );
+    });
+
     it('should throw on error', async () => {
       // Arrange
       (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
@@ -319,6 +399,22 @@ describe('CircuitBreakerHierarchyManager', () => {
 
       // Assert
       expect(wouldCycle).toBe(true);
+    });
+
+    it('should throw user-friendly error when HomeyAPI not initialized', async () => {
+      // Arrange
+      const uninitializedManager = new CircuitBreakerHierarchyManager(
+        null as unknown as HomeyAPI,
+        homey
+      );
+
+      // Act & Assert
+      await expect(uninitializedManager.wouldCreateCycle('device-1', 'device-2'))
+        .rejects.toThrow('The app is still initializing. Wait and try again.');
+
+      expect(homey.error).toHaveBeenCalledWith(
+        expect.stringContaining('[CIRCUIT_BREAKER_006]')
+      );
     });
 
     it('should detect direct cycle (A -> B -> A)', async () => {
@@ -489,6 +585,22 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(descendants).toContain('grandchild2');
     });
 
+    it('should throw user-friendly error when HomeyAPI not initialized', async () => {
+      // Arrange
+      const uninitializedManager = new CircuitBreakerHierarchyManager(
+        null as unknown as HomeyAPI,
+        homey
+      );
+
+      // Act & Assert
+      await expect(uninitializedManager.getDescendants('device-1'))
+        .rejects.toThrow('The app is still initializing. Wait and try again.');
+
+      expect(homey.error).toHaveBeenCalledWith(
+        expect.stringContaining('[CIRCUIT_BREAKER_013]')
+      );
+    });
+
     it('should return empty array for leaf device', async () => {
       // Arrange
       const leaf = createMockDevice({
@@ -596,6 +708,22 @@ describe('CircuitBreakerHierarchyManager', () => {
       expect(result).not.toBeNull();
       expect(result?.id).toBe('cb-1');
       expect(result?.name).toBe('CB 1');
+    });
+
+    it('should throw user-friendly error when HomeyAPI not initialized', async () => {
+      // Arrange
+      const uninitializedManager = new CircuitBreakerHierarchyManager(
+        null as unknown as HomeyAPI,
+        homey
+      );
+
+      // Act & Assert
+      await expect(uninitializedManager.getDeviceById('device-1'))
+        .rejects.toThrow('The app is still initializing. Wait and try again.');
+
+      expect(homey.error).toHaveBeenCalledWith(
+        expect.stringContaining('[CIRCUIT_BREAKER_013]')
+      );
     });
 
     it('should return null for non-existent device', async () => {

@@ -35,12 +35,14 @@ private async getOptionalData(id: string): Promise<string | null> {
 Zone names enhance UX by providing location context (e.g., "Main Breaker (Kitchen)"), but pairing can proceed without them.
 
 ```typescript
-private async getDeviceZoneName(deviceId: string): Promise<string | null> {
+private async getDeviceZoneName(deviceId: string, homeyApi: HomeyAPI): Promise<string | null> {
   try {
-    const device = await api.devices.getDevice(deviceId);
+    const devices = await homeyApi.devices.getDevices();
+    const device = devices[deviceId] as HomeyAPIDevice;
+
     if (!device || !device.zone) return null;
 
-    const zone = await api.zones.getZone({ id: device.zone });
+    const zone = await homeyApi.zones.getZone({ id: device.zone });
     return zone.name;
   } catch (error) {
     this.log(`Could not retrieve zone for device ${deviceId}:`, error);

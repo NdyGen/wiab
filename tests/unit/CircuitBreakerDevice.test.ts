@@ -475,12 +475,10 @@ describe('CircuitBreakerDevice', () => {
 
       await capabilityListener(true);
 
-      // Should log unexpected error with HIGH severity (not expected flow card error)
-      expect(device.error).toHaveBeenCalledWith(
-        expect.stringContaining('[CIRCUIT_BREAKER_009]')
-      );
-      expect(device.error).toHaveBeenCalledWith(
-        expect.stringContaining('Unexpected flow card system error occurred')
+      // Should log error as non-critical (flow card failures don't stop state changes)
+      expect(device.log).toHaveBeenCalledWith(
+        'Flow card trigger failed (non-critical):',
+        expect.any(Error)
       );
     });
 
@@ -567,7 +565,7 @@ describe('CircuitBreakerDevice', () => {
       expect(device.setWarning).not.toHaveBeenCalled();
     });
 
-    it('should use alarm_generic fallback when setWarning fails', async () => {
+    it('should log error when setWarning fails', async () => {
       // Arrange - Set up mock to return high failure rate (> 20%)
       mockCascadeEngine.cascadeStateChange.mockResolvedValue({
         success: 0,
@@ -577,14 +575,16 @@ describe('CircuitBreakerDevice', () => {
 
       // Make setWarning fail
       device.setWarning = jest.fn().mockRejectedValue(new Error('Warning API unavailable'));
-      device.setCapabilityValue = jest.fn().mockResolvedValue(undefined);
 
       // Act - Turn OFF to trigger cascade with failures (100% failure rate triggers warning)
       await capabilityListener(false);
 
-      // Assert - Should attempt setWarning, then fallback to alarm_generic
+      // Assert - Should attempt setWarning and log error when it fails
       expect(device.setWarning).toHaveBeenCalled();
-      expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_generic', true);
+      expect(device.error).toHaveBeenCalledWith(
+        'Failed to set cascade failure warning - user will not see device card warning:',
+        expect.any(Error)
+      );
     });
   });
 });

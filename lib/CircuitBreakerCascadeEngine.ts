@@ -232,29 +232,18 @@ export class CircuitBreakerCascadeEngine {
         success: true,
       };
     } catch (error) {
-      // Check if this is a critical programming error that should bubble up
-      const isCritical = error instanceof TypeError ||
-                         error instanceof ReferenceError ||
-                         (error instanceof Error && error.message.includes('platform'));
-
-      if (isCritical) {
-        this.logger.error(
-          `[${CircuitBreakerErrorId.CASCADE_FAILED}] CRITICAL: Unexpected error in cascade logic:`,
-          error
-        );
-        throw error;
-      } else {
-        // Expected errors - device not found, capability issues, etc.
-        this.logger.error(
-          `[${CircuitBreakerErrorId.CHILD_UPDATE_FAILED}] Device update failed:`,
-          error
-        );
-        return {
-          deviceId,
-          success: false,
-          error: error as Error,
-        };
-      }
+      // All errors are treated as device update failures
+      // This includes device not found, capability issues, network errors, etc.
+      // The cascade operation continues with other devices regardless of individual failures
+      this.logger.error(
+        `[${CircuitBreakerErrorId.CHILD_UPDATE_FAILED}] Device update failed:`,
+        error
+      );
+      return {
+        deviceId,
+        success: false,
+        error: error as Error,
+      };
     }
   }
 

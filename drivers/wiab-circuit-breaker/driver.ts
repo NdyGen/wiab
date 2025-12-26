@@ -27,9 +27,13 @@ interface PairSession extends Homey.Driver.PairSession {
  * hierarchy to control flow execution at different levels.
  *
  * Pairing Flow:
- * 1. intro.html - Explains the circuit breaker concept
- * 2. select_parent.html - User selects parent (or "None" for root breaker)
- * 3. list_devices - Creates device with configured parent
+ * Frontend Pages:
+ *   1. intro.html - Explains the circuit breaker concept
+ *   2. select_parent.html - User selects parent (or "None" for root breaker)
+ * Backend Handlers:
+ *   - get_circuit_breakers - Fetches all existing circuit breakers for parent dropdown
+ *   - parent_selected - Stores the selected parent ID in session
+ *   - list_devices - Creates device with configured parent
  *
  * Flow Cards:
  * - Triggers: turned_on, turned_off, flipped (with state token)
