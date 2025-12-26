@@ -277,6 +277,7 @@ interface MockDevice {
   error: jest.Mock<void>;
   name: string;
   id: string;
+  driverId?: string;
   settings: Record<string, unknown>;
   capabilitiesObj: Record<string, { value: unknown; id?: string; lastUpdated?: number }>;
   on: (event: string, handler: (update: CapabilityUpdate) => void) => void;

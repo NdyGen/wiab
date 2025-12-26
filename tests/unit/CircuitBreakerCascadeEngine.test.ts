@@ -67,10 +67,10 @@ describe('CircuitBreakerCascadeEngine', () => {
         settings: { parentId: 'child1' },
       });
 
-      (root as any).driverId = 'wiab-circuit-breaker';
-      (child1 as any).driverId = 'wiab-circuit-breaker';
-      (child2 as any).driverId = 'wiab-circuit-breaker';
-      (grandchild1 as any).driverId = 'wiab-circuit-breaker';
+      root.driverId = 'wiab-circuit-breaker';
+      child1.driverId = 'wiab-circuit-breaker';
+      child2.driverId = 'wiab-circuit-breaker';
+      grandchild1.driverId = 'wiab-circuit-breaker';
 
       homeyApi.devices._addDevice('root', root);
       homeyApi.devices._addDevice('child1', child1);
@@ -100,7 +100,7 @@ describe('CircuitBreakerCascadeEngine', () => {
         settings: { parentId: null },
       });
 
-      (leaf as any).driverId = 'wiab-circuit-breaker';
+      leaf.driverId = 'wiab-circuit-breaker';
       homeyApi.devices._addDevice('leaf', leaf);
 
       // Act
@@ -138,9 +138,9 @@ describe('CircuitBreakerCascadeEngine', () => {
         new Error('Device offline')
       );
 
-      (parent as any).driverId = 'wiab-circuit-breaker';
-      (child1 as any).driverId = 'wiab-circuit-breaker';
-      (child2 as any).driverId = 'wiab-circuit-breaker';
+      parent.driverId = 'wiab-circuit-breaker';
+      child1.driverId = 'wiab-circuit-breaker';
+      child2.driverId = 'wiab-circuit-breaker';
 
       homeyApi.devices._addDevice('parent', parent);
       homeyApi.devices._addDevice('child1', child1);
@@ -189,10 +189,10 @@ describe('CircuitBreakerCascadeEngine', () => {
         new Error('Device offline')
       );
 
-      (parent as any).driverId = 'wiab-circuit-breaker';
-      (child1 as any).driverId = 'wiab-circuit-breaker';
-      (child2 as any).driverId = 'wiab-circuit-breaker';
-      (child3 as any).driverId = 'wiab-circuit-breaker';
+      parent.driverId = 'wiab-circuit-breaker';
+      child1.driverId = 'wiab-circuit-breaker';
+      child2.driverId = 'wiab-circuit-breaker';
+      child3.driverId = 'wiab-circuit-breaker';
 
       homeyApi.devices._addDevice('parent', parent);
       homeyApi.devices._addDevice('child1', child1);
@@ -218,7 +218,7 @@ describe('CircuitBreakerCascadeEngine', () => {
         settings: { parentId: null },
       });
 
-      (parent as any).driverId = 'wiab-circuit-breaker';
+      parent.driverId = 'wiab-circuit-breaker';
       homeyApi.devices._addDevice('parent', parent);
 
       // Mock getDescendants to throw error
@@ -280,7 +280,7 @@ describe('CircuitBreakerCascadeEngine', () => {
       });
 
       // Remove setCapabilityValue method
-      delete (device as any).setCapabilityValue;
+      delete (device as unknown as Record<string, unknown>).setCapabilityValue;
 
       homeyApi.devices._addDevice('device-1', device);
 
@@ -506,9 +506,9 @@ describe('CircuitBreakerCascadeEngine', () => {
         settings: { parentId: 'parent' },
       });
 
-      (parent as any).driverId = 'wiab-circuit-breaker';
-      (child1 as any).driverId = 'wiab-circuit-breaker';
-      (child2 as any).driverId = 'wiab-circuit-breaker';
+      parent.driverId = 'wiab-circuit-breaker';
+      child1.driverId = 'wiab-circuit-breaker';
+      child2.driverId = 'wiab-circuit-breaker';
 
       homeyApi.devices._addDevice('parent', parent);
       homeyApi.devices._addDevice('child1', child1);
