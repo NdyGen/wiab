@@ -1,0 +1,23 @@
+{
+  "title": {
+    "en": "Turn circuit breaker ON",
+    "nl": "Stroomonderbreker aanzetten",
+    "de": "Schutzschalter einschalten",
+    "no": "Slå strømbryter PÅ",
+    "sv": "Slå på strömbrytare"
+  },
+  "hint": {
+    "en": "Turn the circuit breaker ON (allow flows)",
+    "nl": "Zet de stroomonderbreker AAN (flows toestaan)",
+    "de": "Schutzschalter einschalten (Flows erlauben)",
+    "no": "Slå strømbryteren PÅ (tillat flyter)",
+    "sv": "Slå på strömbrytaren (tillåt flöden)"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab:wiab-circuit-breaker"
+    }
+  ]
+}

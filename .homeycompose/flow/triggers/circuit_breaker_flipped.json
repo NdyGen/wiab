@@ -1,0 +1,36 @@
+{
+  "title": {
+    "en": "Circuit breaker state changed",
+    "nl": "Stroomonderbreker status veranderd",
+    "de": "Schutzschalter-Status geändert",
+    "no": "Strømbryter-status endret",
+    "sv": "Strömbrytare-status ändrades"
+  },
+  "hint": {
+    "en": "Triggered when the circuit breaker changes state (ON/OFF)",
+    "nl": "Geactiveerd wanneer de stroomonderbreker van status verandert (AAN/UIT)",
+    "de": "Ausgelöst, wenn der Schutzschalter den Status ändert (EIN/AUS)",
+    "no": "Utløst når strømbryteren endrer status (PÅ/AV)",
+    "sv": "Utlöses när strömbrytaren ändrar status (PÅ/AV)"
+  },
+  "tokens": [
+    {
+      "name": "state",
+      "type": "boolean",
+      "title": {
+        "en": "Is ON",
+        "nl": "Is AAN",
+        "de": "Ist EIN",
+        "no": "Er PÅ",
+        "sv": "Är PÅ"
+      }
+    }
+  ],
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab:wiab-circuit-breaker"
+    }
+  ]
+}

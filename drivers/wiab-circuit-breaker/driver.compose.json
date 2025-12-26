@@ -1,0 +1,61 @@
+{
+  "name": {
+    "en": "Circuit Breaker",
+    "nl": "Stroomonderbreker",
+    "de": "Schutzschalter",
+    "no": "Strømbryter",
+    "sv": "Strömbrytare"
+  },
+  "class": "other",
+  "capabilities": [
+    "onoff"
+  ],
+  "capabilitiesOptions": {
+    "onoff": {
+      "title": {
+        "en": "State",
+        "nl": "Status",
+        "de": "Zustand",
+        "no": "Tilstand",
+        "sv": "Tillstånd"
+      }
+    }
+  },
+  "platforms": [
+    "local"
+  ],
+  "connectivity": [],
+  "icon": "/drivers/wiab-circuit-breaker/assets/icon.svg",
+  "images": {
+    "small": "/drivers/wiab-circuit-breaker/assets/images/small.png",
+    "large": "/drivers/wiab-circuit-breaker/assets/images/large.png",
+    "xlarge": "/drivers/wiab-circuit-breaker/assets/images/xlarge.png"
+  },
+  "pair": [
+    {
+      "id": "intro",
+      "navigation": {
+        "next": "select_parent"
+      }
+    },
+    {
+      "id": "select_parent",
+      "navigation": {
+        "prev": "intro",
+        "next": "list_devices"
+      }
+    },
+    {
+      "id": "list_devices",
+      "template": "list_devices",
+      "navigation": {
+        "prev": "select_parent",
+        "next": "add_devices"
+      }
+    },
+    {
+      "id": "add_devices",
+      "template": "add_devices"
+    }
+  ]
+}

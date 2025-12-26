@@ -1,0 +1,23 @@
+{
+  "title": {
+    "en": "Circuit breaker !{{is|is not}} ON",
+    "nl": "Stroomonderbreker !{{is|is niet}} AAN",
+    "de": "Schutzschalter !{{ist|ist nicht}} EIN",
+    "no": "Strømbryter !{{er|er ikke}} PÅ",
+    "sv": "Strömbrytare !{{är|är inte}} PÅ"
+  },
+  "hint": {
+    "en": "Returns true when the circuit breaker is ON (allowing flows)",
+    "nl": "Retourneert waar wanneer de stroomonderbreker AAN is (flows toegestaan)",
+    "de": "Gibt wahr zurück, wenn der Schutzschalter EIN ist (Flows erlaubt)",
+    "no": "Returnerer sant når strømbryteren er PÅ (tillater flyter)",
+    "sv": "Returnerar sant när strömbrytaren är PÅ (tillåter flöden)"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab:wiab-circuit-breaker"
+    }
+  ]
+}

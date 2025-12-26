@@ -371,3 +371,62 @@ export interface ZoneSealSettings {
   closeDelaySeconds: number;
   staleContactMinutes: number;
 }
+
+/**
+ * Device settings for circuit breaker.
+ *
+ * Circuit breakers organize in a parent-child hierarchy where state changes
+ * cascade from parent to all descendants.
+ *
+ * @interface CircuitBreakerSettings
+ * @property {string | null} parentId - Device ID of parent breaker, null for root breakers
+ */
+export interface CircuitBreakerSettings {
+  parentId: string | null;
+}
+
+/**
+ * Information about a circuit breaker device from HomeyAPI.
+ *
+ * Used for hierarchy traversal and parent/child lookups.
+ *
+ * @interface CircuitBreakerDeviceInfo
+ * @property {string} id - Device ID
+ * @property {string} name - Device name
+ * @property {boolean} state - Current onoff state
+ * @property {string | null} parentId - Parent device ID or null
+ */
+export interface CircuitBreakerDeviceInfo {
+  id: string;
+  name: string;
+  state: boolean;
+  parentId: string | null;
+}
+
+/**
+ * Result of a single device's cascade operation.
+ *
+ * @interface DeviceCascadeResult
+ * @property {string} deviceId - Device ID that was updated
+ * @property {boolean} success - Whether the update succeeded
+ * @property {Error} [error] - Error if update failed
+ */
+export interface DeviceCascadeResult {
+  deviceId: string;
+  success: boolean;
+  error?: Error;
+}
+
+/**
+ * Result of a complete cascade operation across hierarchy.
+ *
+ * @interface CascadeResult
+ * @property {number} success - Number of devices successfully updated
+ * @property {number} failed - Number of devices that failed to update
+ * @property {DeviceCascadeResult[]} errors - Details of failed updates
+ */
+export interface CascadeResult {
+  success: number;
+  failed: number;
+  errors: DeviceCascadeResult[];
+}
