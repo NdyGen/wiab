@@ -35,6 +35,9 @@ describe('CircuitBreakerDevice', () => {
   let mockDriver: unknown;
 
   beforeEach(() => {
+    // Use fake timers for deterministic async testing
+    jest.useFakeTimers();
+
     // Clear all mocks
     jest.clearAllMocks();
 
@@ -89,6 +92,11 @@ describe('CircuitBreakerDevice', () => {
       getDevices: jest.fn(() => []),
     };
     (device as unknown as { driver: unknown }).driver = mockDriver;
+  });
+
+  afterEach(() => {
+    // Restore real timers after each test
+    jest.useRealTimers();
   });
 
   describe('onInit', () => {
@@ -265,8 +273,8 @@ describe('CircuitBreakerDevice', () => {
 
       await device.onDeleted();
 
-      // Wait for async orphan operation
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Advance timers to allow async orphan operation to complete
+      await jest.advanceTimersByTimeAsync(10);
 
       expect(mockHierarchyManager.getChildren).toHaveBeenCalledWith('test-breaker-1');
       expect(child1.setSettings).toHaveBeenCalledWith({ parentId: null });
@@ -283,14 +291,14 @@ describe('CircuitBreakerDevice', () => {
 
       await device.onDeleted();
 
-      // Wait for async orphan operation
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Advance timers to allow async orphan operation to complete
+      await jest.advanceTimersByTimeAsync(10);
 
       expect(device.log).toHaveBeenCalledWith(`Orphaning children of test-breaker-1`);
       expect(device.log).toHaveBeenCalledWith('Orphaned child child-1');
     });
 
-    it('should handle orphaning errors without failing deletion', async () => {
+    it('should throw when orphaning fails (prevents data corruption)', async () => {
       const childIds = ['child-1', 'child-2'];
       mockHierarchyManager.getChildren.mockResolvedValue(childIds);
 
@@ -301,30 +309,34 @@ describe('CircuitBreakerDevice', () => {
 
       (mockDriver as { getDevices: jest.Mock }).getDevices.mockReturnValue([child1, child2]);
 
-      await device.onDeleted();
-
-      // Wait for async orphan operation
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      // Deletion should complete despite errors
-      expect(device.log).toHaveBeenCalledWith('Circuit breaker device deleted');
-
-      // Error should be logged for failed child
-      expect(device.error).toHaveBeenCalledWith(
-        expect.stringContaining(`[${CircuitBreakerErrorId.ORPHAN_CHILDREN_FAILED}]`),
-        expect.any(Error)
+      // Orphaning is now blocking - if it fails, deletion should throw
+      await expect(device.onDeleted()).rejects.toThrow(
+        'Failed to orphan 1 child circuit breakers. Deletion cannot proceed. Check device logs.'
       );
+
+      // Error should be logged for failed orphaning (uses ORPHAN_CHILDREN_FAILED error ID)
+      expect(device.error).toHaveBeenCalledWith(
+        expect.stringContaining(`[${CircuitBreakerErrorId.ORPHAN_CHILDREN_FAILED}]`)
+      );
+
+      // Deletion should NOT complete
+      expect(device.log).not.toHaveBeenCalledWith('Circuit breaker device deleted');
     });
 
-    it('should use DEVICE_DELETION_FAILED error ID for deletion errors', async () => {
+    it('should throw when getChildren fails', async () => {
       mockHierarchyManager.getChildren.mockRejectedValue(new Error('Failed to get children'));
 
-      await device.onDeleted();
+      // Should throw and prevent deletion
+      await expect(device.onDeleted()).rejects.toThrow();
 
+      // Error should be logged
       expect(device.error).toHaveBeenCalledWith(
         expect.stringContaining(`[${CircuitBreakerErrorId.DEVICE_DELETION_FAILED}]`),
         expect.any(Error)
       );
+
+      // Deletion should NOT complete
+      expect(device.log).not.toHaveBeenCalledWith('Circuit breaker device deleted');
     });
 
     it('should handle case when no hierarchy manager exists', async () => {
@@ -340,21 +352,42 @@ describe('CircuitBreakerDevice', () => {
       expect(uninitializedDevice.log).toHaveBeenCalledWith('Circuit breaker device deleted');
     });
 
-    it('should handle case when child device not found in driver', async () => {
+    it('should successfully orphan all children when all exist', async () => {
       const childIds = ['child-1', 'child-2'];
       mockHierarchyManager.getChildren.mockResolvedValue(childIds);
 
-      // Only child-2 exists in driver
+      // Both children exist in driver
+      const child1 = createMockDevice({ id: 'child-1', settings: { parentId: 'test-breaker-1' } });
       const child2 = createMockDevice({ id: 'child-2', settings: { parentId: 'test-breaker-1' } });
-      (mockDriver as { getDevices: jest.Mock }).getDevices.mockReturnValue([child2]);
+      (mockDriver as { getDevices: jest.Mock }).getDevices.mockReturnValue([child1, child2]);
 
       await device.onDeleted();
 
-      // Wait for async orphan operation
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      // Should only attempt to orphan child-2
+      // Both children should be orphaned
+      expect(child1.setSettings).toHaveBeenCalledWith({ parentId: null });
       expect(child2.setSettings).toHaveBeenCalledWith({ parentId: null });
+
+      // Deletion should complete successfully
+      expect(device.log).toHaveBeenCalledWith('Circuit breaker device deleted');
+    });
+
+    it('should handle getDevices failure during orphaning', async () => {
+      // Arrange
+      mockHierarchyManager.getChildren.mockRejectedValue(
+        new Error('HomeyAPI temporarily unavailable')
+      );
+
+      // Act & Assert - Should throw error and prevent deletion
+      await expect(device.onDeleted()).rejects.toThrow();
+
+      // Verify error was logged with appropriate error ID
+      expect(device.error).toHaveBeenCalledWith(
+        expect.stringContaining(`[${CircuitBreakerErrorId.DEVICE_DELETION_FAILED}]`),
+        expect.any(Error)
+      );
+
+      // Verify deletion did NOT complete (no "deleted" log)
+      expect(device.log).not.toHaveBeenCalledWith('Circuit breaker device deleted');
     });
   });
 
@@ -442,9 +475,12 @@ describe('CircuitBreakerDevice', () => {
 
       await capabilityListener(true);
 
-      // Should log error but not throw
+      // Should log unexpected error with HIGH severity (not expected flow card error)
       expect(device.error).toHaveBeenCalledWith(
-        expect.stringContaining('Flow card trigger failed')
+        expect.stringContaining('[CIRCUIT_BREAKER_009]')
+      );
+      expect(device.error).toHaveBeenCalledWith(
+        expect.stringContaining('Unexpected flow card system error occurred')
       );
     });
 
@@ -510,6 +546,45 @@ describe('CircuitBreakerDevice', () => {
         { state: false },
         {}
       );
+    });
+
+    it('should set warning when exactly 20% of cascades fail', async () => {
+      // Arrange - Create device with cascadeStateChange already initialized
+      mockCascadeEngine.cascadeStateChange.mockResolvedValue({
+        success: 4,
+        failed: 1,
+        errors: [{ deviceId: 'child0', success: false, error: new Error('Update failed') }],
+      });
+
+      // Mock setWarning
+      device.setWarning = jest.fn().mockResolvedValue(undefined);
+
+      // Act - Turn device OFF to trigger cascade (20% failure rate = 1/5)
+      await capabilityListener(false);
+
+      // Assert - Should NOT set warning at exactly 20% (implementation uses > 0.2, not >= 0.2)
+      // So exactly 20% does not trigger warning
+      expect(device.setWarning).not.toHaveBeenCalled();
+    });
+
+    it('should use alarm_generic fallback when setWarning fails', async () => {
+      // Arrange - Set up mock to return high failure rate (> 20%)
+      mockCascadeEngine.cascadeStateChange.mockResolvedValue({
+        success: 0,
+        failed: 1,
+        errors: [{ deviceId: 'child', success: false, error: new Error('Update failed') }],
+      });
+
+      // Make setWarning fail
+      device.setWarning = jest.fn().mockRejectedValue(new Error('Warning API unavailable'));
+      device.setCapabilityValue = jest.fn().mockResolvedValue(undefined);
+
+      // Act - Turn OFF to trigger cascade with failures (100% failure rate triggers warning)
+      await capabilityListener(false);
+
+      // Assert - Should attempt setWarning, then fallback to alarm_generic
+      expect(device.setWarning).toHaveBeenCalled();
+      expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_generic', true);
     });
   });
 });

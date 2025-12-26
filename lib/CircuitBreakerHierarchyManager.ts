@@ -27,6 +27,18 @@ import { ErrorReporter } from './ErrorReporter';
 import { ErrorSeverity } from './ErrorTypes';
 
 /**
+ * Custom error class for circuit breaker cycle detection
+ *
+ * Provides type-safe cycle error detection without fragile string matching.
+ */
+class CircuitBreakerCycleError extends Error {
+  constructor(message: string, public errorId: string) {
+    super(message);
+    this.name = 'CircuitBreakerCycleError';
+  }
+}
+
+/**
  * Interface for logging instance
  */
 interface Logger {
@@ -96,12 +108,18 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getAllCircuitBreakers(): Promise<CircuitBreakerDevice[]> {
-    // Validate preconditions BEFORE try block
-    if (!this.homeyApi || !this.homeyApi.devices) {
-      throw new Error('HomeyAPI not properly initialized');
-    }
-
     try {
+      // Validate preconditions inside try block for proper error reporting
+      if (!this.homeyApi || !this.homeyApi.devices) {
+        const errorReporter = new ErrorReporter(this.logger);
+        throw new Error(errorReporter.reportAndGetMessage({
+          errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
+          severity: ErrorSeverity.CRITICAL,
+          userMessage: 'The app is still initializing. Wait and try again.',
+          technicalMessage: 'HomeyAPI not properly initialized',
+        }));
+      }
+
       const allDevices = await this.homeyApi.devices.getDevices();
       const circuitBreakers: CircuitBreakerDevice[] = [];
 
@@ -118,11 +136,16 @@ export class CircuitBreakerHierarchyManager {
 
       return circuitBreakers;
     } catch (error) {
+      // Re-throw errors that already have proper error reporting
+      if (error instanceof Error && error.message.includes('The app is still initializing')) {
+        throw error;
+      }
+
       const errorReporter = new ErrorReporter(this.logger);
       const message = errorReporter.reportAndGetMessage({
         errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
         severity: ErrorSeverity.HIGH,
-        userMessage: 'Cannot fetch circuit breakers. Please try again.',
+        userMessage: 'Cannot fetch circuit breakers. Wait a moment and try again. If the problem persists, restart the app.',
         technicalMessage: error instanceof Error ? error.message : 'Unknown error',
       });
       throw new Error(message);
@@ -145,12 +168,18 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getChildren(parentId: string): Promise<string[]> {
-    // Validate preconditions BEFORE try block
-    if (!this.homeyApi || !this.homeyApi.devices) {
-      throw new Error('HomeyAPI not properly initialized');
-    }
-
     try {
+      // Validate preconditions inside try block for proper error reporting
+      if (!this.homeyApi || !this.homeyApi.devices) {
+        const errorReporter = new ErrorReporter(this.logger);
+        throw new Error(errorReporter.reportAndGetMessage({
+          errorId: CircuitBreakerErrorId.GET_CHILDREN_FAILED,
+          severity: ErrorSeverity.CRITICAL,
+          userMessage: 'The app is still initializing. Wait and try again.',
+          technicalMessage: 'HomeyAPI not properly initialized',
+        }));
+      }
+
       const allDevices = await this.getAllCircuitBreakers();
       const children: string[] = [];
 
@@ -169,11 +198,16 @@ export class CircuitBreakerHierarchyManager {
 
       return children;
     } catch (error) {
+      // Re-throw errors that already have proper error reporting
+      if (error instanceof Error && error.message.includes('The app is still initializing')) {
+        throw error;
+      }
+
       const errorReporter = new ErrorReporter(this.logger);
       const message = errorReporter.reportAndGetMessage({
         errorId: CircuitBreakerErrorId.GET_CHILDREN_FAILED,
         severity: ErrorSeverity.HIGH,
-        userMessage: 'Cannot fetch child circuit breakers. Please try again.',
+        userMessage: 'Cannot fetch child circuit breakers. Wait a moment and try again. If the problem persists, restart the app.',
         technicalMessage: error instanceof Error ? error.message : 'Unknown error',
       });
       throw new Error(message);
@@ -197,12 +231,18 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getParentChain(deviceId: string): Promise<string[]> {
-    // Validate preconditions BEFORE try block
-    if (!this.homeyApi || !this.homeyApi.devices) {
-      throw new Error('HomeyAPI not properly initialized');
-    }
-
     try {
+      // Validate preconditions inside try block for proper error reporting
+      if (!this.homeyApi || !this.homeyApi.devices) {
+        const errorReporter = new ErrorReporter(this.logger);
+        throw new Error(errorReporter.reportAndGetMessage({
+          errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
+          severity: ErrorSeverity.CRITICAL,
+          userMessage: 'The app is still initializing. Wait and try again.',
+          technicalMessage: 'HomeyAPI not properly initialized',
+        }));
+      }
+
       const allDevices = await this.getAllCircuitBreakers();
       const deviceMap = this.buildDeviceMap(allDevices);
 
@@ -233,7 +273,7 @@ export class CircuitBreakerHierarchyManager {
             userMessage: 'Circuit breaker hierarchy is corrupted. Please contact support.',
             technicalMessage: `Cycle detected in parent chain for ${deviceId} at ${parentId}`,
           });
-          throw new Error(message);
+          throw new CircuitBreakerCycleError(message, CircuitBreakerErrorId.CYCLE_DETECTED);
         }
 
         chain.push(parentId);
@@ -244,7 +284,13 @@ export class CircuitBreakerHierarchyManager {
       return chain;
     } catch (error) {
       // Re-throw cycle detection errors without wrapping
-      if (error instanceof Error && error.message.includes('Circuit breaker hierarchy is corrupted')) {
+      if (error instanceof CircuitBreakerCycleError) {
+        throw error;
+      }
+
+      // Re-throw critical errors without wrapping
+      if (error instanceof Error &&
+          error.message.includes('The app is still initializing')) {
         throw error;
       }
 
@@ -252,7 +298,7 @@ export class CircuitBreakerHierarchyManager {
       const message = errorReporter.reportAndGetMessage({
         errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
         severity: ErrorSeverity.HIGH,
-        userMessage: 'Cannot fetch parent hierarchy. Please try again.',
+        userMessage: 'Cannot fetch parent hierarchy. Wait a moment and try again. If the problem persists, restart the app.',
         technicalMessage: error instanceof Error ? error.message : 'Unknown error',
       });
       throw new Error(message);
@@ -284,12 +330,18 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async wouldCreateCycle(deviceId: string, proposedParentId: string): Promise<boolean> {
-    // Validate preconditions BEFORE try block
-    if (!this.homeyApi || !this.homeyApi.devices) {
-      throw new Error('HomeyAPI not properly initialized');
-    }
-
     try {
+      // Validate preconditions inside try block for proper error reporting
+      if (!this.homeyApi || !this.homeyApi.devices) {
+        const errorReporter = new ErrorReporter(this.logger);
+        throw new Error(errorReporter.reportAndGetMessage({
+          errorId: CircuitBreakerErrorId.PARENT_VALIDATION_FAILED,
+          severity: ErrorSeverity.CRITICAL,
+          userMessage: 'The app is still initializing. Wait and try again.',
+          technicalMessage: 'HomeyAPI not properly initialized',
+        }));
+      }
+
       // Self-parent check
       if (deviceId === proposedParentId) {
         this.logger.log(
@@ -311,11 +363,16 @@ export class CircuitBreakerHierarchyManager {
 
       return false;
     } catch (error) {
+      // Re-throw errors that already have proper error reporting
+      if (error instanceof Error && error.message.includes('The app is still initializing')) {
+        throw error;
+      }
+
       const errorReporter = new ErrorReporter(this.logger);
       const message = errorReporter.reportAndGetMessage({
         errorId: CircuitBreakerErrorId.PARENT_VALIDATION_FAILED,
         severity: ErrorSeverity.HIGH,
-        userMessage: 'Cannot validate parent assignment. Please try again.',
+        userMessage: 'Cannot validate parent assignment. Wait a moment and try again. If the problem persists, restart the app.',
         technicalMessage: error instanceof Error ? error.message : 'Unknown error',
       });
       throw new Error(message);
@@ -340,12 +397,18 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getDescendants(deviceId: string): Promise<string[]> {
-    // Validate preconditions BEFORE try block
-    if (!this.homeyApi || !this.homeyApi.devices) {
-      throw new Error('HomeyAPI not properly initialized');
-    }
-
     try {
+      // Validate preconditions inside try block for proper error reporting
+      if (!this.homeyApi || !this.homeyApi.devices) {
+        const errorReporter = new ErrorReporter(this.logger);
+        throw new Error(errorReporter.reportAndGetMessage({
+          errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
+          severity: ErrorSeverity.CRITICAL,
+          userMessage: 'The app is still initializing. Wait and try again.',
+          technicalMessage: 'HomeyAPI not properly initialized',
+        }));
+      }
+
       const allDevices = await this.getAllCircuitBreakers();
       const descendants: string[] = [];
       const visited = new Set<string>([deviceId]);
@@ -377,11 +440,16 @@ export class CircuitBreakerHierarchyManager {
 
       return descendants;
     } catch (error) {
+      // Re-throw errors that already have proper error reporting
+      if (error instanceof Error && error.message.includes('The app is still initializing')) {
+        throw error;
+      }
+
       const errorReporter = new ErrorReporter(this.logger);
       const message = errorReporter.reportAndGetMessage({
         errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
         severity: ErrorSeverity.HIGH,
-        userMessage: 'Cannot fetch circuit breaker hierarchy. Please try again.',
+        userMessage: 'Cannot fetch circuit breaker hierarchy. Wait a moment and try again. If the problem persists, restart the app.',
         technicalMessage: error instanceof Error ? error.message : 'Unknown error',
       });
       throw new Error(message);
@@ -406,12 +474,18 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getDeviceById(deviceId: string): Promise<CircuitBreakerDevice | null> {
-    // Validate preconditions BEFORE try block
-    if (!this.homeyApi || !this.homeyApi.devices) {
-      throw new Error('HomeyAPI not properly initialized');
-    }
-
     try {
+      // Validate preconditions inside try block for proper error reporting
+      if (!this.homeyApi || !this.homeyApi.devices) {
+        const errorReporter = new ErrorReporter(this.logger);
+        throw new Error(errorReporter.reportAndGetMessage({
+          errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
+          severity: ErrorSeverity.CRITICAL,
+          userMessage: 'The app is still initializing. Wait and try again.',
+          technicalMessage: 'HomeyAPI not properly initialized',
+        }));
+      }
+
       const allDevices = await this.getAllCircuitBreakers();
 
       for (const device of allDevices) {
@@ -423,11 +497,16 @@ export class CircuitBreakerHierarchyManager {
       this.logger.log(`[HIERARCHY] Device ${deviceId} not found or not a circuit breaker`);
       return null;
     } catch (error) {
+      // Re-throw errors that already have proper error reporting
+      if (error instanceof Error && error.message.includes('The app is still initializing')) {
+        throw error;
+      }
+
       const errorReporter = new ErrorReporter(this.logger);
       const message = errorReporter.reportAndGetMessage({
         errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
         severity: ErrorSeverity.HIGH,
-        userMessage: 'Cannot fetch circuit breaker device. Please try again.',
+        userMessage: 'Cannot fetch circuit breaker device. Wait a moment and try again. If the problem persists, restart the app.',
         technicalMessage: error instanceof Error ? error.message : 'Unknown error',
       });
       throw new Error(message);

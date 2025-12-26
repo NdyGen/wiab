@@ -157,7 +157,7 @@ export class CircuitBreakerCascadeEngine {
       const message = errorReporter.reportAndGetMessage({
         errorId: CircuitBreakerErrorId.CASCADE_FAILED,
         severity: ErrorSeverity.HIGH,
-        userMessage: 'Failed to cascade state change. Please try again.',
+        userMessage: 'Failed to cascade state change. Wait a moment and try again. If the problem persists, restart the app.',
         technicalMessage: error instanceof Error ? error.message : 'Unknown error',
       });
       throw new Error(message);
@@ -201,6 +201,7 @@ export class CircuitBreakerCascadeEngine {
           deviceId,
           success: false,
           error,
+          notFound: true,
         };
       }
 
@@ -231,16 +232,29 @@ export class CircuitBreakerCascadeEngine {
         success: true,
       };
     } catch (error) {
-      this.logger.error(
-        `[${CircuitBreakerErrorId.CHILD_UPDATE_FAILED}] Failed to update device ${deviceId}:`,
-        error
-      );
+      // Check if this is a critical programming error that should bubble up
+      const isCritical = error instanceof TypeError ||
+                         error instanceof ReferenceError ||
+                         (error instanceof Error && error.message.includes('platform'));
 
-      return {
-        deviceId,
-        success: false,
-        error: error as Error,
-      };
+      if (isCritical) {
+        this.logger.error(
+          `[${CircuitBreakerErrorId.CASCADE_FAILED}] CRITICAL: Unexpected error in cascade logic:`,
+          error
+        );
+        throw error;
+      } else {
+        // Expected errors - device not found, capability issues, etc.
+        this.logger.error(
+          `[${CircuitBreakerErrorId.CHILD_UPDATE_FAILED}] Device update failed:`,
+          error
+        );
+        return {
+          deviceId,
+          success: false,
+          error: error as Error,
+        };
+      }
     }
   }
 

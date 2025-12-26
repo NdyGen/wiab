@@ -298,4 +298,7 @@ export enum CircuitBreakerErrorId {
 
   /** Failed to delete device and cleanup resources */
   DEVICE_DELETION_FAILED = 'CIRCUIT_BREAKER_015',
+
+  /** Driver initialization failed (onInit) */
+  DRIVER_INIT_FAILED = 'CIRCUIT_BREAKER_016',
 }

@@ -228,9 +228,179 @@ describe('CircuitBreakerCascadeEngine', () => {
 
       // Act & Assert
       await expect(engine.cascadeStateChange('parent', false)).rejects.toThrow(
-        'Failed to cascade state change. Please try again.'
+        'Failed to cascade state change. Wait a moment and try again. If the problem persists, restart the app.'
       );
       expect(homey.error).toHaveBeenCalled();
+    });
+
+    it('should propagate hierarchy manager errors with user-friendly messages', async () => {
+      // Arrange
+      const parent = createMockDevice({
+        id: 'parent',
+        name: 'Parent',
+        capabilities: ['onoff'],
+        settings: { parentId: null },
+      });
+
+      parent.driverId = 'wiab-circuit-breaker';
+      homeyApi.devices._addDevice('parent', parent);
+
+      // Mock getDescendants to throw a specific error
+      const technicalError = new Error('Database connection timeout');
+      jest.spyOn(hierarchyManager, 'getDescendants').mockRejectedValue(technicalError);
+
+      // Act & Assert - Verify user-friendly message is thrown
+      await expect(engine.cascadeStateChange('parent', false)).rejects.toThrow(
+        'Failed to cascade state change. Wait a moment and try again. If the problem persists, restart the app.'
+      );
+
+      // Verify technical error was logged with error ID
+      expect(homey.error).toHaveBeenCalledWith(
+        expect.stringContaining('[CIRCUIT_BREAKER_002]')
+      );
+    });
+
+    it('should collect and report all errors in batch updates', async () => {
+      // Arrange - Create 4 devices where 2 fail with different errors
+      const parent = createMockDevice({
+        id: 'parent',
+        name: 'Parent',
+        capabilities: ['onoff'],
+        settings: { parentId: null },
+      });
+      const child1 = createMockDevice({
+        id: 'child1',
+        name: 'Child 1',
+        capabilities: ['onoff'],
+        settings: { parentId: 'parent' },
+      });
+      const child2 = createMockDevice({
+        id: 'child2',
+        name: 'Child 2',
+        capabilities: ['onoff'],
+        settings: { parentId: 'parent' },
+      });
+      const child3 = createMockDevice({
+        id: 'child3',
+        name: 'Child 3',
+        capabilities: ['onoff'],
+        settings: { parentId: 'parent' },
+      });
+      const child4 = createMockDevice({
+        id: 'child4',
+        name: 'Child 4',
+        capabilities: ['onoff'],
+        settings: { parentId: 'parent' },
+      });
+
+      // Make child2 and child4 fail with different errors
+      (child2.setCapabilityValue as jest.Mock).mockRejectedValue(
+        new Error('Network timeout')
+      );
+      (child4.setCapabilityValue as jest.Mock).mockRejectedValue(
+        new Error('Device offline')
+      );
+
+      parent.driverId = 'wiab-circuit-breaker';
+      child1.driverId = 'wiab-circuit-breaker';
+      child2.driverId = 'wiab-circuit-breaker';
+      child3.driverId = 'wiab-circuit-breaker';
+      child4.driverId = 'wiab-circuit-breaker';
+
+      homeyApi.devices._addDevice('parent', parent);
+      homeyApi.devices._addDevice('child1', child1);
+      homeyApi.devices._addDevice('child2', child2);
+      homeyApi.devices._addDevice('child3', child3);
+      homeyApi.devices._addDevice('child4', child4);
+
+      // Act
+      const result = await engine.cascadeStateChange('parent', false);
+
+      // Assert - Verify errors are collected and reported
+      expect(result.success).toBe(2); // child1 and child3
+      expect(result.failed).toBe(2); // child2 and child4
+      expect(result.errors).toHaveLength(2);
+
+      // Verify both errors are captured with details
+      const errorDeviceIds = result.errors.map(e => e.deviceId);
+      expect(errorDeviceIds).toContain('child2');
+      expect(errorDeviceIds).toContain('child4');
+
+      // Verify error details are preserved
+      const child2Error = result.errors.find(e => e.deviceId === 'child2');
+      expect(child2Error?.error?.message).toContain('Network timeout');
+
+      const child4Error = result.errors.find(e => e.deviceId === 'child4');
+      expect(child4Error?.error?.message).toContain('Device offline');
+
+      // Verify successful devices were still updated
+      expect(child1.setCapabilityValue).toHaveBeenCalledWith('onoff', false);
+      expect(child3.setCapabilityValue).toHaveBeenCalledWith('onoff', false);
+    });
+
+    it('should handle cascadeStateChange when getDevices fails in hierarchy query', async () => {
+      // Arrange
+      const parent = createMockDevice({
+        id: 'parent',
+        name: 'Parent',
+        capabilities: ['onoff'],
+        settings: { parentId: null },
+      });
+
+      parent.driverId = 'wiab-circuit-breaker';
+      homeyApi.devices._addDevice('parent', parent);
+
+      // Mock getDevices to fail (simulating API failure)
+      (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
+        new Error('HomeyAPI unavailable')
+      );
+
+      // Act & Assert - Should throw with user-friendly message
+      await expect(engine.cascadeStateChange('parent', false)).rejects.toThrow(
+        'Failed to cascade state change. Wait a moment and try again. If the problem persists, restart the app.'
+      );
+
+      // Verify error was logged
+      expect(homey.error).toHaveBeenCalled();
+    });
+
+    it('should handle race conditions when devices are deleted during batch update', async () => {
+      // Arrange - Create parent and 3 children
+      const parent = createMockDevice({ id: 'parent', name: 'Parent', capabilities: ['onoff'], settings: { parentId: null } });
+      const child1 = createMockDevice({ id: 'child1', name: 'Child 1', capabilities: ['onoff'], settings: { parentId: 'parent' } });
+      const child2 = createMockDevice({ id: 'child2', name: 'Child 2', capabilities: ['onoff'], settings: { parentId: 'parent' } });
+      const child3 = createMockDevice({ id: 'child3', name: 'Child 3', capabilities: ['onoff'], settings: { parentId: 'parent' } });
+
+      parent.driverId = 'wiab-circuit-breaker';
+      child1.driverId = 'wiab-circuit-breaker';
+      child2.driverId = 'wiab-circuit-breaker';
+      child3.driverId = 'wiab-circuit-breaker';
+
+      homeyApi.devices._addDevice('parent', parent);
+      homeyApi.devices._addDevice('child1', child1);
+      homeyApi.devices._addDevice('child2', child2);
+      homeyApi.devices._addDevice('child3', child3);
+
+      // Simulate race condition: child2 is deleted mid-update
+      let callCount = 0;
+      (child2.setCapabilityValue as jest.Mock).mockImplementation(() => {
+        callCount++;
+        // Delete child2 from API on first call (simulating concurrent deletion)
+        if (callCount === 1) {
+          homeyApi.devices._removeDevice('child2');
+        }
+        return Promise.reject(new Error('Device deleted during update'));
+      });
+
+      // Act
+      const result = await engine.cascadeStateChange('parent', false);
+
+      // Assert - Should handle deletion gracefully
+      expect(result.success).toBe(2); // child1 and child3
+      expect(result.failed).toBe(1); // child2
+      expect(result.errors).toHaveLength(1);
+      expect(result.errors[0].deviceId).toBe('child2');
+      expect(result.errors[0].error?.message).toContain('deleted during update');
     });
   });
 

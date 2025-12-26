@@ -45,17 +45,32 @@ class CircuitBreakerDriver extends Homey.Driver {
    * Initializes the circuit breaker driver.
    *
    * Registers flow cards for triggers, conditions, and actions.
+   *
+   * @throws Error if driver initialization fails
    */
   async onInit(): Promise<void> {
     this.log('Circuit breaker driver initializing');
 
     try {
-      // Register flow card triggers
+      // ─── Flow Card Triggers ─────────────────────────────────────────────
+      // These triggers are fired by devices when state changes occur.
+      // Stored as driver properties for device access during state changes.
       this.turnedOnTrigger = this.homey.flow.getDeviceTriggerCard('circuit_breaker_turned_on');
       this.turnedOffTrigger = this.homey.flow.getDeviceTriggerCard('circuit_breaker_turned_off');
       this.flippedTrigger = this.homey.flow.getDeviceTriggerCard('circuit_breaker_flipped');
 
-      // Register flow card condition
+      // ─── Flow Card Condition: Is Circuit Breaker ON? ────────────────────
+      /**
+       * Condition card for checking circuit breaker state in flow conditions.
+       *
+       * @param args.device - The circuit breaker device to check
+       * @returns true if breaker is ON, false if OFF or on error
+       *
+       * @remarks Error Handling:
+       * - Returns false on capability read failure (fail-safe: assume OFF)
+       * - Logs error but doesn't throw (conditions should never break flows)
+       * - False negatives preferred over flow crashes
+       */
       this.homey.flow.getConditionCard('circuit_breaker_is_on')
         .registerRunListener(async (args: { device: Homey.Device }) => {
           try {
@@ -71,7 +86,19 @@ class CircuitBreakerDriver extends Homey.Driver {
           }
         });
 
-      // Register flow card actions
+      // ─── Flow Card Action: Turn Circuit Breaker ON ──────────────────────
+      /**
+       * Action card for turning breaker ON from flows.
+       *
+       * @param args.device - The circuit breaker device to turn on
+       * @returns true on success
+       * @throws {Error} User-friendly error message on capability update failure
+       *
+       * @remarks Error Handling:
+       * - Throws user-friendly error to show in flow execution
+       * - Uses ErrorReporter for consistent error messaging
+       * - Prevents silent failures (user should see when action fails)
+       */
       this.homey.flow.getActionCard('circuit_breaker_turn_on')
         .registerRunListener(async (args: { device: Homey.Device }) => {
           try {
@@ -82,16 +109,43 @@ class CircuitBreakerDriver extends Homey.Driver {
               log: this.log.bind(this),
               error: this.error.bind(this),
             });
+
+            let userMessage = 'Cannot turn circuit breaker ON.';
+            if (error instanceof Error) {
+              if (error.message.includes('capability not found')) {
+                userMessage += ' Device configuration is invalid. Delete and re-pair the device.';
+              } else if (error.message.includes('permission')) {
+                userMessage += ' Check app permissions in Homey settings.';
+              } else {
+                userMessage += ' Wait a moment and try again. If the problem persists, restart the app.';
+              }
+            } else {
+              userMessage += ' Wait a moment and try again. If the problem persists, restart the app.';
+            }
+
             const message = errorReporter.reportAndGetMessage({
               errorId: CircuitBreakerErrorId.CAPABILITY_UPDATE_FAILED,
               severity: ErrorSeverity.HIGH,
-              userMessage: 'Cannot turn circuit breaker ON. Please try again.',
+              userMessage,
               technicalMessage: error instanceof Error ? error.message : 'Unknown error',
             });
             throw new Error(message);
           }
         });
 
+      // ─── Flow Card Action: Turn Circuit Breaker OFF ─────────────────────
+      /**
+       * Action card for turning breaker OFF from flows.
+       *
+       * @param args.device - The circuit breaker device to turn off
+       * @returns true on success
+       * @throws {Error} User-friendly error message on capability update failure
+       *
+       * @remarks Error Handling:
+       * - Throws user-friendly error to show in flow execution
+       * - Uses ErrorReporter for consistent error messaging
+       * - Prevents silent failures (user should see when action fails)
+       */
       this.homey.flow.getActionCard('circuit_breaker_turn_off')
         .registerRunListener(async (args: { device: Homey.Device }) => {
           try {
@@ -102,10 +156,24 @@ class CircuitBreakerDriver extends Homey.Driver {
               log: this.log.bind(this),
               error: this.error.bind(this),
             });
+
+            let userMessage = 'Cannot turn circuit breaker OFF.';
+            if (error instanceof Error) {
+              if (error.message.includes('capability not found')) {
+                userMessage += ' Device configuration is invalid. Delete and re-pair the device.';
+              } else if (error.message.includes('permission')) {
+                userMessage += ' Check app permissions in Homey settings.';
+              } else {
+                userMessage += ' Wait a moment and try again. If the problem persists, restart the app.';
+              }
+            } else {
+              userMessage += ' Wait a moment and try again. If the problem persists, restart the app.';
+            }
+
             const message = errorReporter.reportAndGetMessage({
               errorId: CircuitBreakerErrorId.CAPABILITY_UPDATE_FAILED,
               severity: ErrorSeverity.HIGH,
-              userMessage: 'Cannot turn circuit breaker OFF. Please try again.',
+              userMessage,
               technicalMessage: error instanceof Error ? error.message : 'Unknown error',
             });
             throw new Error(message);
@@ -114,11 +182,17 @@ class CircuitBreakerDriver extends Homey.Driver {
 
       this.log('Circuit breaker driver initialized');
     } catch (error) {
-      this.error(
-        `[${CircuitBreakerErrorId.FLOW_CARD_REGISTRATION_FAILED}] Failed to register flow cards:`,
-        error
-      );
-      throw error;
+      const errorReporter = new ErrorReporter({
+        log: this.log.bind(this),
+        error: this.error.bind(this),
+      });
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.DRIVER_INIT_FAILED,
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'Circuit breaker driver failed to initialize. Restart the app.',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new Error(message);
     }
   }
 
@@ -142,11 +216,17 @@ class CircuitBreakerDriver extends Homey.Driver {
         this.log('Fetching circuit breakers for pairing');
         return await this.getAllCircuitBreakers();
       } catch (error) {
-        this.error(
-          `[${CircuitBreakerErrorId.PAIRING_HANDLER_FAILED}] Failed to fetch circuit breakers:`,
-          error
-        );
-        throw error;
+        const errorReporter = new ErrorReporter({
+          log: this.log.bind(this),
+          error: this.error.bind(this),
+        });
+        const message = errorReporter.reportAndGetMessage({
+          errorId: CircuitBreakerErrorId.PAIRING_HANDLER_FAILED,
+          severity: ErrorSeverity.HIGH,
+          userMessage: 'Cannot load circuit breakers for pairing. Wait a moment and try again. If the problem persists, restart Homey.',
+          technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+        throw new Error(message);
       }
     });
 
@@ -157,11 +237,17 @@ class CircuitBreakerDriver extends Homey.Driver {
         selectedParentId = data.parentId;
         return true;
       } catch (error) {
-        this.error(
-          `[${CircuitBreakerErrorId.PAIRING_HANDLER_FAILED}] Failed to store parent selection:`,
-          error
-        );
-        throw error;
+        const errorReporter = new ErrorReporter({
+          log: this.log.bind(this),
+          error: this.error.bind(this),
+        });
+        const message = errorReporter.reportAndGetMessage({
+          errorId: CircuitBreakerErrorId.PAIRING_HANDLER_FAILED,
+          severity: ErrorSeverity.HIGH,
+          userMessage: 'Cannot load circuit breakers for pairing. Wait a moment and try again. If the problem persists, restart Homey.',
+          technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+        throw new Error(message);
       }
     });
 
@@ -186,11 +272,17 @@ class CircuitBreakerDriver extends Homey.Driver {
           },
         ];
       } catch (error) {
-        this.error(
-          `[${CircuitBreakerErrorId.PAIRING_HANDLER_FAILED}] Failed to create device list:`,
-          error
-        );
-        throw error;
+        const errorReporter = new ErrorReporter({
+          log: this.log.bind(this),
+          error: this.error.bind(this),
+        });
+        const message = errorReporter.reportAndGetMessage({
+          errorId: CircuitBreakerErrorId.PAIRING_HANDLER_FAILED,
+          severity: ErrorSeverity.HIGH,
+          userMessage: 'Cannot load circuit breakers for pairing. Wait a moment and try again. If the problem persists, restart Homey.',
+          technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+        throw new Error(message);
       }
     });
   }
@@ -198,7 +290,11 @@ class CircuitBreakerDriver extends Homey.Driver {
   /**
    * Retrieves all circuit breaker devices with zone information.
    *
-   * Returns devices in format: "Device Name (Zone Name)"
+   * Returns devices formatted as "Device Name (Zone Name)" for display in the
+   * parent selection dropdown during pairing. For example:
+   * - "Main Breaker (Kitchen)"
+   * - "Floor 1 Breaker (Living Room)"
+   *
    * Used by parent selection dropdown during pairing.
    *
    * @returns Array of circuit breaker device configs for pairing
@@ -250,7 +346,7 @@ class CircuitBreakerDriver extends Homey.Driver {
       const message = errorReporter.reportAndGetMessage({
         errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
         severity: ErrorSeverity.HIGH,
-        userMessage: 'Cannot load circuit breakers for pairing. Please try again.',
+        userMessage: 'Cannot load circuit breakers for pairing. Wait a moment and try again. If the problem persists, restart the app.',
         technicalMessage: error instanceof Error ? error.message : 'Unknown error',
       });
       throw new Error(message);
@@ -260,9 +356,16 @@ class CircuitBreakerDriver extends Homey.Driver {
   /**
    * Retrieves zone name for a device.
    *
+   * This method implements the graceful degradation pattern for optional data.
+   * Zone names enhance the user experience by providing location context
+   * (e.g., "Main Breaker (Kitchen)"), but are not critical to pairing functionality.
+   *
+   * For detailed information about this pattern, see:
+   * @see {@link file://../../docs/patterns/graceful-degradation.md}
+   *
    * @param deviceId - Device ID to query
    * @param homeyApi - HomeyAPI instance
-   * @returns Zone name or null if not available
+   * @returns Zone name if available, null otherwise (including on error)
    * @private
    */
   private async getDeviceZoneName(deviceId: string, homeyApi: HomeyAPI): Promise<string | null> {

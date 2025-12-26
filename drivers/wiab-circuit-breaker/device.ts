@@ -121,10 +121,53 @@ class CircuitBreakerDevice extends Homey.Device {
         );
 
         if (result.failed > 0) {
+          const notFoundCount = result.errors.filter(e => e.notFound).length;
+          const updateFailedCount = result.failed - notFoundCount;
+
+          let errorDetail = '';
+          if (notFoundCount > 0) {
+            errorDetail += `${notFoundCount} devices no longer exist. `;
+          }
+          if (updateFailedCount > 0) {
+            errorDetail += `${updateFailedCount} devices failed to update.`;
+          }
+
           this.error(
-            `[${CircuitBreakerErrorId.CASCADE_FAILED}] ${result.failed} descendants failed to update:`,
+            `[${CircuitBreakerErrorId.CASCADE_FAILED}] Cascade failures: ${errorDetail}`,
             result.errors
           );
+
+          // Warn user if more than 20% of cascades failed
+          const totalDevices = result.success + result.failed;
+          const failureRate = result.failed / totalDevices;
+          if (failureRate > 0.2) {
+            try {
+              await this.setWarning(
+                `${result.failed} of ${totalDevices} child circuit breakers failed to update. Some flows may still execute.`
+              );
+            } catch (warningError) {
+              this.error('Failed to set cascade failure warning:', warningError);
+              // Fallback: try to set generic alarm as alternative notification
+              try {
+                await this.setCapabilityValue('alarm_generic', true);
+              } catch (fallbackError) {
+                this.error('All warning methods failed - user will not see cascade failure notification:', fallbackError);
+              }
+            }
+          }
+        } else {
+          // Clear warning if cascade succeeds
+          try {
+            await this.unsetWarning();
+          } catch (warningError) {
+            this.error('Failed to clear warning after successful cascade:', warningError);
+            // Try to clear alarm as fallback
+            try {
+              await this.setCapabilityValue('alarm_generic', false);
+            } catch (fallbackError) {
+              this.error('Failed to clear all warning indicators:', fallbackError);
+            }
+          }
         }
       }
 
@@ -180,18 +223,25 @@ class CircuitBreakerDevice extends Homey.Device {
 
       this.log(`Flow cards triggered for state=${newState ? 'ON' : 'OFF'}`);
     } catch (error) {
-      const errorReporter = new ErrorReporter({
-        log: this.log.bind(this),
-        error: this.error.bind(this),
-      });
-      const message = errorReporter.reportAndGetMessage({
-        errorId: CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED,
-        severity: ErrorSeverity.MEDIUM,
-        userMessage: 'Flow card trigger failed',
-        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
-      });
-      // Don't throw - flow cards are non-critical
-      this.error(message);
+      // Only suppress expected flow card errors
+      if (error instanceof Error &&
+          (error.message.includes('Flow card not found') ||
+           error.message.includes('No listeners'))) {
+        this.log('Flow card trigger failed (non-critical):', error.message);
+      } else {
+        // Unexpected error - log with high severity
+        const errorReporter = new ErrorReporter({
+          log: this.log.bind(this),
+          error: this.error.bind(this),
+        });
+        const message = errorReporter.reportAndGetMessage({
+          errorId: CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED,
+          severity: ErrorSeverity.HIGH,
+          userMessage: 'Unexpected flow card system error occurred',
+          technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+        });
+        this.error(message);
+      }
     }
   }
 
@@ -249,8 +299,9 @@ class CircuitBreakerDevice extends Homey.Device {
   /**
    * Handles device deletion.
    *
-   * Orphans all children (sets their parentId to null) in a fire-and-forget manner.
+   * Orphans all children (sets their parentId to null) in a blocking manner.
    * Children become root circuit breakers when parent is deleted.
+   * Deletion fails if orphaning fails to prevent data corruption.
    */
   async onDeleted(): Promise<void> {
     this.log('Circuit breaker device being deleted');
@@ -258,46 +309,49 @@ class CircuitBreakerDevice extends Homey.Device {
     try {
       const deviceId = this.getData().id;
 
-      // Orphan children (fire-and-forget)
+      // Orphan children (blocking operation)
       if (this.hierarchyManager) {
         this.log(`Orphaning children of ${deviceId}`);
 
-        // Get all children IDs and update their settings asynchronously
-        const childrenIds = await this.hierarchyManager.getChildren(deviceId);
+        // Get all children IDs and update their settings
+        const childIds = await this.hierarchyManager.getChildren(deviceId);
 
-        // Fire-and-forget orphan operation
-        Promise.allSettled(
-          childrenIds.map(async (childId) => {
-            try {
-              // Get child device through driver
-              const driver = this.driver;
-              const devices = driver.getDevices();
-              const childDevice = devices.find((d) => {
-                const data = d.getData() as { id: string };
-                return data.id === childId;
-              });
+        const orphanResults = await Promise.allSettled(
+          childIds.map(async (childId) => {
+            // Get child device through driver
+            const driver = this.driver;
+            const devices = driver.getDevices();
+            const childDevice = devices.find((d) => {
+              const data = d.getData() as { id: string };
+              return data.id === childId;
+            });
 
-              if (childDevice) {
-                await childDevice.setSettings({ parentId: null });
-                this.log(`Orphaned child ${childId}`);
-              }
-            } catch (error) {
-              this.error(
-                `[${CircuitBreakerErrorId.ORPHAN_CHILDREN_FAILED}] Failed to orphan child ${childId}:`,
-                error
-              );
+            if (childDevice) {
+              await childDevice.setSettings({ parentId: null });
+              this.log(`Orphaned child ${childId}`);
+            } else {
+              throw new Error(`Child device ${childId} not found`);
             }
           })
-        )
-          .then((results) => {
-            const failures = results.filter((r) => r.status === 'rejected');
-            if (failures.length > 0) {
-              this.error(
-                `[${CircuitBreakerErrorId.ORPHAN_CHILDREN_FAILED}] Failed to orphan ${failures.length} children`,
-                failures
-              );
-            }
+        );
+
+        const failures = orphanResults.filter(r => r.status === 'rejected');
+        if (failures.length > 0) {
+          const errorReporter = new ErrorReporter({
+            log: this.log.bind(this),
+            error: this.error.bind(this),
           });
+          const message = errorReporter.reportAndGetMessage({
+            errorId: CircuitBreakerErrorId.ORPHAN_CHILDREN_FAILED,
+            severity: ErrorSeverity.HIGH,
+            userMessage: `Failed to orphan ${failures.length} child circuit breakers. Deletion cannot proceed. Check device logs.`,
+            technicalMessage: `Orphaning failed for ${failures.length} devices`,
+          });
+          throw new Error(message);
+        }
+
+        // Only proceed with cleanup if orphaning succeeded
+        this.log('All children orphaned successfully');
       }
 
       this.log('Circuit breaker device deleted');
@@ -306,7 +360,7 @@ class CircuitBreakerDevice extends Homey.Device {
         `[${CircuitBreakerErrorId.DEVICE_DELETION_FAILED}] Error during deletion:`,
         error
       );
-      // Don't throw - deletion should proceed even if orphaning fails
+      throw error;
     }
   }
 }

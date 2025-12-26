@@ -418,11 +418,13 @@ export interface CircuitBreakerDeviceInfo {
  * @property {string} deviceId - Device ID that was updated
  * @property {boolean} success - Whether the update succeeded
  * @property {Error} [error] - Error if update failed
+ * @property {boolean} [notFound] - True if device was not found (distinguishes missing devices from update failures)
  */
 export interface DeviceCascadeResult {
   deviceId: string;
   success: boolean;
   error?: Error;
+  notFound?: boolean;
 }
 
 /**
