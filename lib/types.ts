@@ -154,16 +154,24 @@ export interface CapabilityUpdate {
  * updates. Device objects auto-update via WebSocket when their state changes.
  *
  * @interface HomeyAPIDevice
+ * @property {string} id - Device ID
  * @property {string} name - The user-assigned name of the device
+ * @property {string} [zone] - Optional zone ID where the device is located
  * @property {string} [zoneName] - Optional zone name where the device is located
- * @property {Record<string, { value: unknown }>} capabilitiesObj - Object mapping capability IDs to their current values
+ * @property {string} [driverId] - Driver ID for this device
+ * @property {Record<string, unknown>} settings - Device settings
+ * @property {Record<string, { value: unknown; id?: string }>} capabilitiesObj - Object mapping capability IDs to their current values
  * @property {(event: string, handler: (update: CapabilityUpdate) => void) => void} on - Registers an event listener for device updates
  * @property {(event: string, handler: (update: CapabilityUpdate) => void) => void} removeListener - Removes an event listener
  */
 export interface HomeyAPIDevice {
+  id: string;
   name: string;
+  zone?: string;
   zoneName?: string;
-  capabilitiesObj: Record<string, { value: unknown }>;
+  driverId?: string;
+  settings: Record<string, unknown>;
+  capabilitiesObj: Record<string, { value: unknown; id?: string }>;
   on: (event: string, handler: (update: CapabilityUpdate) => void) => void;
   removeListener: (event: string, handler: (update: CapabilityUpdate) => void) => void;
 }

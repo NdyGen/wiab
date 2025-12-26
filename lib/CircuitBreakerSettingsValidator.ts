@@ -36,7 +36,7 @@ export async function validateCircuitBreakerSettings(
   hierarchyManager: CircuitBreakerHierarchyManager
 ): Promise<CircuitBreakerSettings> {
   // Validate settings is an object
-  if (!settings || typeof settings !== 'object') {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
     throw new Error('Settings must be an object');
   }
 
@@ -45,13 +45,13 @@ export async function validateCircuitBreakerSettings(
   // Validate parentId field
   const parentId = settingsObj.parentId;
 
-  if (parentId !== null && parentId !== undefined) {
+  if (parentId !== null && parentId !== undefined && parentId !== '') {
     // Parent ID must be a string if provided
     if (typeof parentId !== 'string') {
       throw new Error('Parent ID must be a string or null');
     }
 
-    // Parent ID must not be empty string
+    // Parent ID must not be whitespace-only
     if (parentId.trim() === '') {
       throw new Error('Parent ID cannot be an empty string');
     }
@@ -64,7 +64,7 @@ export async function validateCircuitBreakerSettings(
   }
 
   return {
-    parentId: parentId === null || parentId === undefined ? null : String(parentId),
+    parentId: (parentId === null || parentId === undefined || parentId === '') ? null : String(parentId),
   };
 }
 
@@ -87,7 +87,7 @@ export function validateCircuitBreakerSettingsSync(
   settings: unknown
 ): CircuitBreakerSettings {
   // Validate settings is an object
-  if (!settings || typeof settings !== 'object') {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
     throw new Error('Settings must be an object');
   }
 
@@ -96,19 +96,19 @@ export function validateCircuitBreakerSettingsSync(
   // Validate parentId field
   const parentId = settingsObj.parentId;
 
-  if (parentId !== null && parentId !== undefined) {
+  if (parentId !== null && parentId !== undefined && parentId !== '') {
     // Parent ID must be a string if provided
     if (typeof parentId !== 'string') {
       throw new Error('Parent ID must be a string or null');
     }
 
-    // Parent ID must not be empty string
+    // Parent ID must not be whitespace-only
     if (parentId.trim() === '') {
       throw new Error('Parent ID cannot be an empty string');
     }
   }
 
   return {
-    parentId: parentId === null || parentId === undefined ? null : String(parentId),
+    parentId: (parentId === null || parentId === undefined || parentId === '') ? null : String(parentId),
   };
 }

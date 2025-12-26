@@ -4,6 +4,8 @@ import { CircuitBreakerCascadeEngine } from '../../lib/CircuitBreakerCascadeEngi
 import { validateCircuitBreakerSettings } from '../../lib/CircuitBreakerSettingsValidator';
 import { HomeyAPI } from '../../lib/types';
 import { CircuitBreakerErrorId } from '../../constants/errorIds';
+import { ErrorReporter } from '../../lib/ErrorReporter';
+import { ErrorSeverity } from '../../lib/ErrorTypes';
 
 /**
  * Interface for WIABApp with HomeyAPI
@@ -128,11 +130,17 @@ class CircuitBreakerDevice extends Homey.Device {
 
       this.log(`Circuit breaker ${deviceId} state changed successfully`);
     } catch (error) {
-      this.error(
-        `[${CircuitBreakerErrorId.CAPABILITY_UPDATE_FAILED}] Failed to update capability:`,
-        error
-      );
-      throw error;
+      const errorReporter = new ErrorReporter({
+        log: this.log.bind(this),
+        error: this.error.bind(this),
+      });
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.CAPABILITY_UPDATE_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to update circuit breaker state',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      throw new Error(message);
     }
   }
 
@@ -143,6 +151,8 @@ class CircuitBreakerDevice extends Homey.Device {
    * - turned_on: When breaker turns ON
    * - turned_off: When breaker turns OFF
    * - flipped: On any state change (with state token)
+   *
+   * Flow card triggers are non-critical and don't block state changes on failure.
    *
    * @param newState - New onoff state
    */
@@ -170,11 +180,18 @@ class CircuitBreakerDevice extends Homey.Device {
 
       this.log(`Flow cards triggered for state=${newState ? 'ON' : 'OFF'}`);
     } catch (error) {
-      this.error(
-        `[${CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED}] Failed to trigger flow cards:`,
-        error
-      );
-      // Don't throw - flow card errors shouldn't block state changes
+      const errorReporter = new ErrorReporter({
+        log: this.log.bind(this),
+        error: this.error.bind(this),
+      });
+      const message = errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED,
+        severity: ErrorSeverity.MEDIUM,
+        userMessage: 'Flow card trigger failed',
+        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
+      });
+      // Don't throw - flow cards are non-critical
+      this.error(message);
     }
   }
 
@@ -271,15 +288,22 @@ class CircuitBreakerDevice extends Homey.Device {
               );
             }
           })
-        ).catch(() => {
-          // Ignore errors - this is fire-and-forget
-        });
+        )
+          .then((results) => {
+            const failures = results.filter((r) => r.status === 'rejected');
+            if (failures.length > 0) {
+              this.error(
+                `[${CircuitBreakerErrorId.ORPHAN_CHILDREN_FAILED}] Failed to orphan ${failures.length} children`,
+                failures
+              );
+            }
+          });
       }
 
       this.log('Circuit breaker device deleted');
     } catch (error) {
       this.error(
-        `[${CircuitBreakerErrorId.DEVICE_INIT_FAILED}] Error during deletion:`,
+        `[${CircuitBreakerErrorId.DEVICE_DELETION_FAILED}] Error during deletion:`,
         error
       );
       // Don't throw - deletion should proceed even if orphaning fails

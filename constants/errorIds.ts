@@ -295,4 +295,7 @@ export enum CircuitBreakerErrorId {
 
   /** Capability update failed */
   CAPABILITY_UPDATE_FAILED = 'CIRCUIT_BREAKER_014',
+
+  /** Failed to delete device and cleanup resources */
+  DEVICE_DELETION_FAILED = 'CIRCUIT_BREAKER_015',
 }

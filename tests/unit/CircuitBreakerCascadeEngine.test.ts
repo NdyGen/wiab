@@ -209,7 +209,7 @@ describe('CircuitBreakerCascadeEngine', () => {
       expect(child3.setCapabilityValue).toHaveBeenCalled();
     });
 
-    it('should handle critical errors during cascade', async () => {
+    it('should throw on critical errors during cascade', async () => {
       // Arrange
       const parent = createMockDevice({
         id: 'parent',
@@ -226,16 +226,11 @@ describe('CircuitBreakerCascadeEngine', () => {
         new Error('Critical error')
       );
 
-      // Act
-      const result = await engine.cascadeStateChange('parent', false);
-
-      // Assert
-      expect(result.success).toBe(0);
-      expect(result.failed).toBe(0);
-      expect(homey.error).toHaveBeenCalledWith(
-        expect.stringContaining('Critical error during cascade'),
-        expect.anything()
+      // Act & Assert
+      await expect(engine.cascadeStateChange('parent', false)).rejects.toThrow(
+        'Failed to cascade state change. Please try again.'
       );
+      expect(homey.error).toHaveBeenCalled();
     });
   });
 
