@@ -86,22 +86,6 @@
             color: #333;
         }
 
-        .skip-button {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background: white;
-            cursor: pointer;
-            font-size: 14px;
-            color: #666;
-            transition: all 0.2s;
-        }
-
-        .skip-button:hover {
-            background: #f5f5f5;
-            border-color: #999;
-        }
     </style>
 </head>
 <body>
@@ -114,10 +98,6 @@
     <div id="templateList" class="template-list">
         <!-- Templates will be inserted here by JavaScript -->
     </div>
-
-    <button id="skipButton" class="skip-button">
-        Skip - Configure Manually
-    </button>
 
     <script type="application/javascript">
         (function() {
@@ -141,24 +121,6 @@
                     ROOM_TEMPLATES = templates;
                     console.log('Loaded ' + templates.length + ' room templates');
                     renderTemplates();
-                });
-
-                // Skip button handler
-                document.getElementById('skipButton').addEventListener('click', function() {
-                    console.log('Skip button clicked');
-                    try {
-                        Homey.emit('select_room_type', null, function(err, result) {
-                            if (err) {
-                                console.error('Failed to skip template selection:', err);
-                                alert('Failed to proceed. Please try again.');
-                                return;
-                            }
-                            Homey.nextView();
-                        });
-                    } catch (error) {
-                        console.error('Exception during skip:', error);
-                        alert('An error occurred. Please restart pairing.');
-                    }
                 });
             }
 
@@ -240,24 +202,22 @@
                 if (template) {
                     console.log('Sending template timer values:', template.timerValues);
                     try {
-                        // Send template timer values to driver and proceed to next view
+                        // Send template timer values to driver
                         Homey.emit('select_room_type', template.timerValues, function(err, result) {
                             if (err) {
                                 console.error('Failed to send template to driver:', err);
                                 alert('Failed to apply template: ' + (err.message || err));
                                 return;
                             }
-
-                            // Success - proceed to next view
-                            Homey.nextView();
+                            console.log('Template applied successfully');
                         });
                     } catch (error) {
                         console.error('Exception during template selection:', error);
-                        alert('An error occurred. Please skip this step and configure manually.');
+                        alert('An error occurred. Please try a different template.');
                     }
                 } else {
                     console.error('Template not found:', templateId);
-                    alert('Template not found. Please select another template or skip.');
+                    alert('Template not found. Please select another template.');
                 }
             }
 
