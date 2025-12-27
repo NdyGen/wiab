@@ -205,10 +205,18 @@ Be thorough, specific, and practical. Consider the Homey app ecosystem constrain
  * Extracts suggested labels from the evaluation
  */
 function extractLabels(evaluation) {
-  const labelMatch = evaluation.match(/\*\*Suggested Labels:\*\* `\[(.*?)\]`/);
+  // Try format: **Suggested Labels:** `[label1, label2]`
+  let labelMatch = evaluation.match(/\*\*Suggested Labels:\*\* `\[(.*?)\]`/);
   if (labelMatch) {
     return labelMatch[1].split(',').map(label => label.trim());
   }
+
+  // Try format: **Suggested Labels:** `label1, label2, label3`
+  labelMatch = evaluation.match(/\*\*Suggested Labels:\*\* `([^`]+)`/);
+  if (labelMatch) {
+    return labelMatch[1].split(',').map(label => label.trim());
+  }
+
   return [];
 }
 
