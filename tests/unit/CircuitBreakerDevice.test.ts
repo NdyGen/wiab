@@ -430,39 +430,55 @@ describe('CircuitBreakerDevice', () => {
       });
     });
 
-    it('should cascade OFF state to all descendants', async () => {
+    it('should cascade OFF state to all descendants (fire-and-forget)', async () => {
       mockCascadeEngine.cascadeStateChange.mockResolvedValue({
         success: 3,
         failed: 0,
         errors: [],
       });
 
+      // Capability listener returns immediately without waiting for cascade
       await capabilityListener(false);
 
+      // Capability listener should log that cascade started
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Starting background cascade: OFF state to descendants')
+      );
+
+      // Cascade hasn't completed yet (fire-and-forget)
       expect(mockCascadeEngine.cascadeStateChange).toHaveBeenCalledWith('test-breaker-uuid', false);
 
-      expect(device.log).toHaveBeenCalledWith(
-        expect.stringContaining('Cascading OFF state to descendants')
-      );
+      // Advance timers to allow background cascade to complete
+      await jest.advanceTimersByTimeAsync(10);
+
+      // Now cascade completion should be logged
       expect(device.log).toHaveBeenCalledWith(
         expect.stringContaining('Cascade complete: 3 succeeded, 0 failed')
       );
     });
 
-    it('should cascade ON state to all descendants', async () => {
+    it('should cascade ON state to all descendants (fire-and-forget)', async () => {
       mockCascadeEngine.cascadeStateChange.mockResolvedValue({
         success: 3,
         failed: 0,
         errors: [],
       });
 
+      // Capability listener returns immediately without waiting for cascade
       await capabilityListener(true);
 
+      // Capability listener should log that cascade started
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Starting background cascade: ON state to descendants')
+      );
+
+      // Cascade hasn't completed yet (fire-and-forget)
       expect(mockCascadeEngine.cascadeStateChange).toHaveBeenCalledWith('test-breaker-uuid', true);
 
-      expect(device.log).toHaveBeenCalledWith(
-        expect.stringContaining('Cascading ON state to descendants')
-      );
+      // Advance timers to allow background cascade to complete
+      await jest.advanceTimersByTimeAsync(10);
+
+      // Now cascade completion should be logged
       expect(device.log).toHaveBeenCalledWith(
         expect.stringContaining('Cascade complete: 3 succeeded, 0 failed')
       );
@@ -493,6 +509,9 @@ describe('CircuitBreakerDevice', () => {
 
       await capabilityListener(false);
 
+      // Advance timers to allow background cascade to complete
+      await jest.advanceTimersByTimeAsync(10);
+
       expect(device.error).toHaveBeenCalledWith(
         expect.stringContaining(`[${CircuitBreakerErrorId.CASCADE_FAILED}]`),
         expect.arrayContaining([
@@ -502,6 +521,37 @@ describe('CircuitBreakerDevice', () => {
           }),
         ])
       );
+    });
+
+    it('should return immediately from capability listener without waiting for cascade', async () => {
+      // This test verifies the fix for issue #92: capability listener returns quickly
+      // to prevent Homey's 10-second timeout, even with large hierarchies
+
+      // Mock a slow cascade that would normally cause timeout
+      mockCascadeEngine.cascadeStateChange.mockImplementation(() => {
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve({ success: 100, failed: 0, errors: [] });
+          }, 15000); // 15 seconds - would exceed Homey's 10-second timeout
+        });
+      });
+
+      // Measure how long the capability listener takes
+      const startTime = Date.now();
+      await capabilityListener(false);
+      const duration = Date.now() - startTime;
+
+      // Capability listener should return immediately (< 100ms)
+      // This proves it doesn't await the cascade
+      expect(duration).toBeLessThan(100);
+
+      // Verify cascade was started
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Starting background cascade: OFF state to descendants')
+      );
+
+      // Cascade is still running in background (hasn't completed yet)
+      expect(mockCascadeEngine.cascadeStateChange).toHaveBeenCalled();
     });
 
     it('should handle flow card trigger errors gracefully', async () => {
@@ -524,7 +574,7 @@ describe('CircuitBreakerDevice', () => {
       );
     });
 
-    it('should throw cascade engine failures after attempting to warn user', async () => {
+    it('should handle cascade engine failures in background and set warning', async () => {
       mockCascadeEngine.cascadeStateChange.mockRejectedValue(
         new Error('Cascade engine failure')
       );
@@ -532,22 +582,24 @@ describe('CircuitBreakerDevice', () => {
       // Mock setWarning to avoid errors
       device.setWarning = jest.fn().mockResolvedValue(undefined);
 
-      // Act & Assert - State change should now throw cascade errors
-      // This prevents silent failures where cascade completely fails
-      // The error is wrapped by the outer catch with a user-friendly message
-      await expect(capabilityListener(false)).rejects.toThrow('Failed to update circuit breaker state');
+      // Act - Capability listener returns immediately without throwing (fire-and-forget)
+      await capabilityListener(false);
 
-      // Cascade error should be logged with new error ID
+      // Capability listener should not throw - cascade runs in background
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Starting background cascade: OFF state to descendants')
+      );
+
+      // Advance timers to allow background cascade to complete
+      await jest.advanceTimersByTimeAsync(10);
+
+      // Cascade error should be logged with error ID
       expect(device.error).toHaveBeenCalledWith(
         `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Cascade engine threw exception:`,
         expect.any(Error)
       );
-      expect(device.error).toHaveBeenCalledWith(
-        `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Error details:`,
-        expect.any(String)
-      );
 
-      // Warning should be set to alert user (before re-throwing)
+      // Warning should be set to alert user
       expect(device.setWarning).toHaveBeenCalledWith(
         expect.stringContaining('Circuit breaker cascade failed')
       );
@@ -616,8 +668,11 @@ describe('CircuitBreakerDevice', () => {
       // Mock setWarning
       device.setWarning = jest.fn().mockResolvedValue(undefined);
 
-      // Act - Turn device OFF to trigger cascade
+      // Act - Turn device OFF to trigger cascade (fire-and-forget)
       await capabilityListener(false);
+
+      // Advance timers to allow background cascade to complete
+      await jest.advanceTimersByTimeAsync(10);
 
       // Assert - Should set warning for ANY failure (threshold removed)
       expect(device.setWarning).toHaveBeenCalledWith(
@@ -625,7 +680,7 @@ describe('CircuitBreakerDevice', () => {
       );
     });
 
-    it('should throw error when setWarning fails after cascade failure', async () => {
+    it('should log error when setWarning fails after cascade failure (fire-and-forget)', async () => {
       // Arrange - Set up mock to return failures
       mockCascadeEngine.cascadeStateChange.mockResolvedValue({
         success: 0,
@@ -636,10 +691,16 @@ describe('CircuitBreakerDevice', () => {
       // Make setWarning fail with "not supported" error
       device.setWarning = jest.fn().mockRejectedValue(new Error('setWarning not supported'));
 
-      // Act & Assert - Should throw when warning fails after cascade failure
-      // This prevents silent failures where cascade errors are hidden
-      // The error is wrapped by the outer catch with a user-friendly message
-      await expect(capabilityListener(false)).rejects.toThrow('Failed to update circuit breaker state');
+      // Act - Capability listener returns immediately without throwing (fire-and-forget)
+      await capabilityListener(false);
+
+      // Capability listener should not throw - cascade runs in background
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Starting background cascade: OFF state to descendants')
+      );
+
+      // Advance timers to allow background cascade to complete
+      await jest.advanceTimersByTimeAsync(10);
 
       // Should attempt setWarning and log error with error ID
       expect(device.setWarning).toHaveBeenCalled();
@@ -665,8 +726,11 @@ describe('CircuitBreakerDevice', () => {
       // Mock unsetWarning
       device.unsetWarning = jest.fn().mockResolvedValue(undefined);
 
-      // Act - Turn device OFF to trigger successful cascade
+      // Act - Turn device OFF to trigger successful cascade (fire-and-forget)
       await capabilityListener(false);
+
+      // Advance timers to allow background cascade to complete
+      await jest.advanceTimersByTimeAsync(10);
 
       // Assert - Should clear warning on success
       expect(device.unsetWarning).toHaveBeenCalled();
