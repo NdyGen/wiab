@@ -40,5 +40,8 @@
   },
   "1.2.2": {
     "en": "Room State Manager pairing flow simplified: now select an existing WIAB occupancy device instead of configuring individual sensors. Room State Manager monitors WIAB device occupancy changes with configurable timer-based state transitions."
+  },
+  "1.2.3": {
+    "en": "added circuit breaker device. code cleanup and small refactoring."
   }
 }
