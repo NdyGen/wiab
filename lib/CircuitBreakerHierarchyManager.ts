@@ -123,13 +123,8 @@ export class CircuitBreakerHierarchyManager {
       const allDevices = await this.homeyApi.devices.getDevices();
       const circuitBreakers: CircuitBreakerDevice[] = [];
 
-      this.logger.log(`[HIERARCHY] Total devices from HomeyAPI: ${Object.keys(allDevices).length}`);
-
       for (const [deviceId, device] of Object.entries(allDevices)) {
         const cbDevice = device as CircuitBreakerDevice;
-
-        // Log device details for debugging
-        this.logger.log(`[HIERARCHY] Device ${deviceId}: name="${cbDevice.name}", driverId="${cbDevice.driverId}", driver.id="${(cbDevice as any).driver?.id}"`);
 
         // Filter by driver ID (match both short form and fully qualified form)
         // HomeyAPI returns: "homey:app:net.dongen.wiab:wiab-circuit-breaker"
@@ -145,11 +140,9 @@ export class CircuitBreakerHierarchyManager {
             (cbDevice as { id: string }).id = deviceId;
           }
           circuitBreakers.push(cbDevice);
-          this.logger.log(`[HIERARCHY] ✓ Matched circuit breaker: ${deviceId}`);
         }
       }
 
-      this.logger.log(`[HIERARCHY] Found ${circuitBreakers.length} circuit breakers out of ${Object.keys(allDevices).length} total devices`);
       return circuitBreakers;
     } catch (error) {
       // Re-throw errors that already have proper error reporting
@@ -207,10 +200,6 @@ export class CircuitBreakerHierarchyManager {
           children.push(device.id);
         }
       }
-
-      this.logger.log(
-        `[HIERARCHY] Found ${children.length} children for parent ${parentId}`
-      );
 
       return children;
     } catch (error) {
@@ -510,7 +499,6 @@ export class CircuitBreakerHierarchyManager {
         }
       }
 
-      this.logger.log(`[HIERARCHY] Device ${deviceId} not found or not a circuit breaker`);
       return null;
     } catch (error) {
       // Re-throw errors that already have proper error reporting

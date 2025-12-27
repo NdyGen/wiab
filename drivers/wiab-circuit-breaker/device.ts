@@ -95,7 +95,6 @@ class CircuitBreakerDevice extends Homey.Device {
 
       // Register capability listener for onoff
       this.registerCapabilityListener('onoff', async (value: boolean) => {
-        this.log(`[CAPABILITY LISTENER] onoff capability changed to ${value}`);
         await this.onCapabilityOnoff(value);
       });
 
@@ -123,7 +122,6 @@ class CircuitBreakerDevice extends Homey.Device {
    */
   private async onCapabilityOnoff(value: boolean): Promise<void> {
     const deviceId = this.getData().id;
-    this.log(`[CAPABILITY LISTENER] onoff capability changed to ${value}`);
     this.log(`Circuit breaker ${deviceId} state changing to ${value ? 'ON' : 'OFF'}`);
 
     try {

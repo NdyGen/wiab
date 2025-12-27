@@ -92,6 +92,18 @@ describe('CircuitBreakerDevice', () => {
       getDevices: jest.fn(() => []),
     };
     (device as unknown as { driver: unknown }).driver = mockDriver;
+
+    // Add the device itself to the HomeyAPI devices map with data property
+    // This is needed for Homey device ID lookup during initialization
+    const mockDeviceInApi = createMockDevice({
+      id: 'test-breaker-uuid',
+      name: 'Test Circuit Breaker',
+      capabilities: ['onoff'],
+      settings: { parentId: null },
+    });
+    mockDeviceInApi.driverId = 'wiab-circuit-breaker';
+    (mockDeviceInApi as { data?: { id?: string } }).data = { id: 'test-breaker-1' };
+    mockHomeyApi.devices._addDevice('test-breaker-uuid', mockDeviceInApi);
   });
 
   afterEach(() => {
@@ -414,7 +426,7 @@ describe('CircuitBreakerDevice', () => {
 
       await capabilityListener(false);
 
-      expect(mockCascadeEngine.cascadeStateChange).toHaveBeenCalledWith('test-breaker-1', false);
+      expect(mockCascadeEngine.cascadeStateChange).toHaveBeenCalledWith('test-breaker-uuid', false);
 
       expect(device.log).toHaveBeenCalledWith(
         expect.stringContaining('Cascading OFF state to descendants')
@@ -424,10 +436,23 @@ describe('CircuitBreakerDevice', () => {
       );
     });
 
-    it('should NOT cascade when turning ON', async () => {
+    it('should cascade ON state to all descendants', async () => {
+      mockCascadeEngine.cascadeStateChange.mockResolvedValue({
+        success: 3,
+        failed: 0,
+        errors: [],
+      });
+
       await capabilityListener(true);
 
-      expect(mockCascadeEngine.cascadeStateChange).not.toHaveBeenCalled();
+      expect(mockCascadeEngine.cascadeStateChange).toHaveBeenCalledWith('test-breaker-uuid', true);
+
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Cascading ON state to descendants')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Cascade complete: 3 succeeded, 0 failed')
+      );
     });
 
     it('should trigger flow cards on state change', async () => {
@@ -482,16 +507,23 @@ describe('CircuitBreakerDevice', () => {
       );
     });
 
-    it('should throw when cascade engine fails', async () => {
+    it('should log cascade engine failures without throwing', async () => {
       mockCascadeEngine.cascadeStateChange.mockRejectedValue(
         new Error('Cascade engine failure')
       );
 
-      await expect(
-        (device as unknown as { onCapabilityOnoff: (value: boolean) => Promise<void> }).onCapabilityOnoff(false)
-      ).rejects.toThrow();
+      // State change should complete successfully even if cascade fails
+      await capabilityListener(false);
 
-      expect(device.error).toHaveBeenCalled();
+      // Cascade error should be logged
+      expect(device.error).toHaveBeenCalledWith(
+        '[CASCADE ERROR] Failed to cascade state change:',
+        expect.any(Error)
+      );
+      expect(device.error).toHaveBeenCalledWith(
+        '[CASCADE ERROR] Error details:',
+        expect.any(String)
+      );
     });
 
     it('should trigger turned_off flow card when turning off', async () => {

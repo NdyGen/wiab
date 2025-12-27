@@ -109,10 +109,6 @@ export class CircuitBreakerCascadeEngine {
    * ```
    */
   async cascadeStateChange(deviceId: string, newState: boolean): Promise<CascadeResult> {
-    this.logger.log(
-      `[CASCADE] Starting cascade from ${deviceId} with state=${newState}`
-    );
-
     // Validate preconditions
     if (!this.hierarchyManager) {
       throw new Error('HierarchyManager not initialized');
@@ -129,13 +125,8 @@ export class CircuitBreakerCascadeEngine {
       const descendants = await this.hierarchyManager.getDescendants(deviceId);
 
       if (descendants.length === 0) {
-        this.logger.log(`[CASCADE] No descendants found for ${deviceId}`);
         return result;
       }
-
-      this.logger.log(
-        `[CASCADE] Found ${descendants.length} descendants to update: ${descendants.join(', ')}`
-      );
 
       // Update descendants sequentially
       for (const descendantId of descendants) {
@@ -150,7 +141,7 @@ export class CircuitBreakerCascadeEngine {
       }
 
       this.logger.log(
-        `[CASCADE] Cascade complete: ${result.success} succeeded, ${result.failed} failed`
+        `Cascade complete: ${result.success} succeeded, ${result.failed} failed`
       );
     } catch (error) {
       const errorReporter = new ErrorReporter(this.logger);
@@ -186,8 +177,6 @@ export class CircuitBreakerCascadeEngine {
    */
   async updateDeviceState(deviceId: string, newState: boolean): Promise<DeviceCascadeResult> {
     try {
-      this.logger.log(`[CASCADE] Updating device ${deviceId} to state=${newState}`);
-
       // Get device from HomeyAPI
       const allDevices = await this.homeyApi.devices.getDevices();
       const device = allDevices[deviceId] as DeviceWithCapabilityUpdate;
@@ -222,10 +211,6 @@ export class CircuitBreakerCascadeEngine {
           error,
         };
       }
-
-      this.logger.log(
-        `[CASCADE] Successfully updated device ${device.name} (${deviceId}) to ${newState}`
-      );
 
       return {
         deviceId,
@@ -266,10 +251,6 @@ export class CircuitBreakerCascadeEngine {
     deviceIds: string[],
     newState: boolean
   ): Promise<CascadeResult> {
-    this.logger.log(
-      `[CASCADE] Batch updating ${deviceIds.length} devices to state=${newState}`
-    );
-
     const result: CascadeResult = {
       success: 0,
       failed: 0,
@@ -302,10 +283,6 @@ export class CircuitBreakerCascadeEngine {
         );
       }
     }
-
-    this.logger.log(
-      `[CASCADE] Batch update complete: ${result.success} succeeded, ${result.failed} failed`
-    );
 
     return result;
   }
