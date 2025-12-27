@@ -227,9 +227,32 @@ export class CircuitBreakerCascadeEngine {
         success: true,
       };
     } catch (error) {
-      // All errors are treated as device update failures
-      // This includes device not found, capability issues, network errors, etc.
-      // The cascade operation continues with other devices regardless of individual failures
+      // Distinguish between system-level failures and device-level failures
+      // System failures (HomeyAPI unavailable) should propagate up to abort cascade
+      // Device failures (setCapabilityValue errors) are logged and cascade continues
+
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase();
+
+        // Check for system-level failures that indicate HomeyAPI.devices.getDevices() failed
+        // These are failures in retrieving the device list, not failures updating a specific device
+        // Pattern: Look for API-level errors that would affect ALL devices, not just one
+        if (
+          errorMsg.includes('homeyapi') ||
+          errorMsg.includes('api.devices.getdevices') ||
+          errorMsg.includes('econnrefused') ||
+          errorMsg.includes('enotfound') ||
+          (errorMsg.includes('getdevices') && errorMsg.includes('failed'))
+        ) {
+          // System-level error - throw to abort cascade
+          throw new Error(
+            `Cannot update devices: HomeyAPI unavailable (${error.message}). Wait and try again.`
+          );
+        }
+      }
+
+      // Device-level error - log and return failure result so cascade continues
+      // This includes setCapabilityValue failures, capability not supported, device offline, etc.
       this.logger.error(
         `[${CircuitBreakerErrorId.CHILD_UPDATE_FAILED}] Device update failed:`,
         error

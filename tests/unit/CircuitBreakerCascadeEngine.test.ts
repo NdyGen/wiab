@@ -526,6 +526,30 @@ describe('CircuitBreakerCascadeEngine', () => {
       );
     });
 
+    it('should throw on system-level errors (HomeyAPI unavailable)', async () => {
+      // Arrange - Simulate HomeyAPI network error during getDevices
+      (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
+        new Error('ECONNREFUSED: Connection refused to HomeyAPI')
+      );
+
+      // Act & Assert - Should throw instead of returning failure result
+      await expect(engine.updateDeviceState('device-1', false)).rejects.toThrow(
+        'Cannot update devices: HomeyAPI unavailable'
+      );
+    });
+
+    it('should throw when getDevices fails', async () => {
+      // Arrange - Simulate getDevices failure
+      (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
+        new Error('api.devices.getDevices failed: timeout')
+      );
+
+      // Act & Assert - Should throw to abort cascade
+      await expect(engine.updateDeviceState('device-1', false)).rejects.toThrow(
+        'Cannot update devices: HomeyAPI unavailable'
+      );
+    });
+
     it('should set notFound flag when device does not exist', async () => {
       // Act - Try to update non-existent device
       const result = await engine.updateDeviceState('non-existent-device', false);
