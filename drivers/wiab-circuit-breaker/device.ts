@@ -229,8 +229,9 @@ class CircuitBreakerDevice extends Homey.Device {
             // Use ErrorHandler for robust error classification instead of string matching
             if (ErrorHandler.isWarningApiError(warningError)) {
               // Expected warning API failure - log but don't escalate
+              // User will see stale warning but cascade actually succeeded
               this.error(
-                `[${CircuitBreakerErrorId.WARNING_CLEAR_FAILED}] Warning API unavailable:`,
+                `[${CircuitBreakerErrorId.WARNING_CLEAR_FAILED}] Warning API unavailable - cannot clear stale warning:`,
                 warningError
               );
             } else {
@@ -238,6 +239,11 @@ class CircuitBreakerDevice extends Homey.Device {
               this.error(
                 `[${CircuitBreakerErrorId.WARNING_CLEAR_FAILED}] Unexpected error in warning clear operation:`,
                 warningError
+              );
+              // Throw to notify user that warning state is inconsistent
+              // This prevents silent failure where stale warnings persist indefinitely
+              throw new Error(
+                'Cascade succeeded but warning system failed. Device may show incorrect warning. Restart the app if warning persists.'
               );
             }
           }
@@ -354,6 +360,11 @@ class CircuitBreakerDevice extends Homey.Device {
           );
         } catch (warningError) {
           this.error('Failed to set warning after flow card error:', warningError);
+          // If we can't warn the user via device warning, throw an error they'll see in flow execution
+          // This prevents silent failure where user never learns automations are broken
+          throw new Error(
+            'Flow card trigger failed and warning system is unavailable. Flow automations may not be working. Check app status or restart Homey.'
+          );
         }
       }
     }
