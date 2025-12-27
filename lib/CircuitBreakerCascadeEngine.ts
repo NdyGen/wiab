@@ -150,7 +150,7 @@ export class CircuitBreakerCascadeEngine {
     } catch (error) {
       // Cascade operation threw unexpected exception during getDescendants
       // This is different from individual device update failures (tracked in result.errors)
-      // Throw HierarchyError with proper context (caller will log if needed)
+      // Throw HierarchyError with proper context - caller will log this error
       throw new HierarchyError(
         `Cascade engine failed during getDescendants: ${error instanceof Error ? error.message : String(error)}`,
         CircuitBreakerErrorId.CASCADE_ENGINE_FAILED,
@@ -230,13 +230,16 @@ export class CircuitBreakerCascadeEngine {
       // Distinguish between system-level failures and device-level failures
       // System failures (HomeyAPI unavailable) should propagate up to abort cascade
       // Device failures (setCapabilityValue errors) are logged and cascade continues
+      //
+      // NOTE: Uses error message pattern matching to classify errors. This is pragmatic
+      // but could misclassify errors if messages don't match expected patterns.
 
       if (error instanceof Error) {
         const errorMsg = error.message.toLowerCase();
 
         // Check for system-level failures that indicate HomeyAPI.devices.getDevices() failed
         // These are failures in retrieving the device list, not failures updating a specific device
-        // Pattern: Look for API-level errors that would affect ALL devices, not just one
+        // Matches common HomeyAPI and network error patterns
         if (
           errorMsg.includes('homeyapi') ||
           errorMsg.includes('api.devices.getdevices') ||

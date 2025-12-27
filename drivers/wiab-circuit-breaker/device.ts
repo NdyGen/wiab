@@ -479,8 +479,12 @@ class CircuitBreakerDevice extends Homey.Device {
           // Also try to set device warning for visibility
           try {
             await this.setWarning(message);
-          } catch {
-            // Warning failed but we're already throwing
+          } catch (warningError) {
+            // Log warning failure for diagnostics (deletion already failing)
+            this.error(
+              `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Could not set warning during deletion failure:`,
+              warningError
+            );
           }
 
           throw new Error(message);
