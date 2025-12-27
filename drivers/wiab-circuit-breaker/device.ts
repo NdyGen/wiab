@@ -184,12 +184,15 @@ class CircuitBreakerDevice extends Homey.Device {
             result.errors
           );
 
+          // CRITICAL: User MUST be informed even if warning API fails
           // Warn user when any child circuit breaker fails to update
           const totalDevices = result.success + result.failed;
+          let userNotified = false;
           try {
             await this.setWarning(
               `${result.failed} of ${totalDevices} child circuit breaker(s) failed to update. Some flows may still execute.`
             );
+            userNotified = true;
           } catch (warningError) {
             // Distinguish between expected warning API failures vs programming errors
             // Use ErrorHandler for robust error classification instead of string matching
@@ -206,6 +209,13 @@ class CircuitBreakerDevice extends Homey.Device {
                 warningError
               );
             }
+          }
+
+          // If we couldn't warn the user, throw an error they'll see in flow execution
+          if (!userNotified) {
+            throw new Error(
+              `Circuit breaker state changed but ${result.failed} of ${totalDevices} child devices failed to update. Check device warnings.`
+            );
           }
         } else {
           // Clear warning if cascade succeeds
@@ -259,6 +269,10 @@ class CircuitBreakerDevice extends Homey.Device {
               );
             }
           }
+
+          // CRITICAL: Re-throw cascade error so user sees it in UI/flow execution
+          // This prevents silent failures where cascade completely fails but execution continues
+          throw cascadeError;
         }
       }
 
@@ -329,6 +343,15 @@ class CircuitBreakerDevice extends Homey.Device {
           `[${CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED}] Unexpected error in flow card trigger:`,
           error
         );
+        // CRITICAL: Notify user of unexpected flow card failures
+        // This ensures users know their automations may not be working
+        try {
+          await this.setWarning(
+            'Flow automation triggers may not be working. Check app logs or restart the app.'
+          );
+        } catch (warningError) {
+          this.error('Failed to set warning after flow card error:', warningError);
+        }
       }
     }
   }
@@ -425,16 +448,38 @@ class CircuitBreakerDevice extends Homey.Device {
 
         const failures = orphanResults.filter(r => r.status === 'rejected');
         if (failures.length > 0) {
+          // Extract specific failure reasons for better diagnostics
+          const failureReasons = failures.map((f, idx) => {
+            if (f.status === 'rejected') {
+              return `Child ${idx}: ${f.reason?.message || 'Unknown error'}`;
+            }
+            return '';
+          }).filter(Boolean).join('; ');
+
           const errorReporter = new ErrorReporter({
             log: this.log.bind(this),
             error: this.error.bind(this),
           });
+
+          this.error(
+            `[${CircuitBreakerErrorId.ORPHAN_CHILDREN_FAILED}] Orphaning failures:`,
+            failureReasons
+          );
+
           const message = errorReporter.reportAndGetMessage({
             errorId: CircuitBreakerErrorId.ORPHAN_CHILDREN_FAILED,
             severity: ErrorSeverity.HIGH,
-            userMessage: `Failed to orphan ${failures.length} child circuit breakers. Deletion cannot proceed. Check device logs.`,
-            technicalMessage: `Orphaning failed for ${failures.length} devices`,
+            userMessage: `Cannot delete: ${failures.length} child circuit breaker(s) failed to orphan. Delete all child devices first, or contact support if this persists.`,
+            technicalMessage: `Orphaning failed: ${failureReasons}`,
           });
+
+          // Also try to set device warning for visibility
+          try {
+            await this.setWarning(message);
+          } catch {
+            // Warning failed but we're already throwing
+          }
+
           throw new Error(message);
         }
 
