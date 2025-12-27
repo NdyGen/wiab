@@ -381,8 +381,25 @@ class CircuitBreakerDriver extends Homey.Driver {
       const zone = await homeyApi.zones.getZone({ id: device.zone });
       return zone.name;
     } catch (error) {
-      this.log(`Could not retrieve zone for device ${deviceId}:`, error);
-      return null;
+      // Distinguish between expected (no zone) vs unexpected (API error) failures
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase();
+        if (errorMsg.includes('not found') || errorMsg.includes('zone') && errorMsg.includes('null')) {
+          // Expected: device has no zone assigned
+          this.log(`Device ${deviceId} has no zone assigned`);
+          return null;
+        }
+
+        // Unexpected error - log with more visibility
+        this.error(
+          `Unexpected error retrieving zone for ${deviceId}:`,
+          error
+        );
+      } else {
+        this.error(`Non-Error thrown in getDeviceZoneName for ${deviceId}:`, error);
+      }
+
+      return null; // Graceful degradation for UI
     }
   }
 }

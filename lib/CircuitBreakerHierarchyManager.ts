@@ -108,18 +108,18 @@ export class CircuitBreakerHierarchyManager {
    * ```
    */
   async getAllCircuitBreakers(): Promise<CircuitBreakerDevice[]> {
-    try {
-      // Validate preconditions inside try block for proper error reporting
-      if (!this.homeyApi || !this.homeyApi.devices) {
-        const errorReporter = new ErrorReporter(this.logger);
-        throw new Error(errorReporter.reportAndGetMessage({
-          errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
-          severity: ErrorSeverity.CRITICAL,
-          userMessage: 'The app is still initializing. Wait and try again.',
-          technicalMessage: 'HomeyAPI not properly initialized',
-        }));
-      }
+    // Validate preconditions BEFORE try block for clearer error flow
+    if (!this.homeyApi || !this.homeyApi.devices) {
+      const errorReporter = new ErrorReporter(this.logger);
+      throw new Error(errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'The app is still initializing. Wait and try again.',
+        technicalMessage: 'HomeyAPI not properly initialized',
+      }));
+    }
 
+    try {
       const allDevices = await this.homeyApi.devices.getDevices();
       const circuitBreakers: CircuitBreakerDevice[] = [];
 
@@ -145,11 +145,7 @@ export class CircuitBreakerHierarchyManager {
 
       return circuitBreakers;
     } catch (error) {
-      // Re-throw errors that already have proper error reporting
-      if (error instanceof Error && error.message.includes('The app is still initializing')) {
-        throw error;
-      }
-
+      // Only operational errors are caught here (precondition failures throw before try block)
       const errorReporter = new ErrorReporter(this.logger);
       const message = errorReporter.reportAndGetMessage({
         errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,

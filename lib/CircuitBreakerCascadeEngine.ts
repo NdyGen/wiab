@@ -22,8 +22,6 @@
 import { HomeyAPI, CascadeResult, DeviceCascadeResult } from './types';
 import { CircuitBreakerHierarchyManager } from './CircuitBreakerHierarchyManager';
 import { CircuitBreakerErrorId } from '../constants/errorIds';
-import { ErrorReporter } from './ErrorReporter';
-import { ErrorSeverity } from './ErrorTypes';
 import { DeviceNotFoundError, HierarchyError } from './CircuitBreakerErrors';
 
 /**
@@ -152,17 +150,9 @@ export class CircuitBreakerCascadeEngine {
     } catch (error) {
       // Cascade operation threw unexpected exception during getDescendants
       // This is different from individual device update failures (tracked in result.errors)
-      const errorReporter = new ErrorReporter(this.logger);
-      errorReporter.reportAndGetMessage({
-        errorId: CircuitBreakerErrorId.CASCADE_ENGINE_FAILED,
-        severity: ErrorSeverity.HIGH,
-        userMessage: 'Failed to cascade state change. Wait a moment and try again. If the problem persists, restart the app.',
-        technicalMessage: error instanceof Error ? error.message : 'Unknown error',
-      });
-
-      // Throw HierarchyError with proper context
+      // Throw HierarchyError with proper context (caller will log if needed)
       throw new HierarchyError(
-        'Cascade engine failed during getDescendants',
+        `Cascade engine failed during getDescendants: ${error instanceof Error ? error.message : String(error)}`,
         CircuitBreakerErrorId.CASCADE_ENGINE_FAILED,
         deviceId,
         'getDescendants',

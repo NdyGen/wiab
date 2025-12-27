@@ -227,10 +227,11 @@ describe('CircuitBreakerCascadeEngine', () => {
       );
 
       // Act & Assert
+      // The cascade engine now throws HierarchyError without logging (to avoid double logging)
+      // The caller is responsible for logging the error
       await expect(engine.cascadeStateChange('parent', false)).rejects.toThrow(
         'Cascade engine failed during getDescendants'
       );
-      expect(homey.error).toHaveBeenCalled();
     });
 
     it('should propagate hierarchy manager errors with user-friendly messages', async () => {
@@ -254,10 +255,8 @@ describe('CircuitBreakerCascadeEngine', () => {
         'Cascade engine failed during getDescendants'
       );
 
-      // Verify technical error was logged with error ID
-      expect(homey.error).toHaveBeenCalledWith(
-        expect.stringContaining('[CIRCUIT_BREAKER_020]')
-      );
+      // The cascade engine no longer logs the error (to avoid double logging)
+      // The caller is responsible for logging the HierarchyError
     });
 
     it('should collect and report all errors in batch updates', async () => {
