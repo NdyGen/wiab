@@ -19,8 +19,8 @@ interface WIABApp extends Homey.App {
  * Circuit Breaker Device - Hierarchical flow control for Homey automations
  *
  * This device implements a virtual circuit breaker with parent-child hierarchy.
- * When a circuit breaker is turned OFF, it blocks flows and cascades the OFF state
- * to all descendant breakers. Children can still be controlled independently.
+ * State changes (both ON and OFF) cascade from parent to all descendants.
+ * Children can still be controlled independently.
  *
  * Key Features:
  * - ON/OFF state with capability 'onoff'
@@ -36,8 +36,8 @@ interface WIABApp extends Homey.App {
  * 3. onDeleted() - Orphan all children (async fire-and-forget)
  *
  * State Propagation:
- * - When parent turns OFF → all descendants turn OFF (cascade)
- * - When parent turns ON → all descendants turn ON (cascade)
+ * - ALL state changes (both ON and OFF) cascade from parent to descendants
+ * - Propagation is bidirectional: ON→ON and OFF→OFF
  * - State changes propagate recursively through entire descendant tree
  */
 class CircuitBreakerDevice extends Homey.Device {
@@ -86,9 +86,12 @@ class CircuitBreakerDevice extends Homey.Device {
       //
       // ⚠️ Performance Note: With N circuit breaker devices, each device's O(n)
       // lookup results in O(n²) total startup cost when all devices initialize
-      // simultaneously (e.g., app start, Homey reboot). For typical deployments
-      // with <100 circuit breakers, this is acceptable. For larger deployments,
-      // consider caching UUID mappings at the app level.
+      // simultaneously (e.g., app start, Homey reboot).
+      //
+      // Tested acceptable for N < 100 (typical home automation deployment).
+      // For N ≥ 100, consider implementing app-level UUID cache to reduce
+      // initialization to O(n) total. This is accepted technical debt for
+      // current use cases but should be addressed if deployments exceed 100 devices.
       //
       // Example mapping:
       //   Custom data.id: "circuit-breaker-1234567890"  (from pairing)

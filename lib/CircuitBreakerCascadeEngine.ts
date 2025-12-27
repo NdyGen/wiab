@@ -93,12 +93,12 @@ export class CircuitBreakerCascadeEngine {
    * Cascades a state change to all descendants of a device.
    *
    * Performs depth-first traversal to update all children, grandchildren, etc.
-   * Updates are performed sequentially using await in a for loop to process
-   * each descendant's async operation one at a time. This ensures proper
-   * error handling and result tracking for each device.
    *
-   * Note: "Sequential" refers to the order of processing (one after another),
-   * not the lack of async/await. Each update is still an async operation.
+   * Updates descendants one-at-a-time in series (not parallel).
+   * Uses await in a for loop to process each device before moving to the next.
+   * This ensures proper error handling and result tracking for each device,
+   * preventing race conditions and allowing the cascade to continue even if
+   * individual devices fail.
    *
    * Continues processing all descendants even if individual updates fail.
    *
