@@ -13,7 +13,7 @@
 
 const Anthropic = require('@anthropic-ai/sdk');
 const fs = require('fs');
-const https = require('https');
+const { execSync } = require('child_process');
 
 // Configuration
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -49,89 +49,41 @@ const anthropic = new Anthropic({
 });
 
 /**
- * Posts a comment to the GitHub issue
+ * Posts a comment to the GitHub issue using gh CLI
  */
 async function postComment(body) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify({ body });
+  // Write comment body to temp file to avoid command-line escaping issues
+  const tempFile = `/tmp/evaluation-${ISSUE_NUMBER}.md`;
+  fs.writeFileSync(tempFile, body, 'utf-8');
 
-    const options = {
-      hostname: 'api.github.com',
-      path: `/repos/${REPOSITORY}/issues/${ISSUE_NUMBER}/comments`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-        'Content-Length': data.length,
-        'User-Agent': 'WIAB-Issue-Evaluator',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let responseBody = '';
-
-      res.on('data', (chunk) => {
-        responseBody += chunk;
-      });
-
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(JSON.parse(responseBody));
-        } else {
-          reject(new Error(`GitHub API error: ${res.statusCode} - ${responseBody}`));
-        }
-      });
+  try {
+    execSync(`gh issue comment ${ISSUE_NUMBER} --body-file ${tempFile}`, {
+      env: { ...process.env, GH_TOKEN: GITHUB_TOKEN },
+      stdio: 'inherit'
     });
-
-    req.on('error', reject);
-    req.write(data);
-    req.end();
-  });
+    console.log('Comment posted successfully');
+  } finally {
+    // Clean up temp file
+    if (fs.existsSync(tempFile)) {
+      fs.unlinkSync(tempFile);
+    }
+  }
 }
 
 /**
- * Adds labels to the GitHub issue
+ * Adds labels to the GitHub issue using gh CLI
  */
 async function addLabels(labels) {
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify({ labels });
+  if (!labels || labels.length === 0) {
+    return;
+  }
 
-    const options = {
-      hostname: 'api.github.com',
-      path: `/repos/${REPOSITORY}/issues/${ISSUE_NUMBER}/labels`,
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-        'Content-Length': data.length,
-        'User-Agent': 'WIAB-Issue-Evaluator',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let responseBody = '';
-
-      res.on('data', (chunk) => {
-        responseBody += chunk;
-      });
-
-      res.on('end', () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(JSON.parse(responseBody));
-        } else {
-          reject(new Error(`GitHub API error: ${res.statusCode} - ${responseBody}`));
-        }
-      });
-    });
-
-    req.on('error', reject);
-    req.write(data);
-    req.end();
+  const labelArgs = labels.map(l => `--add-label "${l}"`).join(' ');
+  execSync(`gh issue edit ${ISSUE_NUMBER} ${labelArgs}`, {
+    env: { ...process.env, GH_TOKEN: GITHUB_TOKEN },
+    stdio: 'inherit'
   });
+  console.log('Labels added successfully');
 }
 
 /**
