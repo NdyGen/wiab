@@ -92,11 +92,15 @@ export class CircuitBreakerCascadeEngine {
    *
    * Performs depth-first traversal to update all children, grandchildren, etc.
    *
-   * Updates descendants one-at-a-time in series (not parallel).
+   * **Sequential Processing Rationale:**
+   * Updates descendants one-at-a-time in series (not parallel) to ensure:
+   * 1. State consistency - child devices see parent state before grandchildren update
+   * 2. Error isolation - one failed device doesn't block others
+   * 3. Resource management - prevents overwhelming HomeyAPI with concurrent writes
+   * 4. Debugging - clear order of operations in logs
+   *
    * Uses await in a for loop to process each device before moving to the next.
-   * This ensures proper error handling and result tracking for each device,
-   * preventing race conditions and allowing the cascade to continue even if
-   * individual devices fail.
+   * Result tracking continues even if individual devices fail (best-effort cascade).
    *
    * Continues processing all descendants even if individual updates fail.
    *

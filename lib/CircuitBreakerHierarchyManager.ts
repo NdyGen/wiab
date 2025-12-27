@@ -94,6 +94,28 @@ export class CircuitBreakerHierarchyManager {
   }
 
   /**
+   * Validates that HomeyAPI is properly initialized.
+   *
+   * Throws a user-friendly error if API is not ready, preventing
+   * operations that would fail with cryptic errors.
+   *
+   * @param errorId - The error ID to use for reporting
+   * @throws Error if HomeyAPI is not properly initialized
+   * @private
+   */
+  private validateApiReady(errorId: string): void {
+    if (!this.homeyApi || !this.homeyApi.devices) {
+      const errorReporter = new ErrorReporter(this.logger);
+      throw new Error(errorReporter.reportAndGetMessage({
+        errorId,
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'The app is still initializing. Wait and try again.',
+        technicalMessage: 'HomeyAPI not properly initialized',
+      }));
+    }
+  }
+
+  /**
    * Gets all circuit breaker devices from HomeyAPI.
    *
    * Filters devices to only include those with the circuit breaker driver ID.
@@ -109,15 +131,7 @@ export class CircuitBreakerHierarchyManager {
    */
   async getAllCircuitBreakers(): Promise<CircuitBreakerDevice[]> {
     // Validate preconditions BEFORE try block for clearer error flow
-    if (!this.homeyApi || !this.homeyApi.devices) {
-      const errorReporter = new ErrorReporter(this.logger);
-      throw new Error(errorReporter.reportAndGetMessage({
-        errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
-        severity: ErrorSeverity.CRITICAL,
-        userMessage: 'The app is still initializing. Wait and try again.',
-        technicalMessage: 'HomeyAPI not properly initialized',
-      }));
-    }
+    this.validateApiReady(CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED);
 
     try {
       const allDevices = await this.homeyApi.devices.getDevices();
@@ -175,15 +189,7 @@ export class CircuitBreakerHierarchyManager {
   async getChildren(parentId: string): Promise<string[]> {
     try {
       // Validate preconditions inside try block for proper error reporting
-      if (!this.homeyApi || !this.homeyApi.devices) {
-        const errorReporter = new ErrorReporter(this.logger);
-        throw new Error(errorReporter.reportAndGetMessage({
-          errorId: CircuitBreakerErrorId.GET_CHILDREN_FAILED,
-          severity: ErrorSeverity.CRITICAL,
-          userMessage: 'The app is still initializing. Wait and try again.',
-          technicalMessage: 'HomeyAPI not properly initialized',
-        }));
-      }
+      this.validateApiReady(CircuitBreakerErrorId.GET_CHILDREN_FAILED);
 
       const allDevices = await this.getAllCircuitBreakers();
       const children: string[] = [];
@@ -234,15 +240,7 @@ export class CircuitBreakerHierarchyManager {
   async getParentChain(deviceId: string): Promise<string[]> {
     try {
       // Validate preconditions inside try block for proper error reporting
-      if (!this.homeyApi || !this.homeyApi.devices) {
-        const errorReporter = new ErrorReporter(this.logger);
-        throw new Error(errorReporter.reportAndGetMessage({
-          errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
-          severity: ErrorSeverity.CRITICAL,
-          userMessage: 'The app is still initializing. Wait and try again.',
-          technicalMessage: 'HomeyAPI not properly initialized',
-        }));
-      }
+      this.validateApiReady(CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED);
 
       const allDevices = await this.getAllCircuitBreakers();
       const deviceMap = this.buildDeviceMap(allDevices);
@@ -333,15 +331,7 @@ export class CircuitBreakerHierarchyManager {
   async wouldCreateCycle(deviceId: string, proposedParentId: string): Promise<boolean> {
     try {
       // Validate preconditions inside try block for proper error reporting
-      if (!this.homeyApi || !this.homeyApi.devices) {
-        const errorReporter = new ErrorReporter(this.logger);
-        throw new Error(errorReporter.reportAndGetMessage({
-          errorId: CircuitBreakerErrorId.PARENT_VALIDATION_FAILED,
-          severity: ErrorSeverity.CRITICAL,
-          userMessage: 'The app is still initializing. Wait and try again.',
-          technicalMessage: 'HomeyAPI not properly initialized',
-        }));
-      }
+      this.validateApiReady(CircuitBreakerErrorId.PARENT_VALIDATION_FAILED);
 
       // Self-parent check
       if (deviceId === proposedParentId) {
@@ -400,15 +390,7 @@ export class CircuitBreakerHierarchyManager {
   async getDescendants(deviceId: string): Promise<string[]> {
     try {
       // Validate preconditions inside try block for proper error reporting
-      if (!this.homeyApi || !this.homeyApi.devices) {
-        const errorReporter = new ErrorReporter(this.logger);
-        throw new Error(errorReporter.reportAndGetMessage({
-          errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
-          severity: ErrorSeverity.CRITICAL,
-          userMessage: 'The app is still initializing. Wait and try again.',
-          technicalMessage: 'HomeyAPI not properly initialized',
-        }));
-      }
+      this.validateApiReady(CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED);
 
       const allDevices = await this.getAllCircuitBreakers();
       const descendants: string[] = [];
@@ -477,15 +459,7 @@ export class CircuitBreakerHierarchyManager {
   async getDeviceById(deviceId: string): Promise<CircuitBreakerDevice | null> {
     try {
       // Validate preconditions inside try block for proper error reporting
-      if (!this.homeyApi || !this.homeyApi.devices) {
-        const errorReporter = new ErrorReporter(this.logger);
-        throw new Error(errorReporter.reportAndGetMessage({
-          errorId: CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED,
-          severity: ErrorSeverity.CRITICAL,
-          userMessage: 'The app is still initializing. Wait and try again.',
-          technicalMessage: 'HomeyAPI not properly initialized',
-        }));
-      }
+      this.validateApiReady(CircuitBreakerErrorId.HIERARCHY_QUERY_FAILED);
 
       const allDevices = await this.getAllCircuitBreakers();
 
