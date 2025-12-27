@@ -77,23 +77,6 @@
             line-height: 1.6;
         }
 
-        .next-button {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background: white;
-            cursor: pointer;
-            font-size: 14px;
-            color: #666;
-            transition: all 0.2s;
-            margin-top: 20px;
-        }
-
-        .next-button:hover {
-            background: #f5f5f5;
-            border-color: #999;
-        }
     </style>
 </head>
 <body>
@@ -128,23 +111,7 @@
         </div>
     </div>
 
-    <button id="nextButton" class="next-button" onclick="handleNextClick(); return false;">
-        Next
-    </button>
-
     <script type="application/javascript">
-        console.log('[GLOBAL] Script execution started');
-
-        function handleNextClick() {
-            console.log('[ONCLICK] Next button onclick fired!');
-            if (typeof window.proceedToNext === 'function') {
-                window.proceedToNext();
-            } else {
-                console.error('[ONCLICK] window.proceedToNext not available');
-                alert('Navigation not initialized. Check console.');
-            }
-        }
-
         (function() {
             'use strict';
 
@@ -159,16 +126,14 @@
 
             var idleTimeoutInput = document.getElementById('idleTimeout');
             var occupiedTimeoutInput = document.getElementById('occupiedTimeout');
-            var nextButton = document.getElementById('nextButton');
 
             console.log('[INIT] Elements found:', {
                 idleTimeoutInput: !!idleTimeoutInput,
-                occupiedTimeoutInput: !!occupiedTimeoutInput,
-                nextButton: !!nextButton
+                occupiedTimeoutInput: !!occupiedTimeoutInput
             });
 
             // Store timer values when changed
-            function updateTimers(callback) {
+            function updateTimers() {
                 var idleTimeout = parseInt(idleTimeoutInput.value) || 0;
                 var occupiedTimeout = parseInt(occupiedTimeoutInput.value) || 0;
 
@@ -183,27 +148,8 @@
                     } else {
                         console.log('[TIMERS] Timer values sent successfully');
                     }
-                    if (callback) callback(err);
                 });
             }
-
-            // Make proceedToNext available globally
-            window.proceedToNext = function() {
-                console.log('[NAV] proceedToNext called');
-                updateTimers(function(err) {
-                    if (err) {
-                        console.error('[NAV] Error sending timers, not proceeding:', err);
-                        return;
-                    }
-                    console.log('[NAV] Calling Homey.nextView()');
-                    try {
-                        Homey.nextView();
-                        console.log('[NAV] Homey.nextView() called successfully');
-                    } catch (error) {
-                        console.error('[NAV] Exception calling Homey.nextView():', error);
-                    }
-                });
-            };
 
             idleTimeoutInput.addEventListener('input', function() {
                 console.log('[INPUT] Idle timeout changed');
@@ -214,16 +160,6 @@
                 console.log('[INPUT] Occupied timeout changed');
                 updateTimers();
             });
-
-            // Also try addEventListener as backup
-            if (nextButton) {
-                nextButton.addEventListener('click', function(e) {
-                    console.log('[LISTENER] Next button addEventListener fired!');
-                    e.preventDefault();
-                    window.proceedToNext();
-                });
-                console.log('[INIT] Click listener attached to button');
-            }
 
             // Send initial values
             console.log('[INIT] Sending initial timer values');

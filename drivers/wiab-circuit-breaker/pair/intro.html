@@ -45,23 +45,6 @@
             color: #1976d2;
         }
 
-        .next-button {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background: white;
-            cursor: pointer;
-            font-size: 14px;
-            color: #666;
-            transition: all 0.2s;
-            margin-top: 20px;
-        }
-
-        .next-button:hover {
-            background: #f5f5f5;
-            border-color: #999;
-        }
     </style>
 </head>
 <body>
@@ -88,23 +71,5 @@
         In the next step, you'll optionally select a parent circuit breaker for this device.
         You can always change this later in device settings.
     </p>
-
-    <button id="nextButton" class="next-button">
-        Next
-    </button>
-
-    <script type="application/javascript">
-        (function() {
-            'use strict';
-
-            const nextButton = document.getElementById('nextButton');
-
-            nextButton.addEventListener('click', function() {
-                if (typeof Homey !== 'undefined') {
-                    Homey.nextView();
-                }
-            });
-        })();
-    </script>
 </body>
 </html>

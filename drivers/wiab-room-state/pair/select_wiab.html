@@ -73,28 +73,6 @@
             display: block;
         }
 
-        .next-button {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background: white;
-            cursor: pointer;
-            font-size: 14px;
-            color: #666;
-            transition: all 0.2s;
-            margin-top: 20px;
-        }
-
-        .next-button:hover:not(:disabled) {
-            background: #f5f5f5;
-            border-color: #999;
-        }
-
-        .next-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
     </style>
 </head>
 <body>
@@ -117,10 +95,6 @@
         </div>
     </div>
 
-    <button id="nextButton" class="next-button" disabled>
-        Next
-    </button>
-
     <script type="application/javascript">
         (function() {
             'use strict';
@@ -129,7 +103,6 @@
 
             const wiabDeviceSelect = document.getElementById('wiabDevice');
             const errorDiv = document.getElementById('error');
-            const nextButton = document.getElementById('nextButton');
             let selectedWiabId = null;
             let loadAttempt = 0;
             const maxAttempts = 5;
@@ -192,7 +165,6 @@
                         selectedWiabId = devices[0].id;
                         wiabDeviceSelect.value = selectedWiabId;
                         wiabDeviceSelect.disabled = false;
-                        nextButton.disabled = false;
 
                         // Notify driver of selection
                         console.log('Notifying driver of selection:', selectedWiabId);
@@ -210,7 +182,6 @@
             function showError() {
                 errorDiv.classList.add('visible');
                 wiabDeviceSelect.disabled = true;
-                nextButton.disabled = true;
             }
 
             // Handle device selection change
@@ -224,14 +195,6 @@
                             console.error('Failed to notify driver of change:', err);
                         }
                     });
-                }
-            });
-
-            // Handle next button click
-            nextButton.addEventListener('click', function() {
-                console.log('Next button clicked');
-                if (typeof Homey !== 'undefined' && selectedWiabId) {
-                    Homey.nextView();
                 }
             });
 
