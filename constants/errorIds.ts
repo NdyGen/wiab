@@ -238,3 +238,79 @@ export enum ZoneSealErrorId {
   /** Failed to clear device warning */
   WARNING_CLEAR_FAILED = 'ZONE_SEAL_012',
 }
+
+/**
+ * Error ID constants for tracking and monitoring circuit breaker errors.
+ *
+ * These IDs enable error aggregation, filtering, and analysis in logs.
+ * Each error should be logged with its corresponding ID for traceability.
+ *
+ * @example
+ * ```typescript
+ * this.error(
+ *   `[${CircuitBreakerErrorId.CASCADE_FAILED}] Failed to cascade state change`,
+ *   error
+ * );
+ * ```
+ */
+export enum CircuitBreakerErrorId {
+  /** Failed to initialize device (onInit) */
+  DEVICE_INIT_FAILED = 'CIRCUIT_BREAKER_001',
+
+  /** Failed to cascade state change to children */
+  CASCADE_FAILED = 'CIRCUIT_BREAKER_002',
+
+  /** Failed to update child device state */
+  CHILD_UPDATE_FAILED = 'CIRCUIT_BREAKER_003',
+
+  /** Failed to orphan children on deletion */
+  ORPHAN_CHILDREN_FAILED = 'CIRCUIT_BREAKER_004',
+
+  /** Cycle detected in parent assignment */
+  CYCLE_DETECTED = 'CIRCUIT_BREAKER_005',
+
+  /** Failed to validate parent assignment */
+  PARENT_VALIDATION_FAILED = 'CIRCUIT_BREAKER_006',
+
+  /** Failed to get parent state */
+  PARENT_STATE_FAILED = 'CIRCUIT_BREAKER_007',
+
+  /** Failed to get children */
+  GET_CHILDREN_FAILED = 'CIRCUIT_BREAKER_008',
+
+  /** Failed to trigger flow card */
+  FLOW_CARD_TRIGGER_FAILED = 'CIRCUIT_BREAKER_009',
+
+  /** Settings update failed */
+  SETTINGS_UPDATE_FAILED = 'CIRCUIT_BREAKER_010',
+
+  /** Pairing handler failed */
+  PAIRING_HANDLER_FAILED = 'CIRCUIT_BREAKER_011',
+
+  /** Flow card registration failed */
+  FLOW_CARD_REGISTRATION_FAILED = 'CIRCUIT_BREAKER_012',
+
+  /** Hierarchy query failed */
+  HIERARCHY_QUERY_FAILED = 'CIRCUIT_BREAKER_013',
+
+  /** Capability update failed */
+  CAPABILITY_UPDATE_FAILED = 'CIRCUIT_BREAKER_014',
+
+  /** Failed to delete device and cleanup resources */
+  DEVICE_DELETION_FAILED = 'CIRCUIT_BREAKER_015',
+
+  /** Driver initialization failed (onInit) */
+  DRIVER_INIT_FAILED = 'CIRCUIT_BREAKER_016',
+
+  /** Failed to set device warning */
+  WARNING_SET_FAILED = 'CIRCUIT_BREAKER_017',
+
+  /** Failed to clear device warning */
+  WARNING_CLEAR_FAILED = 'CIRCUIT_BREAKER_018',
+
+  /** Promise rejected during batch update (should not happen) */
+  CASCADE_PROMISE_REJECTED = 'CIRCUIT_BREAKER_019',
+
+  /** Cascade engine threw unexpected exception */
+  CASCADE_ENGINE_FAILED = 'CIRCUIT_BREAKER_020',
+}

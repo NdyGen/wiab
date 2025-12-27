@@ -101,7 +101,16 @@
       "WebFetch(domain:api.developer.homey.app)",
       "Bash(gh pr checks:*)",
       "Bash(gh pr edit:*)",
-      "Skill(git:commit)"
+      "Skill(git:commit)",
+      "Bash(npx tsc:*)",
+      "Bash(claude tasks:*)",
+      "Bash(node -e:*)",
+      "Bash(timeout 45 npm test:*)",
+      "Bash(NODE_OPTIONS=\"--max-old-space-size=8192\" npm test:*)",
+      "Bash(xattr:*)",
+      "Bash(git clean:*)",
+      "Bash(gh label:*)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

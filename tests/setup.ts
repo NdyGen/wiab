@@ -236,6 +236,8 @@ export function createMockDevice(config: {
       capabilityCallbacks.clear();
     },
     name, // Add name property for HomeyAPIDevice compatibility
+    settings, // Add settings property for HomeyAPI compatibility
+    id, // Add id property for HomeyAPI compatibility
   };
 
   return device;
@@ -274,6 +276,9 @@ interface MockDevice {
   log: jest.Mock<void>;
   error: jest.Mock<void>;
   name: string;
+  id: string;
+  driverId?: string;
+  settings: Record<string, unknown>;
   capabilitiesObj: Record<string, { value: unknown; id?: string; lastUpdated?: number }>;
   on: (event: string, handler: (update: CapabilityUpdate) => void) => void;
   removeListener: (event: string, handler: (update: CapabilityUpdate) => void) => void;

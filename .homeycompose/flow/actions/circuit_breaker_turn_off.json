@@ -1,0 +1,23 @@
+{
+  "title": {
+    "en": "Turn circuit breaker OFF",
+    "nl": "Stroomonderbreker uitzetten",
+    "de": "Schutzschalter ausschalten",
+    "no": "Slå strømbryter AV",
+    "sv": "Slå av strömbrytare"
+  },
+  "hint": {
+    "en": "Turn the circuit breaker OFF (block flows)",
+    "nl": "Zet de stroomonderbreker UIT (flows blokkeren)",
+    "de": "Schutzschalter ausschalten (Flows blockieren)",
+    "no": "Slå strømbryteren AV (blokker flyter)",
+    "sv": "Slå av strömbrytaren (blockera flöden)"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab:wiab-circuit-breaker"
+    }
+  ]
+}

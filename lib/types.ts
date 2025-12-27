@@ -154,16 +154,24 @@ export interface CapabilityUpdate {
  * updates. Device objects auto-update via WebSocket when their state changes.
  *
  * @interface HomeyAPIDevice
+ * @property {string} id - Device ID
  * @property {string} name - The user-assigned name of the device
+ * @property {string} [zone] - Optional zone ID where the device is located
  * @property {string} [zoneName] - Optional zone name where the device is located
- * @property {Record<string, { value: unknown }>} capabilitiesObj - Object mapping capability IDs to their current values
+ * @property {string} [driverId] - Driver ID for this device
+ * @property {Record<string, unknown>} settings - Device settings
+ * @property {Record<string, { value: unknown; id?: string }>} capabilitiesObj - Object mapping capability IDs to their current values
  * @property {(event: string, handler: (update: CapabilityUpdate) => void) => void} on - Registers an event listener for device updates
  * @property {(event: string, handler: (update: CapabilityUpdate) => void) => void} removeListener - Removes an event listener
  */
 export interface HomeyAPIDevice {
+  id: string;
   name: string;
+  zone?: string;
   zoneName?: string;
-  capabilitiesObj: Record<string, { value: unknown }>;
+  driverId?: string;
+  settings: Record<string, unknown>;
+  capabilitiesObj: Record<string, { value: unknown; id?: string }>;
   on: (event: string, handler: (update: CapabilityUpdate) => void) => void;
   removeListener: (event: string, handler: (update: CapabilityUpdate) => void) => void;
 }
@@ -370,4 +378,65 @@ export interface ZoneSealSettings {
   openDelaySeconds: number;
   closeDelaySeconds: number;
   staleContactMinutes: number;
+}
+
+/**
+ * Device settings for circuit breaker.
+ *
+ * Circuit breakers organize in a parent-child hierarchy where state changes
+ * cascade from parent to all descendants.
+ *
+ * @interface CircuitBreakerSettings
+ * @property {string | null} parentId - Device ID of parent breaker, null for root breakers
+ */
+export interface CircuitBreakerSettings {
+  parentId: string | null;
+}
+
+/**
+ * Information about a circuit breaker device from HomeyAPI.
+ *
+ * Used for hierarchy traversal and parent/child lookups.
+ *
+ * @interface CircuitBreakerDeviceInfo
+ * @property {string} id - Device ID
+ * @property {string} name - Device name
+ * @property {boolean} state - Current onoff state
+ * @property {string | null} parentId - Parent device ID or null
+ */
+export interface CircuitBreakerDeviceInfo {
+  id: string;
+  name: string;
+  state: boolean;
+  parentId: string | null;
+}
+
+/**
+ * Result of a single device's cascade operation.
+ *
+ * @interface DeviceCascadeResult
+ * @property {string} deviceId - Device ID that was updated
+ * @property {boolean} success - Whether the update succeeded
+ * @property {Error} [error] - Error if update failed
+ * @property {boolean} [notFound] - True if device was not found (distinguishes missing devices from update failures)
+ */
+export interface DeviceCascadeResult {
+  deviceId: string;
+  success: boolean;
+  error?: Error;
+  notFound?: boolean;
+}
+
+/**
+ * Result of a complete cascade operation across hierarchy.
+ *
+ * @interface CascadeResult
+ * @property {number} success - Number of devices successfully updated
+ * @property {number} failed - Number of devices that failed to update
+ * @property {DeviceCascadeResult[]} errors - Details of failed updates
+ */
+export interface CascadeResult {
+  success: number;
+  failed: number;
+  errors: DeviceCascadeResult[];
 }

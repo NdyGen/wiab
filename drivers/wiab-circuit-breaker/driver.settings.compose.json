@@ -1,0 +1,21 @@
+[
+  {
+    "id": "parentId",
+    "type": "text",
+    "label": {
+      "en": "Parent Circuit Breaker ID",
+      "nl": "Bovenliggende Stroomonderbreker ID",
+      "de": "Übergeordnete Schutzschalter-ID",
+      "no": "Overordnet Strømbryter-ID",
+      "sv": "Överordnad Strömbrytare-ID"
+    },
+    "hint": {
+      "en": "The device ID of the parent circuit breaker. Leave empty for root breakers. Circular dependencies are automatically prevented.",
+      "nl": "Het apparaat-ID van de bovenliggende stroomonderbreker. Laat leeg voor hoofdonderbrekingen. Circulaire afhankelijkheden worden automatisch voorkomen.",
+      "de": "Die Geräte-ID des übergeordneten Schutzschalters. Leer lassen für Wurzelschalter. Kreisförmige Abhängigkeiten werden automatisch verhindert.",
+      "no": "Enhets-ID-en til den overordnede strømbryteren. La stå tom for rotbryteren. Sirkulære avhengigheter forhindres automatisk.",
+      "sv": "Enhets-ID för den överordnade strömbrytaren. Lämna tom för rotbrytare. Cirkulära beroenden förhindras automatiskt."
+    },
+    "value": ""
+  }
+]

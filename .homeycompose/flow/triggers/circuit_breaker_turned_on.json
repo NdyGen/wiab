@@ -1,0 +1,23 @@
+{
+  "title": {
+    "en": "Circuit breaker turned ON",
+    "nl": "Stroomonderbreker aangezet",
+    "de": "Schutzschalter eingeschaltet",
+    "no": "Strømbryter slått PÅ",
+    "sv": "Strömbrytare påslagen"
+  },
+  "hint": {
+    "en": "Triggered when the circuit breaker is turned ON (allowing flows)",
+    "nl": "Geactiveerd wanneer de stroomonderbreker wordt aangezet (flows toegestaan)",
+    "de": "Ausgelöst, wenn der Schutzschalter eingeschaltet wird (Flows erlaubt)",
+    "no": "Utløst når strømbryteren slås PÅ (tillater flyter)",
+    "sv": "Utlöses när strömbrytaren slås PÅ (tillåter flöden)"
+  },
+  "args": [
+    {
+      "type": "device",
+      "name": "device",
+      "filter": "driver_id=wiab:wiab-circuit-breaker"
+    }
+  ]
+}

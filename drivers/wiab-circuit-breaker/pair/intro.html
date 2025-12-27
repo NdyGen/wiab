@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .intro {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .feature-list {
+            margin: 20px 0;
+            padding-left: 20px;
+        }
+
+        .feature-list li {
+            margin-bottom: 12px;
+            line-height: 1.5;
+            color: #555;
+        }
+
+        .highlight {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .highlight strong {
+            color: #1976d2;
+        }
+
+        .next-button {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            transition: all 0.2s;
+            margin-top: 20px;
+        }
+
+        .next-button:hover {
+            background: #f5f5f5;
+            border-color: #999;
+        }
+    </style>
+</head>
+<body>
+    <h1>Circuit Breaker</h1>
+    <p class="intro">
+        Circuit Breakers provide hierarchical flow control for your Homey automations.
+        Like electrical circuit breakers, they can be turned ON (allowing flows) or OFF (blocking flows).
+    </p>
+
+    <div class="highlight">
+        <strong>Key Feature:</strong> Circuit breakers can be organized in a parent-child hierarchy.
+        When a parent breaker is turned OFF, all of its child breakers automatically turn OFF as well.
+    </div>
+
+    <ul class="feature-list">
+        <li><strong>Hierarchical Control:</strong> Organize breakers in a tree structure (e.g., "House" → "Floor 1" → "Living Room")</li>
+        <li><strong>Cascade Behavior:</strong> Turning OFF a parent automatically turns OFF all descendants</li>
+        <li><strong>Independent Children:</strong> Children can still be controlled independently regardless of parent state</li>
+        <li><strong>No Cycles:</strong> The system prevents circular dependencies automatically</li>
+        <li><strong>Root Breakers:</strong> Breakers without a parent act as top-level controls</li>
+    </ul>
+
+    <p class="intro">
+        In the next step, you'll optionally select a parent circuit breaker for this device.
+        You can always change this later in device settings.
+    </p>
+
+    <button id="nextButton" class="next-button">
+        Next
+    </button>
+
+    <script type="application/javascript">
+        (function() {
+            'use strict';
+
+            const nextButton = document.getElementById('nextButton');
+
+            nextButton.addEventListener('click', function() {
+                if (typeof Homey !== 'undefined') {
+                    Homey.nextView();
+                }
+            });
+        })();
+    </script>
+</body>
+</html>

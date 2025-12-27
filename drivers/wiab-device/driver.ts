@@ -82,10 +82,17 @@ class WIABDriver extends Homey.Driver {
   /**
    * Retrieves zone name for a device if available.
    *
+   * This method implements the graceful degradation pattern for optional data.
+   * Zone names enhance the user experience by providing location context
+   * (e.g., "Motion Sensor (Living Room)"), but are not critical to pairing functionality.
+   *
+   * For detailed information about this pattern, see:
+   * @see {@link file://../../docs/patterns/graceful-degradation.md}
+   *
    * @private
    * @param device - The device to get zone information for
    * @param homeyApi - The HomeyAPI instance
-   * @returns Zone name or null if not available
+   * @returns Zone name if available, null otherwise (including on error)
    */
   private async getDeviceZoneName(device: HomeyAPIDevice, homeyApi: HomeyAPI): Promise<string | null> {
     try {
