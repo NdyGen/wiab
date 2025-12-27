@@ -2,6 +2,7 @@ node_modules/
 *.js
 *.js.map
 !jest.config.js
+!.github/scripts/*.js
 app.json
 !.homeycompose/app.json
 coverage/
