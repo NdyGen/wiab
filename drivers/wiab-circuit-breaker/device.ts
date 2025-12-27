@@ -63,7 +63,30 @@ class CircuitBreakerDevice extends Homey.Device {
         throw new Error('HomeyAPI not available');
       }
 
-      // Find this device's Homey UUID by matching data.id
+      // ═══════════════════════════════════════════════════════════════════
+      // Homey Device ID Lookup
+      // ═══════════════════════════════════════════════════════════════════
+      // Circuit breaker devices use custom data.id for parent-child relationships.
+      // The custom ID is generated during pairing (circuit-breaker-${Date.now()})
+      // and stored in device.data for persistence across app restarts. This enables
+      // parent-child references without requiring knowledge of Homey's UUID system.
+      //
+      // However, HomeyAPI cascade operations require the Homey-assigned UUID to
+      // identify devices in the getDevices() map and call setCapabilityValue().
+      //
+      // Problem: Device context only provides custom data.id, not the HomeyAPI UUID
+      // Solution: Match custom data.id against all devices to find the UUID
+      //
+      // This O(n) lookup happens once during device initialization:
+      // 1. Get all devices from HomeyAPI (returns {uuid: device} map)
+      // 2. Iterate through devices checking each device.data.id property
+      // 3. Match against this device's custom data.id
+      // 4. Store the matching UUID for cascade operations
+      //
+      // Example mapping:
+      //   Custom data.id: "circuit-breaker-1234567890"  (from pairing)
+      //   HomeyAPI UUID:  "a3f8c9d2-e5b4-4c3a-9f2d-1a5e6b7c8d9e"  (Homey-assigned)
+      // ═══════════════════════════════════════════════════════════════════
       const customDataId = this.getData().id;
       const allDevices = await app.homeyApi.devices.getDevices();
       for (const [deviceId, device] of Object.entries(allDevices)) {
@@ -154,18 +177,33 @@ class CircuitBreakerDevice extends Homey.Device {
             result.errors
           );
 
-          // Warn user if more than 20% of cascades failed
+          // Warn user when any child circuit breaker fails to update
           const totalDevices = result.success + result.failed;
-          const failureRate = result.failed / totalDevices;
-          if (failureRate > 0.2) {
-            try {
-              await this.setWarning(
-                `${result.failed} of ${totalDevices} child circuit breakers failed to update. Some flows may still execute.`
+          try {
+            await this.setWarning(
+              `${result.failed} of ${totalDevices} child circuit breaker(s) failed to update. Some flows may still execute.`
+            );
+          } catch (warningError) {
+            // Distinguish between expected warning API failures vs programming errors
+            const warningMessage = warningError instanceof Error ? warningError.message.toLowerCase() : '';
+            const isWarningApiError = warningError instanceof Error && (
+              warningMessage.includes('setwarning') ||
+              warningMessage.includes('warning') ||
+              warningMessage.includes('not supported')
+            );
+
+            if (isWarningApiError) {
+              // Expected warning API failure - log but don't escalate
+              this.error(
+                `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Warning API unavailable:`,
+                warningError
               );
-            } catch (warningError) {
-              // Warning failed - log error but don't throw
-              // Users won't see device warning, but cascade failure is still logged
-              this.error('Failed to set cascade failure warning - user will not see device card warning:', warningError);
+            } else {
+              // Unexpected error (programming bug) - log with more visibility
+              this.error(
+                `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Unexpected error in warning operation:`,
+                warningError
+              );
             }
           }
         } else {
@@ -173,13 +211,65 @@ class CircuitBreakerDevice extends Homey.Device {
           try {
             await this.unsetWarning();
           } catch (warningError) {
-            // Log but don't throw - warning clear failure is not critical
-            this.error('Failed to clear warning after successful cascade:', warningError);
+            // Distinguish between expected warning API failures vs programming errors
+            const warningMessage = warningError instanceof Error ? warningError.message.toLowerCase() : '';
+            const isWarningApiError = warningError instanceof Error && (
+              warningMessage.includes('unsetwarning') ||
+              warningMessage.includes('warning') ||
+              warningMessage.includes('not supported')
+            );
+
+            if (isWarningApiError) {
+              // Expected warning API failure - log but don't escalate
+              this.error(
+                `[${CircuitBreakerErrorId.WARNING_CLEAR_FAILED}] Warning API unavailable:`,
+                warningError
+              );
+            } else {
+              // Unexpected error (programming bug) - log with more visibility
+              this.error(
+                `[${CircuitBreakerErrorId.WARNING_CLEAR_FAILED}] Unexpected error in warning clear operation:`,
+                warningError
+              );
+            }
           }
         }
         } catch (cascadeError) {
-          this.error('[CASCADE ERROR] Failed to cascade state change:', cascadeError);
-          this.error('[CASCADE ERROR] Error details:', cascadeError instanceof Error ? cascadeError.stack : String(cascadeError));
+          this.error(
+            `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Cascade engine threw exception:`,
+            cascadeError
+          );
+          this.error(
+            `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Error details:`,
+            cascadeError instanceof Error ? cascadeError.stack : String(cascadeError)
+          );
+
+          // Alert user about cascade failure via device warning
+          try {
+            await this.setWarning(
+              'Circuit breaker cascade failed. Child circuit breakers may not be updated. Wait a moment and try again. If the problem persists, restart the app.'
+            );
+          } catch (warningError) {
+            // Warning set failed - log but don't throw to avoid masking cascade error
+            const warningMessage = warningError instanceof Error ? warningError.message.toLowerCase() : '';
+            const isWarningApiError = warningError instanceof Error && (
+              warningMessage.includes('setwarning') ||
+              warningMessage.includes('warning') ||
+              warningMessage.includes('not supported')
+            );
+
+            if (isWarningApiError) {
+              this.error(
+                `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Warning API unavailable after cascade failure:`,
+                warningError
+              );
+            } else {
+              this.error(
+                `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Unexpected error setting warning after cascade failure:`,
+                warningError
+              );
+            }
+          }
         }
       }
 
@@ -235,9 +325,29 @@ class CircuitBreakerDevice extends Homey.Device {
 
       this.log(`Flow cards triggered for state=${newState ? 'ON' : 'OFF'}`);
     } catch (error) {
-      // Flow card triggers are non-critical - state changes proceed even if triggers fail
-      // Log for debugging but don't throw or report as error
-      this.log('Flow card trigger failed (non-critical):', error);
+      // Distinguish between expected flow card failures vs programming errors
+      const errorMessage = error instanceof Error ? error.message.toLowerCase() : '';
+      const isFlowCardError = error instanceof Error && (
+        errorMessage.includes('trigger') ||
+        errorMessage.includes('flow card') ||
+        errorMessage.includes('not registered') ||
+        errorMessage.includes('disabled')
+      );
+
+      if (isFlowCardError) {
+        // Expected flow card failure - log but don't escalate
+        // Flow card triggers are non-critical - state changes proceed even if triggers fail
+        this.error(
+          `[${CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED}] Flow card trigger failed (non-critical):`,
+          error
+        );
+      } else {
+        // Unexpected error (programming bug) - log with more visibility
+        this.error(
+          `[${CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED}] Unexpected error in flow card trigger:`,
+          error
+        );
+      }
     }
   }
 

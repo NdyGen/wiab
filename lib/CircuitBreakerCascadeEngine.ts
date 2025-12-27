@@ -278,7 +278,7 @@ export class CircuitBreakerCascadeEngine {
         // Promise rejected (should not happen with proper error handling)
         result.failed++;
         this.logger.error(
-          `[${CircuitBreakerErrorId.CASCADE_FAILED}] Promise rejected during batch update:`,
+          `[${CircuitBreakerErrorId.CASCADE_PROMISE_REJECTED}] Promise rejected during batch update:`,
           promiseResult.reason
         );
       }

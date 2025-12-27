@@ -500,9 +500,13 @@ describe('CircuitBreakerDevice', () => {
 
       await capabilityListener(true);
 
-      // Should log error as non-critical (flow card failures don't stop state changes)
-      expect(device.log).toHaveBeenCalledWith(
-        'Flow card trigger failed (non-critical):',
+      // Should log error with error ID as non-critical (flow card failures don't stop state changes)
+      expect(device.error).toHaveBeenCalledWith(
+        expect.stringContaining(`[${CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED}]`),
+        expect.any(Error)
+      );
+      expect(device.error).toHaveBeenCalledWith(
+        expect.stringContaining('Flow card trigger failed (non-critical)'),
         expect.any(Error)
       );
     });
@@ -512,17 +516,25 @@ describe('CircuitBreakerDevice', () => {
         new Error('Cascade engine failure')
       );
 
+      // Mock setWarning to avoid errors
+      device.setWarning = jest.fn().mockResolvedValue(undefined);
+
       // State change should complete successfully even if cascade fails
       await capabilityListener(false);
 
-      // Cascade error should be logged
+      // Cascade error should be logged with new error ID
       expect(device.error).toHaveBeenCalledWith(
-        '[CASCADE ERROR] Failed to cascade state change:',
+        `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Cascade engine threw exception:`,
         expect.any(Error)
       );
       expect(device.error).toHaveBeenCalledWith(
-        '[CASCADE ERROR] Error details:',
+        `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Error details:`,
         expect.any(String)
+      );
+
+      // Warning should be set to alert user
+      expect(device.setWarning).toHaveBeenCalledWith(
+        expect.stringContaining('Circuit breaker cascade failed')
       );
     });
 
@@ -578,7 +590,7 @@ describe('CircuitBreakerDevice', () => {
       );
     });
 
-    it('should set warning when exactly 20% of cascades fail', async () => {
+    it('should set warning when any child circuit breaker fails', async () => {
       // Arrange - Create device with cascadeStateChange already initialized
       mockCascadeEngine.cascadeStateChange.mockResolvedValue({
         success: 4,
@@ -589,16 +601,17 @@ describe('CircuitBreakerDevice', () => {
       // Mock setWarning
       device.setWarning = jest.fn().mockResolvedValue(undefined);
 
-      // Act - Turn device OFF to trigger cascade (20% failure rate = 1/5)
+      // Act - Turn device OFF to trigger cascade
       await capabilityListener(false);
 
-      // Assert - Should NOT set warning at exactly 20% (implementation uses > 0.2, not >= 0.2)
-      // So exactly 20% does not trigger warning
-      expect(device.setWarning).not.toHaveBeenCalled();
+      // Assert - Should set warning for ANY failure (threshold removed)
+      expect(device.setWarning).toHaveBeenCalledWith(
+        expect.stringContaining('1 of 5 child circuit breaker(s) failed to update')
+      );
     });
 
-    it('should log error when setWarning fails', async () => {
-      // Arrange - Set up mock to return high failure rate (> 20%)
+    it('should log error with error ID when setWarning fails', async () => {
+      // Arrange - Set up mock to return failures
       mockCascadeEngine.cascadeStateChange.mockResolvedValue({
         success: 0,
         failed: 1,
@@ -608,13 +621,17 @@ describe('CircuitBreakerDevice', () => {
       // Make setWarning fail
       device.setWarning = jest.fn().mockRejectedValue(new Error('Warning API unavailable'));
 
-      // Act - Turn OFF to trigger cascade with failures (100% failure rate triggers warning)
+      // Act - Turn OFF to trigger cascade with failures
       await capabilityListener(false);
 
-      // Assert - Should attempt setWarning and log error when it fails
+      // Assert - Should attempt setWarning and log error with error ID
       expect(device.setWarning).toHaveBeenCalled();
       expect(device.error).toHaveBeenCalledWith(
-        'Failed to set cascade failure warning - user will not see device card warning:',
+        expect.stringContaining(`[${CircuitBreakerErrorId.WARNING_SET_FAILED}]`),
+        expect.any(Error)
+      );
+      expect(device.error).toHaveBeenCalledWith(
+        expect.stringContaining('Warning API unavailable'),
         expect.any(Error)
       );
     });

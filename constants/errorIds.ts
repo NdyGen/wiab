@@ -301,4 +301,16 @@ export enum CircuitBreakerErrorId {
 
   /** Driver initialization failed (onInit) */
   DRIVER_INIT_FAILED = 'CIRCUIT_BREAKER_016',
+
+  /** Failed to set device warning */
+  WARNING_SET_FAILED = 'CIRCUIT_BREAKER_017',
+
+  /** Failed to clear device warning */
+  WARNING_CLEAR_FAILED = 'CIRCUIT_BREAKER_018',
+
+  /** Promise rejected during batch update (should not happen) */
+  CASCADE_PROMISE_REJECTED = 'CIRCUIT_BREAKER_019',
+
+  /** Cascade engine threw unexpected exception */
+  CASCADE_ENGINE_FAILED = 'CIRCUIT_BREAKER_020',
 }
