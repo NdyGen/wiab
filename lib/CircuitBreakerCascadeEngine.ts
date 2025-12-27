@@ -24,6 +24,7 @@ import { CircuitBreakerHierarchyManager } from './CircuitBreakerHierarchyManager
 import { CircuitBreakerErrorId } from '../constants/errorIds';
 import { ErrorReporter } from './ErrorReporter';
 import { ErrorSeverity } from './ErrorTypes';
+import { DeviceNotFoundError, HierarchyError } from './CircuitBreakerErrors';
 
 /**
  * Interface for logging instance
@@ -91,9 +92,14 @@ export class CircuitBreakerCascadeEngine {
   /**
    * Cascades a state change to all descendants of a device.
    *
-   * Performs depth-first sequential traversal to update all children, grandchildren, etc.
-   * Updates are performed sequentially (not in parallel) to avoid race conditions.
-   * Updates descendants one at a time in sequence using await in a for loop.
+   * Performs depth-first traversal to update all children, grandchildren, etc.
+   * Updates are performed sequentially using await in a for loop to process
+   * each descendant's async operation one at a time. This ensures proper
+   * error handling and result tracking for each device.
+   *
+   * Note: "Sequential" refers to the order of processing (one after another),
+   * not the lack of async/await. Each update is still an async operation.
+   *
    * Continues processing all descendants even if individual updates fail.
    *
    * @param deviceId - The device ID that changed state
@@ -144,14 +150,25 @@ export class CircuitBreakerCascadeEngine {
         `Cascade complete: ${result.success} succeeded, ${result.failed} failed`
       );
     } catch (error) {
+      // Cascade operation threw unexpected exception during getDescendants
+      // This is different from individual device update failures (tracked in result.errors)
       const errorReporter = new ErrorReporter(this.logger);
-      const message = errorReporter.reportAndGetMessage({
-        errorId: CircuitBreakerErrorId.CASCADE_FAILED,
+      errorReporter.reportAndGetMessage({
+        errorId: CircuitBreakerErrorId.CASCADE_ENGINE_FAILED,
         severity: ErrorSeverity.HIGH,
         userMessage: 'Failed to cascade state change. Wait a moment and try again. If the problem persists, restart the app.',
         technicalMessage: error instanceof Error ? error.message : 'Unknown error',
       });
-      throw new Error(message);
+
+      // Throw HierarchyError with proper context
+      throw new HierarchyError(
+        'Cascade engine failed during getDescendants',
+        CircuitBreakerErrorId.CASCADE_ENGINE_FAILED,
+        deviceId,
+        'getDescendants',
+        error instanceof Error ? error : new Error(String(error)),
+        { newState }
+      );
     }
 
     return result;
@@ -182,7 +199,10 @@ export class CircuitBreakerCascadeEngine {
       const device = allDevices[deviceId] as DeviceWithCapabilityUpdate;
 
       if (!device) {
-        const error = new Error(`Device ${deviceId} not found`);
+        const error = new DeviceNotFoundError(
+          deviceId,
+          CircuitBreakerErrorId.CHILD_UPDATE_FAILED
+        );
         this.logger.error(
           `[${CircuitBreakerErrorId.CHILD_UPDATE_FAILED}] ${error.message}`
         );
@@ -230,60 +250,5 @@ export class CircuitBreakerCascadeEngine {
         error: error as Error,
       };
     }
-  }
-
-  /**
-   * Updates multiple devices in batch.
-   *
-   * Uses Promise.allSettled to update all devices, collecting results.
-   * This allows partial success - some devices can fail while others succeed.
-   *
-   * @param deviceIds - Array of device IDs to update
-   * @param newState - The new state to set for all devices
-   * @returns Result with success/failed counts and error details
-   *
-   * @example
-   * ```typescript
-   * const result = await engine.updateMultipleDevices(['child-1', 'child-2'], false);
-   * ```
-   */
-  async updateMultipleDevices(
-    deviceIds: string[],
-    newState: boolean
-  ): Promise<CascadeResult> {
-    const result: CascadeResult = {
-      success: 0,
-      failed: 0,
-      errors: [],
-    };
-
-    // Update all devices using Promise.allSettled for partial success
-    const updatePromises = deviceIds.map(deviceId =>
-      this.updateDeviceState(deviceId, newState)
-    );
-
-    const results = await Promise.allSettled(updatePromises);
-
-    // Process results
-    for (const promiseResult of results) {
-      if (promiseResult.status === 'fulfilled') {
-        const updateResult = promiseResult.value;
-        if (updateResult.success) {
-          result.success++;
-        } else {
-          result.failed++;
-          result.errors.push(updateResult);
-        }
-      } else {
-        // Promise rejected (should not happen with proper error handling)
-        result.failed++;
-        this.logger.error(
-          `[${CircuitBreakerErrorId.CASCADE_PROMISE_REJECTED}] Promise rejected during batch update:`,
-          promiseResult.reason
-        );
-      }
-    }
-
-    return result;
   }
 }

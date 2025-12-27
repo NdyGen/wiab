@@ -496,7 +496,7 @@ describe('CircuitBreakerDevice', () => {
         turnedOnTrigger: { trigger: jest.Mock };
       };
 
-      driver.turnedOnTrigger.trigger.mockRejectedValue(new Error('Flow card error'));
+      driver.turnedOnTrigger.trigger.mockRejectedValue(new Error('Flow card trigger not supported'));
 
       await capabilityListener(true);
 
@@ -618,8 +618,8 @@ describe('CircuitBreakerDevice', () => {
         errors: [{ deviceId: 'child', success: false, error: new Error('Update failed') }],
       });
 
-      // Make setWarning fail
-      device.setWarning = jest.fn().mockRejectedValue(new Error('Warning API unavailable'));
+      // Make setWarning fail with "not supported" error
+      device.setWarning = jest.fn().mockRejectedValue(new Error('setWarning not supported'));
 
       // Act - Turn OFF to trigger cascade with failures
       await capabilityListener(false);
@@ -630,9 +630,88 @@ describe('CircuitBreakerDevice', () => {
         expect.stringContaining(`[${CircuitBreakerErrorId.WARNING_SET_FAILED}]`),
         expect.any(Error)
       );
+      // The error classification now properly detects this as expected warning API error
       expect(device.error).toHaveBeenCalledWith(
         expect.stringContaining('Warning API unavailable'),
         expect.any(Error)
+      );
+    });
+
+    it('should clear warning when cascade succeeds after previous failures', async () => {
+      // Arrange - Mock successful cascade
+      mockCascadeEngine.cascadeStateChange.mockResolvedValue({
+        success: 3,
+        failed: 0,
+        errors: [],
+      });
+
+      // Mock unsetWarning
+      device.unsetWarning = jest.fn().mockResolvedValue(undefined);
+
+      // Act - Turn device OFF to trigger successful cascade
+      await capabilityListener(false);
+
+      // Assert - Should clear warning on success
+      expect(device.unsetWarning).toHaveBeenCalled();
+    });
+
+    it('should log error with error ID when HomeyAPI device lookup finds multiple devices', async () => {
+      // This test verifies that the O(n) lookup handles multiple devices correctly
+      // and finds the correct device even when multiple circuit breakers exist
+
+      // Re-initialize device to trigger lookup
+      const newDevice = new CircuitBreakerDevice();
+      (newDevice as unknown as { homey: ReturnType<typeof createMockHomey> }).homey = mockHomey;
+      const mockApp = { homeyApi: mockHomeyApi };
+      (newDevice as unknown as { homey: { app: unknown } }).homey.app = mockApp;
+
+      // Setup multiple devices in HomeyAPI
+      const device1 = createMockDevice({
+        id: 'other-device-uuid-1',
+        name: 'Other Device 1',
+        capabilities: ['onoff'],
+        settings: { parentId: null },
+      });
+      (device1 as unknown as { data: { id: string } }).data = { id: 'other-breaker-1' };
+      device1.driverId = 'wiab-circuit-breaker';
+
+      const device2 = createMockDevice({
+        id: 'test-breaker-uuid',
+        name: 'Test Circuit Breaker',
+        capabilities: ['onoff'],
+        settings: { parentId: null },
+      });
+      (device2 as unknown as { data: { id: string } }).data = { id: 'test-breaker-1' };
+      device2.driverId = 'wiab-circuit-breaker';
+
+      const device3 = createMockDevice({
+        id: 'other-device-uuid-2',
+        name: 'Other Device 2',
+        capabilities: ['onoff'],
+        settings: { parentId: null },
+      });
+      (device3 as unknown as { data: { id: string } }).data = { id: 'other-breaker-2' };
+      device3.driverId = 'wiab-circuit-breaker';
+
+      // Add all devices to HomeyAPI
+      mockHomeyApi.devices._addDevice('other-device-uuid-1', device1);
+      mockHomeyApi.devices._addDevice('test-breaker-uuid', device2);
+      mockHomeyApi.devices._addDevice('other-device-uuid-2', device3);
+
+      newDevice.log = jest.fn();
+      newDevice.error = jest.fn();
+      newDevice.getData = jest.fn(() => ({ id: 'test-breaker-1' }));
+      newDevice.getSetting = jest.fn();
+      newDevice.getCapabilityValue = jest.fn(() => true);
+      newDevice.registerCapabilityListener = jest.fn();
+      (newDevice as unknown as { driver: unknown }).driver = mockDriver;
+
+      // Act - Initialize device (triggers lookup)
+      await newDevice.onInit();
+
+      // Assert - Should find correct device UUID
+      expect(newDevice.log).toHaveBeenCalledWith(
+        expect.stringContaining('Found Homey device ID: test-breaker-uuid')
       );
     });
   });

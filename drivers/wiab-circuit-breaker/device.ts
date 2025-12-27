@@ -6,6 +6,7 @@ import { HomeyAPI } from '../../lib/types';
 import { CircuitBreakerErrorId } from '../../constants/errorIds';
 import { ErrorReporter } from '../../lib/ErrorReporter';
 import { ErrorSeverity } from '../../lib/ErrorTypes';
+import { ErrorHandler } from '../../lib/ErrorHandler';
 
 /**
  * Interface for WIABApp with HomeyAPI
@@ -77,11 +78,17 @@ class CircuitBreakerDevice extends Homey.Device {
       // Problem: Device context only provides custom data.id, not the HomeyAPI UUID
       // Solution: Match custom data.id against all devices to find the UUID
       //
-      // This O(n) lookup happens once during device initialization:
+      // This O(n) lookup happens once during each device initialization:
       // 1. Get all devices from HomeyAPI (returns {uuid: device} map)
       // 2. Iterate through devices checking each device.data.id property
       // 3. Match against this device's custom data.id
       // 4. Store the matching UUID for cascade operations
+      //
+      // ⚠️ Performance Note: With N circuit breaker devices, each device's O(n)
+      // lookup results in O(n²) total startup cost when all devices initialize
+      // simultaneously (e.g., app start, Homey reboot). For typical deployments
+      // with <100 circuit breakers, this is acceptable. For larger deployments,
+      // consider caching UUID mappings at the app level.
       //
       // Example mapping:
       //   Custom data.id: "circuit-breaker-1234567890"  (from pairing)
@@ -185,14 +192,8 @@ class CircuitBreakerDevice extends Homey.Device {
             );
           } catch (warningError) {
             // Distinguish between expected warning API failures vs programming errors
-            const warningMessage = warningError instanceof Error ? warningError.message.toLowerCase() : '';
-            const isWarningApiError = warningError instanceof Error && (
-              warningMessage.includes('setwarning') ||
-              warningMessage.includes('warning') ||
-              warningMessage.includes('not supported')
-            );
-
-            if (isWarningApiError) {
+            // Use ErrorHandler for robust error classification instead of string matching
+            if (ErrorHandler.isWarningApiError(warningError)) {
               // Expected warning API failure - log but don't escalate
               this.error(
                 `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Warning API unavailable:`,
@@ -212,14 +213,8 @@ class CircuitBreakerDevice extends Homey.Device {
             await this.unsetWarning();
           } catch (warningError) {
             // Distinguish between expected warning API failures vs programming errors
-            const warningMessage = warningError instanceof Error ? warningError.message.toLowerCase() : '';
-            const isWarningApiError = warningError instanceof Error && (
-              warningMessage.includes('unsetwarning') ||
-              warningMessage.includes('warning') ||
-              warningMessage.includes('not supported')
-            );
-
-            if (isWarningApiError) {
+            // Use ErrorHandler for robust error classification instead of string matching
+            if (ErrorHandler.isWarningApiError(warningError)) {
               // Expected warning API failure - log but don't escalate
               this.error(
                 `[${CircuitBreakerErrorId.WARNING_CLEAR_FAILED}] Warning API unavailable:`,
@@ -251,14 +246,8 @@ class CircuitBreakerDevice extends Homey.Device {
             );
           } catch (warningError) {
             // Warning set failed - log but don't throw to avoid masking cascade error
-            const warningMessage = warningError instanceof Error ? warningError.message.toLowerCase() : '';
-            const isWarningApiError = warningError instanceof Error && (
-              warningMessage.includes('setwarning') ||
-              warningMessage.includes('warning') ||
-              warningMessage.includes('not supported')
-            );
-
-            if (isWarningApiError) {
+            // Use ErrorHandler for robust error classification instead of string matching
+            if (ErrorHandler.isWarningApiError(warningError)) {
               this.error(
                 `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Warning API unavailable after cascade failure:`,
                 warningError
@@ -326,15 +315,8 @@ class CircuitBreakerDevice extends Homey.Device {
       this.log(`Flow cards triggered for state=${newState ? 'ON' : 'OFF'}`);
     } catch (error) {
       // Distinguish between expected flow card failures vs programming errors
-      const errorMessage = error instanceof Error ? error.message.toLowerCase() : '';
-      const isFlowCardError = error instanceof Error && (
-        errorMessage.includes('trigger') ||
-        errorMessage.includes('flow card') ||
-        errorMessage.includes('not registered') ||
-        errorMessage.includes('disabled')
-      );
-
-      if (isFlowCardError) {
+      // Use ErrorHandler for robust error classification instead of string matching
+      if (ErrorHandler.isFlowCardError(error)) {
         // Expected flow card failure - log but don't escalate
         // Flow card triggers are non-critical - state changes proceed even if triggers fail
         this.error(
