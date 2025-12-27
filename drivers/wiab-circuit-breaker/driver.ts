@@ -218,8 +218,12 @@ class CircuitBreakerDriver extends Homey.Driver {
     session.setHandler('get_circuit_breakers', async () => {
       try {
         this.log('Fetching circuit breakers for pairing');
-        return await this.getAllCircuitBreakers();
+        const breakers = await this.getAllCircuitBreakers();
+        this.log(`[PAIRING] Returning ${breakers.length} circuit breakers:`,
+          breakers.map(b => `${b.id}:${b.name}`).join(', '));
+        return breakers;
       } catch (error) {
+        this.error('[PAIRING] Failed to fetch circuit breakers:', error);
         const errorReporter = new ErrorReporter({
           log: this.log.bind(this),
           error: this.error.bind(this),
@@ -312,17 +316,24 @@ class CircuitBreakerDriver extends Homey.Driver {
     try {
       const app = this.homey.app as WIABApp;
       if (!app.homeyApi) {
+        this.error('[PAIRING] HomeyAPI not available');
         throw new Error('HomeyAPI not available');
       }
 
+      this.log('[PAIRING] Creating hierarchy manager...');
       const hierarchyManager = new CircuitBreakerHierarchyManager(app.homeyApi, {
         log: this.log.bind(this),
         error: this.error.bind(this),
       });
+
+      this.log('[PAIRING] Fetching circuit breakers from hierarchy manager...');
       const breakers = await hierarchyManager.getAllCircuitBreakers();
+      this.log(`[PAIRING] Hierarchy manager returned ${breakers.length} breakers:`,
+        breakers.map(b => `${b.id}:${b.name}:${b.driverId}`).join(', '));
 
       // Filter breakers to ensure they have valid IDs
       const validBreakers = breakers.filter((b): b is typeof b & { id: string } => !!b.id);
+      this.log(`[PAIRING] After ID filtering: ${validBreakers.length} valid breakers`);
 
       // Get zone names for all breakers
       const breakersWithZones = await Promise.all(
@@ -340,7 +351,7 @@ class CircuitBreakerDriver extends Homey.Driver {
         })
       );
 
-      this.log(`Found ${breakersWithZones.length} circuit breakers`);
+      this.log(`[PAIRING] Found ${breakersWithZones.length} circuit breakers`);
       return breakersWithZones;
     } catch (error) {
       const errorReporter = new ErrorReporter({
