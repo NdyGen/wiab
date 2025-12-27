@@ -325,7 +325,7 @@ describe('CircuitBreakerDevice', () => {
 
       // Orphaning is now blocking - if it fails, deletion should throw
       await expect(device.onDeleted()).rejects.toThrow(
-        'Failed to orphan 1 child circuit breakers. Deletion cannot proceed. Check device logs.'
+        'Cannot delete: 1 child circuit breaker(s) failed to orphan'
       );
 
       // Error should be logged for failed orphaning (uses ORPHAN_CHILDREN_FAILED error ID)
@@ -421,6 +421,13 @@ describe('CircuitBreakerDevice', () => {
       // Re-mock setWarning and unsetWarning after clearAllMocks
       device.setWarning = jest.fn().mockResolvedValue(undefined);
       device.unsetWarning = jest.fn().mockResolvedValue(undefined);
+
+      // Set default cascade result (tests can override if needed)
+      mockCascadeEngine.cascadeStateChange.mockResolvedValue({
+        success: 0,
+        failed: 0,
+        errors: [],
+      });
     });
 
     it('should cascade OFF state to all descendants', async () => {
@@ -527,7 +534,8 @@ describe('CircuitBreakerDevice', () => {
 
       // Act & Assert - State change should now throw cascade errors
       // This prevents silent failures where cascade completely fails
-      await expect(capabilityListener(false)).rejects.toThrow('Cascade engine failure');
+      // The error is wrapped by the outer catch with a user-friendly message
+      await expect(capabilityListener(false)).rejects.toThrow('Failed to update circuit breaker state');
 
       // Cascade error should be logged with new error ID
       expect(device.error).toHaveBeenCalledWith(
@@ -630,9 +638,8 @@ describe('CircuitBreakerDevice', () => {
 
       // Act & Assert - Should throw when warning fails after cascade failure
       // This prevents silent failures where cascade errors are hidden
-      await expect(capabilityListener(false)).rejects.toThrow(
-        'Circuit breaker state changed but 1 of 1 child devices failed to update'
-      );
+      // The error is wrapped by the outer catch with a user-friendly message
+      await expect(capabilityListener(false)).rejects.toThrow('Failed to update circuit breaker state');
 
       // Should attempt setWarning and log error with error ID
       expect(device.setWarning).toHaveBeenCalled();
