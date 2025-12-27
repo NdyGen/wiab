@@ -138,8 +138,12 @@ export class CircuitBreakerHierarchyManager {
           cbDevice.driverId?.endsWith(`:${CircuitBreakerHierarchyManager.DRIVER_ID}`);
 
         if (matchesDriver) {
-          // Ensure device has ID property
-          cbDevice.id = deviceId;
+          // HomeyAPI devices already have id property from the entries key
+          // Don't try to set it (it's read-only) - just verify it exists
+          if (!cbDevice.id) {
+            // If somehow the device doesn't have an id, use the key
+            (cbDevice as { id: string }).id = deviceId;
+          }
           circuitBreakers.push(cbDevice);
           this.logger.log(`[HIERARCHY] ✓ Matched circuit breaker: ${deviceId}`);
         }

@@ -36,12 +36,13 @@ interface WIABApp extends Homey.App {
  *
  * State Propagation:
  * - When parent turns OFF → all descendants turn OFF (cascade)
- * - When parent turns ON → children retain their current state
- * - Children can turn ON/OFF independently regardless of parent state
+ * - When parent turns ON → all descendants turn ON (cascade)
+ * - State changes propagate recursively through entire descendant tree
  */
 class CircuitBreakerDevice extends Homey.Device {
   private hierarchyManager?: CircuitBreakerHierarchyManager;
   private cascadeEngine?: CircuitBreakerCascadeEngine;
+  private homeyDeviceId?: string;
 
   /**
    * Initializes the circuit breaker device.
@@ -62,6 +63,22 @@ class CircuitBreakerDevice extends Homey.Device {
         throw new Error('HomeyAPI not available');
       }
 
+      // Find this device's Homey UUID by matching data.id
+      const customDataId = this.getData().id;
+      const allDevices = await app.homeyApi.devices.getDevices();
+      for (const [deviceId, device] of Object.entries(allDevices)) {
+        const deviceData = (device as unknown as { data?: { id?: string } }).data;
+        if (deviceData?.id === customDataId) {
+          this.homeyDeviceId = deviceId;
+          this.log(`Found Homey device ID: ${deviceId} for data.id: ${customDataId}`);
+          break;
+        }
+      }
+
+      if (!this.homeyDeviceId) {
+        throw new Error(`Could not find Homey device ID for data.id: ${customDataId}`);
+      }
+
       // Initialize hierarchy manager and cascade engine
       this.hierarchyManager = new CircuitBreakerHierarchyManager(app.homeyApi, {
         log: this.log.bind(this),
@@ -78,7 +95,8 @@ class CircuitBreakerDevice extends Homey.Device {
 
       // Register capability listener for onoff
       this.registerCapabilityListener('onoff', async (value: boolean) => {
-        return this.onCapabilityOnoff(value);
+        this.log(`[CAPABILITY LISTENER] onoff capability changed to ${value}`);
+        await this.onCapabilityOnoff(value);
       });
 
       // Log initialization success
@@ -98,27 +116,28 @@ class CircuitBreakerDevice extends Homey.Device {
    *
    * When state changes:
    * 1. Trigger appropriate flow cards (turned_on, turned_off, flipped)
-   * 2. If turning OFF, cascade state to all descendants
-   * 3. If turning ON, descendants retain their state
+   * 2. Cascade state to all descendants (both ON and OFF propagate)
    *
    * @param value - New onoff state (true = ON, false = OFF)
    * @returns Promise that resolves when state change is complete
    */
   private async onCapabilityOnoff(value: boolean): Promise<void> {
     const deviceId = this.getData().id;
+    this.log(`[CAPABILITY LISTENER] onoff capability changed to ${value}`);
     this.log(`Circuit breaker ${deviceId} state changing to ${value ? 'ON' : 'OFF'}`);
 
     try {
       // Trigger flow cards for state change
       await this.triggerFlowCards(value);
 
-      // If turning OFF, cascade to all descendants
-      if (!value && this.cascadeEngine) {
-        this.log(`Cascading OFF state to descendants of ${deviceId}`);
-        const result = await this.cascadeEngine.cascadeStateChange(deviceId, false);
-        this.log(
-          `Cascade complete: ${result.success} succeeded, ${result.failed} failed`
-        );
+      // Cascade state to all descendants (both ON and OFF)
+      if (this.cascadeEngine && this.homeyDeviceId) {
+        this.log(`Cascading ${value ? 'ON' : 'OFF'} state to descendants of ${deviceId} (Homey ID: ${this.homeyDeviceId})`);
+        try {
+          const result = await this.cascadeEngine.cascadeStateChange(this.homeyDeviceId, value);
+          this.log(
+            `Cascade complete: ${result.success} succeeded, ${result.failed} failed`
+          );
 
         if (result.failed > 0) {
           const notFoundCount = result.errors.filter(e => e.notFound).length;
@@ -159,6 +178,10 @@ class CircuitBreakerDevice extends Homey.Device {
             // Log but don't throw - warning clear failure is not critical
             this.error('Failed to clear warning after successful cascade:', warningError);
           }
+        }
+        } catch (cascadeError) {
+          this.error('[CASCADE ERROR] Failed to cascade state change:', cascadeError);
+          this.error('[CASCADE ERROR] Error details:', cascadeError instanceof Error ? cascadeError.stack : String(cascadeError));
         }
       }
 

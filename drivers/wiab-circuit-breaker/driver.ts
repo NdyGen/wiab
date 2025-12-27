@@ -209,7 +209,8 @@ class CircuitBreakerDriver extends Homey.Driver {
    * - list_devices: Creates the new circuit breaker device with parent configuration
    */
   async onPair(session: PairSession): Promise<void> {
-    this.log('Pairing session started');
+    this.log('[PAIRING] ===== onPair called - Pairing session started =====');
+    this.log('[PAIRING] Session ID:', (session as any).id || 'unknown');
 
     // Store selected parent ID in session
     let selectedParentId: string | null = null;
@@ -217,13 +218,20 @@ class CircuitBreakerDriver extends Homey.Driver {
     // Handler: Get all circuit breakers for parent dropdown
     session.setHandler('get_circuit_breakers', async () => {
       try {
-        this.log('Fetching circuit breakers for pairing');
+        this.log('[PAIRING] ===== get_circuit_breakers handler called =====');
+        this.log('[PAIRING] Fetching circuit breakers for pairing');
+
         const breakers = await this.getAllCircuitBreakers();
-        this.log(`[PAIRING] Returning ${breakers.length} circuit breakers:`,
-          breakers.map(b => `${b.id}:${b.name}`).join(', '));
+
+        this.log(`[PAIRING] ===== Successfully fetched ${breakers.length} circuit breakers =====`);
+        this.log(`[PAIRING] Returning breakers:`, JSON.stringify(breakers.map(b => ({id: b.id, name: b.name}))));
         return breakers;
       } catch (error) {
-        this.error('[PAIRING] Failed to fetch circuit breakers:', error);
+        this.error('[PAIRING] ===== CRITICAL ERROR in get_circuit_breakers =====');
+        this.error('[PAIRING] Error type:', error?.constructor?.name);
+        this.error('[PAIRING] Error message:', error instanceof Error ? error.message : String(error));
+        this.error('[PAIRING] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+
         const errorReporter = new ErrorReporter({
           log: this.log.bind(this),
           error: this.error.bind(this),
@@ -234,6 +242,8 @@ class CircuitBreakerDriver extends Homey.Driver {
           userMessage: 'Cannot load circuit breakers for pairing. Wait a moment and try again. If the problem persists, restart Homey.',
           technicalMessage: error instanceof Error ? error.message : 'Unknown error',
         });
+
+        this.error('[PAIRING] Throwing error to frontend:', message);
         throw new Error(message);
       }
     });
@@ -314,28 +324,41 @@ class CircuitBreakerDriver extends Homey.Driver {
     displayName: string;
   }>> {
     try {
+      this.log('[PAIRING] Step 1: Getting app reference...');
       const app = this.homey.app as WIABApp;
+
+      this.log('[PAIRING] Step 2: Checking HomeyAPI availability...');
       if (!app.homeyApi) {
-        this.error('[PAIRING] HomeyAPI not available');
+        this.error('[PAIRING] CRITICAL: HomeyAPI not available on app');
+        this.error('[PAIRING] app object:', app ? 'exists' : 'null');
+        this.error('[PAIRING] app.homeyApi:', app?.homeyApi ? 'exists' : 'undefined/null');
         throw new Error('HomeyAPI not available');
       }
+      this.log('[PAIRING] HomeyAPI is available');
 
-      this.log('[PAIRING] Creating hierarchy manager...');
+      this.log('[PAIRING] Step 3: Creating hierarchy manager...');
       const hierarchyManager = new CircuitBreakerHierarchyManager(app.homeyApi, {
         log: this.log.bind(this),
         error: this.error.bind(this),
       });
+      this.log('[PAIRING] Hierarchy manager created successfully');
 
-      this.log('[PAIRING] Fetching circuit breakers from hierarchy manager...');
+      this.log('[PAIRING] Step 4: Fetching circuit breakers from hierarchy manager...');
       const breakers = await hierarchyManager.getAllCircuitBreakers();
-      this.log(`[PAIRING] Hierarchy manager returned ${breakers.length} breakers:`,
-        breakers.map(b => `${b.id}:${b.name}:${b.driverId}`).join(', '));
+      this.log(`[PAIRING] Hierarchy manager returned ${breakers.length} breakers`);
+      if (breakers.length > 0) {
+        this.log(`[PAIRING] First breaker:`, JSON.stringify({
+          id: breakers[0].id,
+          name: breakers[0].name,
+          driverId: breakers[0].driverId
+        }));
+      }
 
-      // Filter breakers to ensure they have valid IDs
+      this.log('[PAIRING] Step 5: Filtering breakers with valid IDs...');
       const validBreakers = breakers.filter((b): b is typeof b & { id: string } => !!b.id);
       this.log(`[PAIRING] After ID filtering: ${validBreakers.length} valid breakers`);
 
-      // Get zone names for all breakers
+      this.log('[PAIRING] Step 6: Getting zone names for all breakers...');
       const breakersWithZones = await Promise.all(
         validBreakers.map(async (breaker): Promise<{ id: string; name: string; displayName: string }> => {
           const zoneName = await this.getDeviceZoneName(breaker.id, app.homeyApi!);
@@ -351,7 +374,7 @@ class CircuitBreakerDriver extends Homey.Driver {
         })
       );
 
-      this.log(`[PAIRING] Found ${breakersWithZones.length} circuit breakers`);
+      this.log(`[PAIRING] Step 7: Complete! Returning ${breakersWithZones.length} circuit breakers`);
       return breakersWithZones;
     } catch (error) {
       const errorReporter = new ErrorReporter({
