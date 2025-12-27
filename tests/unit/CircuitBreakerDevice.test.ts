@@ -83,6 +83,8 @@ describe('CircuitBreakerDevice', () => {
     device.getCapabilityValue = jest.fn(() => true);
     device.setCapabilityValue = jest.fn().mockResolvedValue(undefined);
     device.registerCapabilityListener = jest.fn();
+    device.setWarning = jest.fn().mockResolvedValue(undefined);
+    device.unsetWarning = jest.fn().mockResolvedValue(undefined);
 
     // Mock driver with flow cards
     mockDriver = {
@@ -415,6 +417,10 @@ describe('CircuitBreakerDevice', () => {
       capabilityListener = registerCall[1];
 
       jest.clearAllMocks();
+
+      // Re-mock setWarning and unsetWarning after clearAllMocks
+      device.setWarning = jest.fn().mockResolvedValue(undefined);
+      device.unsetWarning = jest.fn().mockResolvedValue(undefined);
     });
 
     it('should cascade OFF state to all descendants', async () => {
@@ -511,7 +517,7 @@ describe('CircuitBreakerDevice', () => {
       );
     });
 
-    it('should log cascade engine failures without throwing', async () => {
+    it('should throw cascade engine failures after attempting to warn user', async () => {
       mockCascadeEngine.cascadeStateChange.mockRejectedValue(
         new Error('Cascade engine failure')
       );
@@ -519,8 +525,9 @@ describe('CircuitBreakerDevice', () => {
       // Mock setWarning to avoid errors
       device.setWarning = jest.fn().mockResolvedValue(undefined);
 
-      // State change should complete successfully even if cascade fails
-      await capabilityListener(false);
+      // Act & Assert - State change should now throw cascade errors
+      // This prevents silent failures where cascade completely fails
+      await expect(capabilityListener(false)).rejects.toThrow('Cascade engine failure');
 
       // Cascade error should be logged with new error ID
       expect(device.error).toHaveBeenCalledWith(
@@ -532,7 +539,7 @@ describe('CircuitBreakerDevice', () => {
         expect.any(String)
       );
 
-      // Warning should be set to alert user
+      // Warning should be set to alert user (before re-throwing)
       expect(device.setWarning).toHaveBeenCalledWith(
         expect.stringContaining('Circuit breaker cascade failed')
       );
@@ -610,7 +617,7 @@ describe('CircuitBreakerDevice', () => {
       );
     });
 
-    it('should log error with error ID when setWarning fails', async () => {
+    it('should throw error when setWarning fails after cascade failure', async () => {
       // Arrange - Set up mock to return failures
       mockCascadeEngine.cascadeStateChange.mockResolvedValue({
         success: 0,
@@ -621,10 +628,13 @@ describe('CircuitBreakerDevice', () => {
       // Make setWarning fail with "not supported" error
       device.setWarning = jest.fn().mockRejectedValue(new Error('setWarning not supported'));
 
-      // Act - Turn OFF to trigger cascade with failures
-      await capabilityListener(false);
+      // Act & Assert - Should throw when warning fails after cascade failure
+      // This prevents silent failures where cascade errors are hidden
+      await expect(capabilityListener(false)).rejects.toThrow(
+        'Circuit breaker state changed but 1 of 1 child devices failed to update'
+      );
 
-      // Assert - Should attempt setWarning and log error with error ID
+      // Should attempt setWarning and log error with error ID
       expect(device.setWarning).toHaveBeenCalled();
       expect(device.error).toHaveBeenCalledWith(
         expect.stringContaining(`[${CircuitBreakerErrorId.WARNING_SET_FAILED}]`),
