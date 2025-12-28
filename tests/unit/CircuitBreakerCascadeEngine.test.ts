@@ -538,13 +538,13 @@ describe('CircuitBreakerCascadeEngine', () => {
       );
     });
 
-    it('should throw when getDevices fails', async () => {
-      // Arrange - Simulate getDevices failure
+    it('should throw when getDevices fails with API unavailable error', async () => {
+      // Arrange - Simulate HomeyAPI unavailable (transient API error)
       (homeyApi.devices.getDevices as jest.Mock).mockRejectedValue(
-        new Error('api.devices.getDevices failed: timeout')
+        new Error('HomeyAPI unavailable')
       );
 
-      // Act & Assert - Should throw to abort cascade
+      // Act & Assert - Should throw to abort cascade for system-level failures
       await expect(engine.updateDeviceState('device-1', false)).rejects.toThrow(
         'Cannot update devices: HomeyAPI unavailable'
       );

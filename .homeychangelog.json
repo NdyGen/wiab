@@ -42,6 +42,9 @@
     "en": "Room State Manager pairing flow simplified: now select an existing WIAB occupancy device instead of configuring individual sensors. Room State Manager monitors WIAB device occupancy changes with configurable timer-based state transitions."
   },
   "1.2.3": {
-    "en": "added circuit breaker device. code cleanup and small refactoring."
+    "en": "Added Circuit Breaker device for hierarchical flow control. Code cleanup and refactoring."
+  },
+  "1.2.4": {
+    "en": "Added state-specific triggers for Room State Manager (extended_occupied, occupied, unoccupied, extended_unoccupied). Added explanatory intro pages to all device pairing flows. Added translations for pairing screens. Fixed timeout issue when updating circuit breaker hierarchy. Improved error handling to prevent silent failures."
   }
 }

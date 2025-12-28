@@ -73,27 +73,53 @@
             display: block;
         }
 
+        .next-button {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: white;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            transition: all 0.2s;
+            margin-top: 20px;
+        }
+
+        .next-button:hover:not(:disabled) {
+            background: #f5f5f5;
+            border-color: #999;
+        }
+
+        .next-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
-    <h1 data-i18n="pair.circuit_breaker.select_parent.title">Select Parent Breaker</h1>
-    <p class="intro" data-i18n="pair.circuit_breaker.select_parent.intro">
+    <h1>Select Parent Breaker</h1>
+    <p class="intro">
         Choose a parent circuit breaker for hierarchical control, or select "None" to create a root-level breaker.
     </p>
 
     <div class="error" id="error">
-        <span id="errorMessage" data-i18n="pair.circuit_breaker.select_parent.error_failed_to_load">Failed to load circuit breakers. Please try again.</span>
+        <span id="errorMessage">Failed to load circuit breakers.</span>
     </div>
 
     <div class="form-group">
-        <label for="parentBreaker" data-i18n="pair.circuit_breaker.select_parent.label_parent_breaker">Parent Circuit Breaker</label>
+        <label for="parentBreaker">Parent Circuit Breaker</label>
         <select id="parentBreaker" disabled>
-            <option data-i18n="pair.circuit_breaker.select_parent.loading_breakers">Loading circuit breakers...</option>
+            <option>Loading circuit breakers...</option>
         </select>
-        <div class="hint" data-i18n="pair.circuit_breaker.select_parent.hint_parent_selection">
+        <div class="hint">
             When the parent breaker is turned OFF, this breaker will also turn OFF automatically.
         </div>
     </div>
+
+    <button id="nextButton" class="next-button" disabled>
+        Next
+    </button>
 
     <script type="application/javascript">
         (function() {
@@ -104,6 +130,7 @@
             const parentBreakerSelect = document.getElementById('parentBreaker');
             const errorDiv = document.getElementById('error');
             const errorMessage = document.getElementById('errorMessage');
+            const nextButton = document.getElementById('nextButton');
             let selectedParentId = null;
             let loadAttempt = 0;
             const maxAttempts = 5;
@@ -150,7 +177,7 @@
                     // Add "None" option for root breakers
                     const noneOption = document.createElement('option');
                     noneOption.value = '';
-                    noneOption.textContent = Homey.__('pair.circuit_breaker.select_parent.option_none');
+                    noneOption.textContent = 'None (Root Breaker)';
                     parentBreakerSelect.appendChild(noneOption);
 
                     // Add existing breakers if any
@@ -167,6 +194,7 @@
                     selectedParentId = null;
                     parentBreakerSelect.value = '';
                     parentBreakerSelect.disabled = false;
+                    nextButton.disabled = false;
 
                     // Notify driver of selection
                     console.log('Notifying driver of selection: None');
@@ -184,6 +212,7 @@
                 errorMessage.textContent = message;
                 errorDiv.classList.add('visible');
                 parentBreakerSelect.disabled = true;
+                nextButton.disabled = true;
             }
 
             // Handle parent selection change
@@ -200,6 +229,14 @@
                 }
             });
 
+            // Handle next button click
+            nextButton.addEventListener('click', function() {
+                console.log('Next button clicked');
+                if (typeof Homey !== 'undefined') {
+                    Homey.nextView();
+                }
+            });
+
             // Initialize
             if (typeof Homey !== 'undefined') {
                 try {
@@ -209,7 +246,7 @@
                     console.error('Failed to initialize pairing page:', error);
                     document.body.innerHTML = '<div style="padding: 20px; color: red;">' +
                         '<h1>Error</h1>' +
-                        '<p>' + Homey.__('pair.circuit_breaker.select_parent.error_pairing_failed') + '</p>' +
+                        '<p>Pairing framework failed to load. Please restart the Homey app and try again.</p>' +
                         '<p>Error: ' + error.message + '</p>' +
                         '</div>';
                 }
@@ -217,7 +254,7 @@
                 console.error('CRITICAL: Homey API not available in pairing context');
                 document.body.innerHTML = '<div style="padding: 20px; color: red;">' +
                     '<h1>Error</h1>' +
-                    '<p>' + (typeof Homey !== 'undefined' ? Homey.__('pair.circuit_breaker.select_parent.error_sdk_not_available') : 'Homey SDK not available. Please restart pairing.') + '</p>' +
+                    '<p>Homey SDK not available. Please restart pairing.</p>' +
                     '</div>';
             }
         })();
