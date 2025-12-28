@@ -1,6 +1,23 @@
 {
   "pair": {
     "wiab_device": {
+      "intro": {
+        "title": "WIAB Apparaat",
+        "description": "WIAB (Wesp In Een Doos) creëert een virtuele aanwezigheidssensor door fysieke sensoren in uw kamer te monitoren. Net als een wesp die in een doos gevangen zit en actief blijft totdat hij de uitgang vindt, blijft het apparaat bezet totdat aan specifieke voorwaarden is voldaan.",
+        "key_feature": "Belangrijkste functie:",
+        "key_feature_description": "Combineert meerdere sensoren om intelligente kamer aanwezigheidsdetectie te creëren met configureerbare activerings- en deactiveringstriggers.",
+        "trigger_sensors": "Triggersensoren:",
+        "trigger_sensors_description": "Bewegingssensoren of andere apparaten die aanwezigheid activeren (wesp komt de doos in)",
+        "reset_sensors": "Resetsensoren:",
+        "reset_sensors_description": "Deurcontacten of andere sensoren die aanwezigheid deactiveren (wesp vindt de uitgang)",
+        "edge_detection": "Randdetectie:",
+        "edge_detection_description": "Alleen ONWAAR→WAAR overgangen activeren acties, waardoor herhaalde activeringen worden voorkomen",
+        "priority": "Prioriteitslogica:",
+        "priority_description": "Resetsensoren worden eerst gecontroleerd, zodat uitgangen altijd voorrang hebben",
+        "polling": "Betrouwbare polling:",
+        "polling_description": "Controleert sensoren elke 2 seconden voor consistent gedrag",
+        "next_step": "In de volgende stappen selecteert u een kamertype, configureert u triggersensoren (om aanwezigheid te detecteren) en resetsensoren (om uitgangen te detecteren)."
+      },
       "select_room_type": {
         "title": "Selecteer Ruimtetype (Optioneel)",
         "intro": "Kies een ruimtetype om timerwaarden automatisch in te stellen met aanbevolen instellingen voor die ruimte. U kunt deze waarden later nog aanpassen in de apparaatinstellingen, of sla deze stap over om handmatig in te stellen.",
@@ -37,6 +54,23 @@
       }
     },
     "room_state": {
+      "intro": {
+        "title": "Kamerstatus Manager",
+        "description": "De Kamerstatus Manager voegt intelligente statustracking toe aan uw WIAB-apparaat. Het monitort aanwezigheid en schakelt automatisch tussen statussen op basis van configureerbare timers, waardoor meer context voor uw automatiseringen wordt geboden.",
+        "key_feature": "Belangrijkste functie:",
+        "key_feature_description": "Vier-status systeem dat niet alleen bijhoudt of een kamer bezet is, maar ook hoe lang - waardoor tijdsbewuste automatiseringen mogelijk zijn.",
+        "idle": "Vrij:",
+        "idle_description": "Kamer is onbezet (geen activiteit gedetecteerd)",
+        "extended_idle": "Verlengd Vrij:",
+        "extended_idle_description": "Kamer is al langere tijd onbezet (configureerbare timeout)",
+        "occupied": "Bezet:",
+        "occupied_description": "Kamer is momenteel bezet (activiteit gedetecteerd)",
+        "extended_occupied": "Verlengd Bezet:",
+        "extended_occupied_description": "Kamer is al langere tijd bezet (configureerbare timeout)",
+        "manual_override": "Handmatige overschrijving:",
+        "manual_override_description": "Stel statussen handmatig in via flows en keer terug naar automatische modus wanneer nodig",
+        "next_step": "In de volgende stappen selecteert u een WIAB-apparaat om te monitoren en configureert u de timeout-duur voor verlengde statussen."
+      },
       "select_wiab": {
         "title": "Selecteer WIAB-apparaat",
         "intro": "Selecteer het WIAB-apparaat (Wasp in a Box) dat aanwezigheid voor deze Ruimtestatus Manager zal leveren.",
@@ -62,6 +96,23 @@
       }
     },
     "zone_seal": {
+      "intro": {
+        "title": "Zone Afdichting",
+        "description": "Zone Afdichting monitort deur- en raamcontactsensoren in een zone om te bepalen of de zone goed is afgesloten (alle deuren en ramen gesloten) of lek is (ten minste één opening gedetecteerd).",
+        "key_feature": "Belangrijkste functie:",
+        "key_feature_description": "Aggregeert meerdere contactsensoren om een enkele afgesloten/lek status te bieden, perfect voor beveiligingscontroles, klimaatregeling of automatiseringstriggers.",
+        "sealed": "Afgesloten:",
+        "sealed_description": "Alle gemonitorde deuren en ramen zijn gesloten",
+        "leaky": "Lek:",
+        "leaky_description": "Ten minste één deur of raam is open",
+        "stale_detection": "Verouderde detectie:",
+        "stale_detection_description": "Identificeert sensoren die een tijdje niet hebben gerapporteerd, wat wijst op mogelijke batterij- of connectiviteitsproblemen",
+        "zone_based": "Zone-gebaseerd:",
+        "zone_based_description": "Ontdekt automatisch alle contactsensoren in de geselecteerde Homey-zone",
+        "flow_triggers": "Flow-triggers:",
+        "flow_triggers_description": "Activeer flows wanneer de zone afgesloten, lek wordt of wanneer verouderde sensoren worden gedetecteerd",
+        "next_step": "In de volgende stap selecteert u een Homey-zone om te monitoren. Alle contactsensoren in die zone worden automatisch opgenomen."
+      },
       "select_contact_sensors": {
         "title": "Selecteer Contactsensoren",
         "intro": "Selecteer de contact- en raamsensoren die de zonesluiting bepalen. Wanneer een sensor open is, wordt de zone als lek beschouwd.",
