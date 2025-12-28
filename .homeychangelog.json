@@ -46,5 +46,8 @@
   },
   "1.2.4": {
     "en": "Added state-specific triggers for Room State Manager (extended_occupied, occupied, unoccupied, extended_unoccupied). Added explanatory intro pages to all device pairing flows. Added translations for pairing screens. Fixed timeout issue when updating circuit breaker hierarchy. Improved error handling to prevent silent failures."
+  },
+  "1.2.5": {
+    "en": "minor improvements in documentation and ui to improve user experience."
   }
 }
