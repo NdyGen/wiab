@@ -295,7 +295,8 @@ export class SensorMonitor {
   /**
    * Initializes the last known values for all configured sensors
    *
-   * This prevents false positives on the first poll by establishing baseline values.
+   * This establishes baseline values before event monitoring starts, preventing
+   * false state change detections when capability listeners first activate.
    * If a sensor cannot be read, it is initialized with false.
    * Also checks if sensors are stale (stuck TRUE for too long) at initialization.
    *

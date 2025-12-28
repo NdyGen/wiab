@@ -1,8 +1,34 @@
 # Wasp in a Box (WIAB)
 
-A Homey app that creates smart virtual occupancy sensors by combining motion sensors with door contacts. Unlike traditional PIR sensors that only detect movement, WIAB maintains room occupancy state even when people sit still - providing reliable presence detection for home automation.
+A Homey app that provides intelligent room occupancy and state management through four specialized device types. The app combines physical sensors to create smart virtual devices that understand room usage patterns, prevent false triggers, and enable sophisticated home automation scenarios.
 
-## The Problem
+## Device Types
+
+WIAB offers four device types, each solving different automation challenges:
+
+### 1. **WIAB Device** - Persistent Occupancy Detection
+Creates virtual occupancy sensors that maintain room occupancy even when people sit still. Combines motion sensors (entry detection) with door contacts (exit detection) to track actual room occupancy, not just movement.
+
+**Best for**: Offices, living rooms, bedrooms - anywhere people spend time sitting still.
+
+### 2. **Circuit Breaker** - Flow Control & Safety Switches
+Acts as a software circuit breaker that can turn off downstream devices when triggered. Supports hierarchical parent-child relationships for cascading state changes across multiple devices.
+
+**Best for**: Safety shutoffs, master control switches, conditional device enablement.
+
+### 3. **Room State Manager** - Extended Occupancy States
+Tracks extended occupancy patterns by monitoring WIAB devices and adding time-based state transitions (e.g., "extended_idle" after 30 minutes of inactivity).
+
+**Best for**: Advanced lighting scenes, progressive comfort adjustments, activity-based automation.
+
+### 4. **Zone Seal Monitor** - Entry Point Tracking
+Monitors multiple door/window contacts to determine if a zone is "sealed" (all openings closed) or "leaky" (any opening open). Supports configurable delay timers to prevent false triggers.
+
+**Best for**: Security zones, climate control zones, pest control automation.
+
+---
+
+## The Problem (WIAB Device)
 
 Motion sensors detect movement, not occupancy. When you're sitting still reading, working at a desk, or sleeping, motion sensors timeout and trigger automations incorrectly - lights turn off, heating shuts down, security activates.
 
@@ -46,7 +72,11 @@ Perfect for:
 3. Click "Install" to add the app to your Homey
 4. The app will be installed and ready to configure
 
-## Configuration
+---
+
+## WIAB Device Configuration
+
+> **Note**: This section focuses on configuring the WIAB Device. Circuit Breaker, Room State Manager, and Zone Seal Monitor have their own configuration screens during pairing. For detailed documentation on those device types, see their respective pairing flows in the Homey app.
 
 ### Adding a WIAB Device
 

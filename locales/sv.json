@@ -1,12 +1,105 @@
 {
   "pair": {
-    "select_trigger_sensors": {
-      "title": "Välj Rörelsesensorer",
-      "intro": "Välj rörelsesensorerna som kommer att utlösa närvarodetektering."
+    "wiab_device": {
+      "select_room_type": {
+        "title": "Välj rumstyp (valfritt)",
+        "intro": "Välj en rumstyp för att automatiskt konfigurera timervärdena med rekommenderade inställningar för det rummet. Du kan fortfarande justera dessa värden senare i enhetsinställningar, eller hoppa över detta steg för manuell konfiguration.",
+        "error_prefix": "Fel:",
+        "error_failed_to_load": "Det gick inte att ladda rumsmallar:",
+        "door_motion_window": "Dörrmotionsfönster:",
+        "empty_timeout": "Timeout för tomt rum:",
+        "pir_stale_timeout": "Timeout för inaktuell PIR:",
+        "door_stale_timeout": "Timeout för inaktuell dörrkontakt:",
+        "error_failed_apply": "Det gick inte att tillämpa mallen:",
+        "error_try_different": "Ett fel uppstod. Försök med en annan mall.",
+        "error_template_not_found": "Mall hittades inte. Välj en annan mall.",
+        "error_pairing_failed": "Det gick inte att ladda kopplingsramverket. Starta om Homey-appen och försök igen.",
+        "error_code_init_failed": "Om detta kvarstår, kontakta support med felkod: HOMEY_INIT_FAILED",
+        "error_sdk_not_available": "Homey SDK är inte tillgänglig. Starta om kopplingen.",
+        "error_code_api_missing": "Om detta kvarstår, kontakta support med felkod: HOMEY_API_MISSING"
+      },
+      "select_trigger_sensors": {
+        "title": "Välj rörelsesensorer",
+        "intro": "Välj de rörelsesensorer som ska utlösa upptäckningen av närvaro.",
+        "search_placeholder": "Sök sensorer...",
+        "no_devices": "Inga rörelsesensorer hittades. Lägg först till rörelsesensorer i din Homey.",
+        "error_failed_to_load": "Det gick inte att ladda rörelsesensorer:",
+        "no_zone": "Ingen zon"
+      },
+      "select_reset_sensors": {
+        "title": "Välj återställningssensorer",
+        "intro": "Välj dörrkontakter som ska återställa närvaron när de öppnas (t.ex. dörrar, fönster).",
+        "skip_note": "Detta steg är valfritt. Du kan klicka på Nästa för att hoppa över om du inte vill använda återställningssensorer.",
+        "search_placeholder": "Sök sensorer...",
+        "no_devices": "Inga dörrkontakter hittades. Klicka på Nästa för att fortsätta utan återställningssensorer.",
+        "error_failed_to_load": "Det gick inte att ladda dörrkontakter:",
+        "no_zone": "Ingen zon"
+      }
     },
-    "select_reset_sensors": {
-      "title": "Välj Dörr-/Fönsterkontakter",
-      "intro": "Välj dörr- eller fönsterkontakterna som kommer att återställa närvaro när de öppnas."
+    "room_state": {
+      "select_wiab": {
+        "title": "Välj WIAB-enhet",
+        "intro": "Välj WIAB-enheten (Wasp in a Box) som ska tillhandahålla närvarodata för denna rumstillståndshanterare.",
+        "error_no_devices": "Inga WIAB-enheter hittades. Skapa först en WIAB-enhet.",
+        "label_wiab_device": "WIAB-enhet",
+        "loading_devices": "Läser in enheter...",
+        "hint_device_selection": "Den valda WIAB-enhetens närvårotillstånd används som indata för rumstillståndsövergångar.",
+        "error_pairing_failed": "Det gick inte att ladda kopplingsramverket. Starta om Homey-appen och försök igen.",
+        "error_sdk_not_available": "Homey SDK är inte tillgänglig. Starta om kopplingen."
+      },
+      "define_states": {
+        "title": "Konfigurera rumstillstånd",
+        "intro": "Rumstillståndshanteraren spårar utökade närvårotillstånd baserat på den WIAB-enhet du valde.",
+        "states_info_title": "Rumstillstånd",
+        "state_idle": "idle - Rummet är inaktivt (ingen aktivitet upptäckt)",
+        "state_extended_idle": "extended_idle - Rummet har varit inaktivt ett tag (valfritt)",
+        "state_occupied": "occupied - Rummet är aktivt (aktivitet upptäckt)",
+        "state_extended_occupied": "extended_occupied - Rummet har varit aktivt ett tag (valfritt)",
+        "label_idle_timeout": "Timeout för utökat inaktivt tillstånd (minuter)",
+        "hint_idle_timeout": "Minuter av inaktivitet innan övergång till extended_idle-tillståndet. Ställ in på 0 för att inaktivera.",
+        "label_occupied_timeout": "Timeout för utökat aktivt tillstånd (minuter)",
+        "hint_occupied_timeout": "Minuter av aktivitet innan övergång till extended_occupied-tillståndet. Ställ in på 0 för att inaktivera."
+      }
+    },
+    "zone_seal": {
+      "select_contact_sensors": {
+        "title": "Välj dörrkontakter",
+        "intro": "Välj dörr- och fönsterkontakterna som ska definiera zonens tätning. När NÅGON sensor är öppen anses zonen läcka.",
+        "search_placeholder": "Sök sensorer...",
+        "no_devices": "Inga dörrkontakter hittades. Lägg först till dörr- eller fönsterkontakter i din Homey.",
+        "error_failed_to_load": "Det gick inte att ladda dörrkontakter:",
+        "no_zone": "Ingen zon"
+      }
+    },
+    "circuit_breaker": {
+      "intro": {
+        "title": "Strömbrytare",
+        "intro": "Strömbrytare tillhandahåller hierarkisk flödeskontroll för dina Homey-automationer. Som elektriska strömbrytare kan de slås på (för att tillåta flöden) eller av (för att blockera flöden).",
+        "key_feature": "Huvudfunktion:",
+        "key_feature_text": "Strömbrytare kan organiseras i en hierarki för överordnade och underordnade enheter. När en överordnad strömbrytare slås av stängs alla dess underordnade strömbrytare automatiskt av.",
+        "hierarchical_control": "Hierarkisk kontroll:",
+        "hierarchical_control_text": "Organisera strömbrytare i en trädstruktur (t.ex. \"Hus\" → \"Våning 1\" → \"Vardagsrum\")",
+        "cascade_behavior": "Kaskaderat beteende:",
+        "cascade_behavior_text": "Att slå av en överordnad strömbrytare stänger automatiskt alla dess underordnade",
+        "independent_children": "Oberoende underordnade:",
+        "independent_children_text": "Underordnade kan fortfarande kontrolleras oberoende av överordnads tillstånd",
+        "no_cycles": "Inga cykler:",
+        "no_cycles_text": "Systemet förhindrar cirkulära beroenden automatiskt",
+        "root_breakers": "Rotströmbrytare:",
+        "root_breakers_text": "Strömbrytare utan överordnad fungerar som toppnivåkontroller",
+        "next_step": "I nästa steg kan du välja en överordnad strömbrytare för denna enhet. Du kan alltid ändra detta senare i enhetsinställningar."
+      },
+      "select_parent": {
+        "title": "Välj överordnad strömbrytare",
+        "intro": "Välj en överordnad strömbrytare för hierarkisk kontroll, eller välj \"Ingen\" för att skapa en rotströmbrytare.",
+        "error_failed_to_load": "Det gick inte att ladda strömbrytare. Försök igen.",
+        "label_parent_breaker": "Överordnad strömbrytare",
+        "loading_breakers": "Läser in strömbrytare...",
+        "hint_parent_selection": "När den överordnade strömbrytaren stängs av kommer denna strömbrytare också att stängas av automatiskt.",
+        "option_none": "Ingen (rotströmbrytare)",
+        "error_pairing_failed": "Det gick inte att ladda kopplingsramverket. Starta om Homey-appen och försök igen.",
+        "error_sdk_not_available": "Homey SDK är inte tillgänglig. Starta om kopplingen."
+      }
     }
   }
 }

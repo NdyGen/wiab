@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .intro {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .feature-list {
+            margin: 20px 0;
+            padding-left: 20px;
+        }
+
+        .feature-list li {
+            margin-bottom: 12px;
+            line-height: 1.5;
+            color: #555;
+        }
+
+        .highlight {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .highlight strong {
+            color: #1976d2;
+        }
+
+    </style>
+</head>
+<body>
+    <h1 data-i18n="intro.title">Zone Seal</h1>
+    <p class="intro" data-i18n="intro.description">
+        Zone Seal monitors door and window contact sensors in a zone to determine if the zone is properly sealed (all doors and windows closed) or leaky (at least one opening detected).
+    </p>
+
+    <div class="highlight">
+        <strong data-i18n="intro.key_feature">Key Feature:</strong> <span data-i18n="intro.key_feature_description">Aggregates multiple contact sensors to provide a single sealed/leaky status, perfect for security checks, climate control, or automation triggers.</span>
+    </div>
+
+    <ul class="feature-list">
+        <li><strong data-i18n="intro.sealed">Sealed:</strong> <span data-i18n="intro.sealed_description">All monitored doors and windows are closed</span></li>
+        <li><strong data-i18n="intro.leaky">Leaky:</strong> <span data-i18n="intro.leaky_description">At least one door or window is open</span></li>
+        <li><strong data-i18n="intro.stale_detection">Stale Detection:</strong> <span data-i18n="intro.stale_detection_description">Identifies sensors that haven't reported in a while, indicating potential battery or connectivity issues</span></li>
+        <li><strong data-i18n="intro.zone_based">Zone-Based:</strong> <span data-i18n="intro.zone_based_description">Automatically discovers all contact sensors in the selected Homey zone</span></li>
+        <li><strong data-i18n="intro.flow_triggers">Flow Triggers:</strong> <span data-i18n="intro.flow_triggers_description">Trigger flows when zone becomes sealed, leaky, or when stale sensors are detected</span></li>
+    </ul>
+
+    <p class="intro" data-i18n="intro.next_step">
+        In the next step, you'll select a Homey zone to monitor. All contact sensors in that zone will be automatically included.
+    </p>
+
+    <script>
+        // Simple i18n loader
+        const translations = {
+            en: {
+                "intro.title": "Zone Seal",
+                "intro.description": "Zone Seal monitors door and window contact sensors in a zone to determine if the zone is properly sealed (all doors and windows closed) or leaky (at least one opening detected).",
+                "intro.key_feature": "Key Feature:",
+                "intro.key_feature_description": "Aggregates multiple contact sensors to provide a single sealed/leaky status, perfect for security checks, climate control, or automation triggers.",
+                "intro.sealed": "Sealed:",
+                "intro.sealed_description": "All monitored doors and windows are closed",
+                "intro.leaky": "Leaky:",
+                "intro.leaky_description": "At least one door or window is open",
+                "intro.stale_detection": "Stale Detection:",
+                "intro.stale_detection_description": "Identifies sensors that haven't reported in a while, indicating potential battery or connectivity issues",
+                "intro.zone_based": "Zone-Based:",
+                "intro.zone_based_description": "Automatically discovers all contact sensors in the selected Homey zone",
+                "intro.flow_triggers": "Flow Triggers:",
+                "intro.flow_triggers_description": "Trigger flows when zone becomes sealed, leaky, or when stale sensors are detected",
+                "intro.next_step": "In the next step, you'll select a Homey zone to monitor. All contact sensors in that zone will be automatically included."
+            },
+            nl: {
+                "intro.title": "Zone Afdichting",
+                "intro.description": "Zone Afdichting monitort deur- en raamcontactsensoren in een zone om te bepalen of de zone goed is afgesloten (alle deuren en ramen gesloten) of lek is (ten minste één opening gedetecteerd).",
+                "intro.key_feature": "Belangrijkste functie:",
+                "intro.key_feature_description": "Aggregeert meerdere contactsensoren om een enkele afgesloten/lek status te bieden, perfect voor beveiligingscontroles, klimaatregeling of automatiseringstriggers.",
+                "intro.sealed": "Afgesloten:",
+                "intro.sealed_description": "Alle gemonitorde deuren en ramen zijn gesloten",
+                "intro.leaky": "Lek:",
+                "intro.leaky_description": "Ten minste één deur of raam is open",
+                "intro.stale_detection": "Verouderde detectie:",
+                "intro.stale_detection_description": "Identificeert sensoren die een tijdje niet hebben gerapporteerd, wat wijst op mogelijke batterij- of connectiviteitsproblemen",
+                "intro.zone_based": "Zone-gebaseerd:",
+                "intro.zone_based_description": "Ontdekt automatisch alle contactsensoren in de geselecteerde Homey-zone",
+                "intro.flow_triggers": "Flow-triggers:",
+                "intro.flow_triggers_description": "Activeer flows wanneer de zone afgesloten, lek wordt of wanneer verouderde sensoren worden gedetecteerd",
+                "intro.next_step": "In de volgende stap selecteert u een Homey-zone om te monitoren. Alle contactsensoren in die zone worden automatisch opgenomen."
+            },
+            de: {
+                "intro.title": "Zonenabdichtung",
+                "intro.description": "Zonenabdichtung überwacht Tür- und Fensterkontaktsensoren in einer Zone, um festzustellen, ob die Zone ordnungsgemäß abgedichtet ist (alle Türen und Fenster geschlossen) oder undicht ist (mindestens eine Öffnung erkannt).",
+                "intro.key_feature": "Hauptfunktion:",
+                "intro.key_feature_description": "Aggregiert mehrere Kontaktsensoren, um einen einzelnen abgedichtet/undicht Status bereitzustellen, perfekt für Sicherheitskontrollen, Klimaregelung oder Automatisierungsauslöser.",
+                "intro.sealed": "Abgedichtet:",
+                "intro.sealed_description": "Alle überwachten Türen und Fenster sind geschlossen",
+                "intro.leaky": "Undicht:",
+                "intro.leaky_description": "Mindestens eine Tür oder ein Fenster ist offen",
+                "intro.stale_detection": "Veraltete Erkennung:",
+                "intro.stale_detection_description": "Identifiziert Sensoren, die eine Weile nicht gemeldet haben, was auf mögliche Batterie- oder Konnektivitätsprobleme hinweist",
+                "intro.zone_based": "Zonenbasiert:",
+                "intro.zone_based_description": "Erkennt automatisch alle Kontaktsensoren in der ausgewählten Homey-Zone",
+                "intro.flow_triggers": "Flow-Auslöser:",
+                "intro.flow_triggers_description": "Auslösen von Flows, wenn die Zone abgedichtet, undicht wird oder wenn veraltete Sensoren erkannt werden",
+                "intro.next_step": "Im nächsten Schritt wählen Sie eine Homey-Zone zur Überwachung aus. Alle Kontaktsensoren in dieser Zone werden automatisch einbezogen."
+            },
+            no: {
+                "intro.title": "Sone Tetting",
+                "intro.description": "Sone Tetting overvåker dør- og vinduskontaktsensorer i en sone for å avgjøre om sonen er riktig tettet (alle dører og vinduer lukket) eller lekk (minst én åpning oppdaget).",
+                "intro.key_feature": "Hovedfunksjon:",
+                "intro.key_feature_description": "Samler flere kontaktsensorer for å gi en enkelt tettet/lekk status, perfekt for sikkerhetskontroller, klimastyring eller automatiseringsutløsere.",
+                "intro.sealed": "Tettet:",
+                "intro.sealed_description": "Alle overvåkede dører og vinduer er lukket",
+                "intro.leaky": "Lekk:",
+                "intro.leaky_description": "Minst én dør eller vindu er åpent",
+                "intro.stale_detection": "Foreldet deteksjon:",
+                "intro.stale_detection_description": "Identifiserer sensorer som ikke har rapportert på en stund, noe som indikerer mulige batteri- eller tilkoblingsproblemer",
+                "intro.zone_based": "Sonebasert:",
+                "intro.zone_based_description": "Oppdager automatisk alle kontaktsensorer i den valgte Homey-sonen",
+                "intro.flow_triggers": "Flow-utløsere:",
+                "intro.flow_triggers_description": "Utløs flows når sonen blir tettet, lekk eller når foreldede sensorer oppdages",
+                "intro.next_step": "I neste trinn velger du en Homey-sone å overvåke. Alle kontaktsensorer i den sonen vil bli automatisk inkludert."
+            },
+            sv: {
+                "intro.title": "Zontätning",
+                "intro.description": "Zontätning övervakar dörr- och fönsterkontaktsensorer i en zon för att avgöra om zonen är ordentligt tätad (alla dörrar och fönster stängda) eller läcker (minst en öppning upptäckt).",
+                "intro.key_feature": "Huvudfunktion:",
+                "intro.key_feature_description": "Aggregerar flera kontaktsensorer för att ge en enda tätad/läckande status, perfekt för säkerhetskontroller, klimatstyrning eller automatiseringsutlösare.",
+                "intro.sealed": "Tätad:",
+                "intro.sealed_description": "Alla övervakade dörrar och fönster är stängda",
+                "intro.leaky": "Läckande:",
+                "intro.leaky_description": "Minst en dörr eller fönster är öppet",
+                "intro.stale_detection": "Föråldrad detektering:",
+                "intro.stale_detection_description": "Identifierar sensorer som inte har rapporterat på ett tag, vilket indikerar möjliga batteri- eller anslutningsproblem",
+                "intro.zone_based": "Zonbaserad:",
+                "intro.zone_based_description": "Upptäcker automatiskt alla kontaktsensorer i den valda Homey-zonen",
+                "intro.flow_triggers": "Flödesutlösare:",
+                "intro.flow_triggers_description": "Utlös flöden när zonen blir tätad, läckande eller när föråldrade sensorer upptäcks",
+                "intro.next_step": "I nästa steg väljer du en Homey-zon att övervaka. Alla kontaktsensorer i den zonen kommer automatiskt att inkluderas."
+            }
+        };
+
+        // Get language from Homey
+        const language = window.Homey ? (window.Homey.getLanguage() || 'en') : 'en';
+        const lang = translations[language] || translations.en;
+
+        // Apply translations
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (lang[key]) {
+                el.textContent = lang[key];
+            }
+        });
+    </script>
+</body>
+</html>

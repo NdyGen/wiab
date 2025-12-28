@@ -22,8 +22,15 @@
   },
   "pair": [
     {
+      "id": "intro",
+      "navigation": {
+        "next": "select_contact_sensors"
+      }
+    },
+    {
       "id": "select_contact_sensors",
       "navigation": {
+        "prev": "intro",
         "next": "list_devices"
       }
     },

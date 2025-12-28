@@ -1,12 +1,105 @@
 {
   "pair": {
-    "select_trigger_sensors": {
-      "title": "Selecteer Bewegingssensoren",
-      "intro": "Selecteer de bewegingssensoren die aanwezigheidsdetectie activeren."
+    "wiab_device": {
+      "select_room_type": {
+        "title": "Selecteer Ruimtetype (Optioneel)",
+        "intro": "Kies een ruimtetype om timerwaarden automatisch in te stellen met aanbevolen instellingen voor die ruimte. U kunt deze waarden later nog aanpassen in de apparaatinstellingen, of sla deze stap over om handmatig in te stellen.",
+        "error_prefix": "Fout:",
+        "error_failed_to_load": "Ruimtsjablonen konden niet worden geladen:",
+        "door_motion_window": "Deur-bewegingsvenster:",
+        "empty_timeout": "Leeg timeout:",
+        "pir_stale_timeout": "PIR stale timeout:",
+        "door_stale_timeout": "Deur stale timeout:",
+        "error_failed_apply": "Sjabloon kon niet worden toegepast:",
+        "error_try_different": "Er is een fout opgetreden. Probeer een ander sjabloon.",
+        "error_template_not_found": "Sjabloon niet gevonden. Selecteer een ander sjabloon.",
+        "error_pairing_failed": "Koppelingskader kon niet worden geladen. Start de Homey-app opnieuw en probeer het opnieuw.",
+        "error_code_init_failed": "Neem contact op met ondersteuning met foutcode: HOMEY_INIT_FAILED",
+        "error_sdk_not_available": "Homey SDK niet beschikbaar. Start de koppeling opnieuw.",
+        "error_code_api_missing": "Neem contact op met ondersteuning met foutcode: HOMEY_API_MISSING"
+      },
+      "select_trigger_sensors": {
+        "title": "Selecteer Bewegingssensoren",
+        "intro": "Selecteer de bewegingssensoren die aanwezigheidsdetectie activeren.",
+        "search_placeholder": "Zoek sensoren...",
+        "no_devices": "Geen bewegingssensoren gevonden. Voeg eerst bewegingssensoren toe aan uw Homey.",
+        "error_failed_to_load": "Bewegingssensoren konden niet worden geladen:",
+        "no_zone": "Geen zone"
+      },
+      "select_reset_sensors": {
+        "title": "Selecteer Reset-sensoren",
+        "intro": "Selecteer contactsensoren die de aanwezigheid opnieuw instellen wanneer ze worden geopend (bijv. deuren, ramen).",
+        "skip_note": "Deze stap is optioneel. U kunt op Volgende klikken om over te slaan als u geen reset-sensoren wilt gebruiken.",
+        "search_placeholder": "Zoek sensoren...",
+        "no_devices": "Geen contactsensoren gevonden. Klik op Volgende om verder te gaan zonder reset-sensoren.",
+        "error_failed_to_load": "Contactsensoren konden niet worden geladen:",
+        "no_zone": "Geen zone"
+      }
     },
-    "select_reset_sensors": {
-      "title": "Selecteer Deur-/Raamcontacten",
-      "intro": "Selecteer de deur- of raamcontacten die aanwezigheid resetten wanneer ze geopend worden."
+    "room_state": {
+      "select_wiab": {
+        "title": "Selecteer WIAB-apparaat",
+        "intro": "Selecteer het WIAB-apparaat (Wasp in a Box) dat aanwezigheid voor deze Ruimtestatus Manager zal leveren.",
+        "error_no_devices": "Geen WIAB-apparaten gevonden. Maak eerst een WIAB-apparaat aan.",
+        "label_wiab_device": "WIAB-apparaat",
+        "loading_devices": "Apparaten laden...",
+        "hint_device_selection": "De aanwezigheidsstatus van het geselecteerde WIAB-apparaat wordt gebruikt als invoer voor ruimtestatusovergangen.",
+        "error_pairing_failed": "Koppelingskader kon niet worden geladen. Start de Homey-app opnieuw en probeer het opnieuw.",
+        "error_sdk_not_available": "Homey SDK niet beschikbaar. Start de koppeling opnieuw."
+      },
+      "define_states": {
+        "title": "Ruimtestatussen Configureren",
+        "intro": "De Ruimtestatus Manager volgt uitgebreide aanwezigheidsstatussen op basis van het WIAB-apparaat dat u hebt geselecteerd.",
+        "states_info_title": "Ruimtestatussen",
+        "state_idle": "inactief - Ruimte is inactief (geen activiteit gedetecteerd)",
+        "state_extended_idle": "uitgebreid inactief - Ruimte is een tijdje inactief geweest (optioneel)",
+        "state_occupied": "bezet - Ruimte is actief (activiteit gedetecteerd)",
+        "state_extended_occupied": "uitgebreid bezet - Ruimte is een tijdje actief geweest (optioneel)",
+        "label_idle_timeout": "Uitgebreide inactiviteit-timeout (minuten)",
+        "hint_idle_timeout": "Minuten inactiviteit voordat wordt overgeschakeld naar de status 'uitgebreid inactief'. Stel in op 0 om uit te schakelen.",
+        "label_occupied_timeout": "Uitgebreide activiteit-timeout (minuten)",
+        "hint_occupied_timeout": "Minuten activiteit voordat wordt overgeschakeld naar de status 'uitgebreid bezet'. Stel in op 0 om uit te schakelen."
+      }
+    },
+    "zone_seal": {
+      "select_contact_sensors": {
+        "title": "Selecteer Contactsensoren",
+        "intro": "Selecteer de contact- en raamsensoren die de zonesluiting bepalen. Wanneer een sensor open is, wordt de zone als lek beschouwd.",
+        "search_placeholder": "Zoek sensoren...",
+        "no_devices": "Geen contactsensoren gevonden. Voeg eerst deur- of raamsensoren toe aan uw Homey.",
+        "error_failed_to_load": "Contactsensoren konden niet worden geladen:",
+        "no_zone": "Geen zone"
+      }
+    },
+    "circuit_breaker": {
+      "intro": {
+        "title": "Circuitonderbreker",
+        "intro": "Circuitonderbrekers leveren hiërarchische stroomregeling voor uw Homey-automatiseringen. Net als elektrische circuitonderbrekers kunnen ze worden ingeschakeld (stromen toestaan) of uitgeschakeld (stromen blokkeren).",
+        "key_feature": "Belangrijkste kenmerk:",
+        "key_feature_text": "Circuitonderbrekers kunnen in een hoofd-kind-hiërarchie worden georganiseerd. Wanneer een bovenliggende onderbreker wordt uitgeschakeld, worden alle onderliggende onderbrekers automatisch ook uitgeschakeld.",
+        "hierarchical_control": "Hiërarchische besturing:",
+        "hierarchical_control_text": "Organiseer onderbrekers in een boomstructuur (bijv. 'Huis' → 'Verdieping 1' → 'Woonkamer')",
+        "cascade_behavior": "Kaskaadgedrag:",
+        "cascade_behavior_text": "Een bovenliggende uitschakelen schakelt automatisch alle onderliggende uit",
+        "independent_children": "Onafhankelijke kinderen:",
+        "independent_children_text": "Kinderen kunnen onafhankelijk van de bovenliggende status worden bestuurd",
+        "no_cycles": "Geen cykli:",
+        "no_cycles_text": "Het systeem voorkomt automatisch circulaire afhankelijkheden",
+        "root_breakers": "Wortels onderbrekers:",
+        "root_breakers_text": "Onderbrekers zonder bovenliggend element functioneren als topniveau besturingen",
+        "next_step": "In de volgende stap kunt u optioneel een bovenliggende circuitonderbreker voor dit apparaat selecteren. U kunt dit later altijd wijzigen in de apparaatinstellingen."
+      },
+      "select_parent": {
+        "title": "Selecteer Bovenliggende Onderbreker",
+        "intro": "Kies een bovenliggende circuitonderbreker voor hiërarchische besturing, of selecteer 'Geen' om een onderbreker op het hoogste niveau te maken.",
+        "error_failed_to_load": "Circuitonderbrekers konden niet worden geladen. Probeer het opnieuw.",
+        "label_parent_breaker": "Bovenliggende Circuitonderbreker",
+        "loading_breakers": "Circuitonderbrekers laden...",
+        "hint_parent_selection": "Wanneer de bovenliggende onderbreker wordt uitgeschakeld, wordt deze onderbreker ook automatisch uitgeschakeld.",
+        "option_none": "Geen (Wortels onderbreker)",
+        "error_pairing_failed": "Koppelingskader kon niet worden geladen. Start de Homey-app opnieuw en probeer het opnieuw.",
+        "error_sdk_not_available": "Homey SDK niet beschikbaar. Start de koppeling opnieuw."
+      }
     }
   }
 }

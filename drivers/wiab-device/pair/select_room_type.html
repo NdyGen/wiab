@@ -86,27 +86,11 @@
             color: #333;
         }
 
-        .skip-button {
-            width: 100%;
-            padding: 12px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            background: white;
-            cursor: pointer;
-            font-size: 14px;
-            color: #666;
-            transition: all 0.2s;
-        }
-
-        .skip-button:hover {
-            background: #f5f5f5;
-            border-color: #999;
-        }
     </style>
 </head>
 <body>
-    <h1>Select Room Type (Optional)</h1>
-    <p class="intro">
+    <h1 data-i18n="pair.wiab_device.select_room_type.title">Select Room Type (Optional)</h1>
+    <p class="intro" data-i18n="pair.wiab_device.select_room_type.intro">
         Choose a room type to automatically configure timer values with recommended settings for that room.
         You can still adjust these values later in device settings, or skip this step to configure manually.
     </p>
@@ -114,10 +98,6 @@
     <div id="templateList" class="template-list">
         <!-- Templates will be inserted here by JavaScript -->
     </div>
-
-    <button id="skipButton" class="skip-button">
-        Skip - Configure Manually
-    </button>
 
     <script type="application/javascript">
         (function() {
@@ -142,30 +122,13 @@
                     console.log('Loaded ' + templates.length + ' room templates');
                     renderTemplates();
                 });
-
-                // Skip button handler
-                document.getElementById('skipButton').addEventListener('click', function() {
-                    console.log('Skip button clicked');
-                    try {
-                        Homey.emit('select_room_type', null, function(err, result) {
-                            if (err) {
-                                console.error('Failed to skip template selection:', err);
-                                alert('Failed to proceed. Please try again.');
-                                return;
-                            }
-                            Homey.nextView();
-                        });
-                    } catch (error) {
-                        console.error('Exception during skip:', error);
-                        alert('An error occurred. Please restart pairing.');
-                    }
-                });
             }
 
             function showError(message) {
                 const container = document.getElementById('templateList');
+                const errorPrefix = Homey.__('pair.wiab_device.select_room_type.error_prefix');
                 container.innerHTML = '<div style="padding: 20px; color: red; text-align: center;">' +
-                    '<strong>Error:</strong> ' + message +
+                    '<strong>' + errorPrefix + '</strong> ' + message +
                     '</div>';
             }
 
@@ -190,19 +153,19 @@
                     valuesEl.className = 'template-values';
                     valuesEl.innerHTML =
                         '<div class="template-value">' +
-                        '    <span class="value-label">Door motion window:</span>' +
+                        '    <span class="value-label">' + Homey.__('pair.wiab_device.select_room_type.door_motion_window') + '</span>' +
                         '    <span class="value-number">' + template.timerValues.t_enter + 's</span>' +
                         '</div>' +
                         '<div class="template-value">' +
-                        '    <span class="value-label">Empty timeout:</span>' +
+                        '    <span class="value-label">' + Homey.__('pair.wiab_device.select_room_type.empty_timeout') + '</span>' +
                         '    <span class="value-number">' + template.timerValues.t_clear + 's</span>' +
                         '</div>' +
                         '<div class="template-value">' +
-                        '    <span class="value-label">PIR stale timeout:</span>' +
+                        '    <span class="value-label">' + Homey.__('pair.wiab_device.select_room_type.pir_stale_timeout') + '</span>' +
                         '    <span class="value-number">' + template.timerValues.stalePirMinutes + 'min</span>' +
                         '</div>' +
                         '<div class="template-value">' +
-                        '    <span class="value-label">Door stale timeout:</span>' +
+                        '    <span class="value-label">' + Homey.__('pair.wiab_device.select_room_type.door_stale_timeout') + '</span>' +
                         '    <span class="value-number">' + template.timerValues.staleDoorMinutes + 'min</span>' +
                         '</div>';
 
@@ -240,24 +203,22 @@
                 if (template) {
                     console.log('Sending template timer values:', template.timerValues);
                     try {
-                        // Send template timer values to driver and proceed to next view
+                        // Send template timer values to driver
                         Homey.emit('select_room_type', template.timerValues, function(err, result) {
                             if (err) {
                                 console.error('Failed to send template to driver:', err);
-                                alert('Failed to apply template: ' + (err.message || err));
+                                alert(Homey.__('pair.wiab_device.select_room_type.error_failed_apply') + ' ' + (err.message || err));
                                 return;
                             }
-
-                            // Success - proceed to next view
-                            Homey.nextView();
+                            console.log('Template applied successfully');
                         });
                     } catch (error) {
                         console.error('Exception during template selection:', error);
-                        alert('An error occurred. Please skip this step and configure manually.');
+                        alert(Homey.__('pair.wiab_device.select_room_type.error_try_different'));
                     }
                 } else {
                     console.error('Template not found:', templateId);
-                    alert('Template not found. Please select another template or skip.');
+                    alert(Homey.__('pair.wiab_device.select_room_type.error_template_not_found'));
                 }
             }
 
@@ -269,16 +230,16 @@
                     console.error('Failed to initialize pairing page:', error);
                     document.body.innerHTML = '<div style="padding: 20px; color: red;">' +
                         '<h1>Error</h1>' +
-                        '<p>Pairing framework failed to load. Please restart the Homey app and try again.</p>' +
-                        '<p>If this persists, contact support with error code: HOMEY_INIT_FAILED</p>' +
+                        '<p>' + Homey.__('pair.wiab_device.select_room_type.error_pairing_failed') + '</p>' +
+                        '<p>' + Homey.__('pair.wiab_device.select_room_type.error_code_init_failed') + '</p>' +
                         '</div>';
                 }
             } else {
                 console.error('CRITICAL: Homey API not available in pairing context');
                 document.body.innerHTML = '<div style="padding: 20px; color: red;">' +
                     '<h1>Error</h1>' +
-                    '<p>Homey SDK not available. Please restart pairing.</p>' +
-                    '<p>If this persists, contact support with error code: HOMEY_API_MISSING</p>' +
+                    '<p>' + (typeof Homey !== 'undefined' ? Homey.__('pair.wiab_device.select_room_type.error_sdk_not_available') : 'Homey SDK not available. Please restart pairing.') + '</p>' +
+                    '<p>' + (typeof Homey !== 'undefined' ? Homey.__('pair.wiab_device.select_room_type.error_code_api_missing') : 'If this persists, contact support with error code: HOMEY_API_MISSING') + '</p>' +
                     '</div>';
             }
         })();

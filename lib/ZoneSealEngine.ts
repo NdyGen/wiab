@@ -206,6 +206,66 @@ export class ZoneSealEngine {
   }
 
   /**
+   * Transitions to SEALED state with optional delay.
+   *
+   * Shared logic for OPEN_DELAY and LEAKY cases in handleAllSensorsClosed().
+   * If delaySeconds is 0, transitions immediately. Otherwise, enters CLOSE_DELAY
+   * state and schedules transition for later.
+   *
+   * @param {number} delaySeconds - Delay duration in seconds
+   * @returns {StateTransition} State transition result
+   * @private
+   */
+  private transitionToSealed(delaySeconds: number): StateTransition {
+    if (delaySeconds === 0) {
+      this.currentState = ZoneSealState.SEALED;
+      this.delayDeadline = null;
+      return {
+        newState: ZoneSealState.SEALED,
+        immediate: true
+      };
+    }
+
+    this.currentState = ZoneSealState.CLOSE_DELAY;
+    this.delayDeadline = Date.now() + delaySeconds * 1000;
+    return {
+      newState: ZoneSealState.SEALED,
+      immediate: false,
+      delaySeconds
+    };
+  }
+
+  /**
+   * Transitions to LEAKY state with optional delay.
+   *
+   * Shared logic for SEALED and CLOSE_DELAY cases in handleAnySensorOpened().
+   * If delaySeconds is 0, transitions immediately. Otherwise, enters OPEN_DELAY
+   * state and schedules transition for later.
+   *
+   * @param {number} delaySeconds - Delay duration in seconds
+   * @returns {StateTransition} State transition result
+   * @private
+   */
+  private transitionToLeaky(delaySeconds: number): StateTransition {
+    if (delaySeconds === 0) {
+      this.currentState = ZoneSealState.LEAKY;
+      this.delayDeadline = null;
+      return {
+        newState: ZoneSealState.LEAKY,
+        immediate: true
+      };
+    }
+
+    this.currentState = ZoneSealState.OPEN_DELAY;
+    this.delayDeadline = Date.now() + delaySeconds * 1000;
+    return {
+      newState: ZoneSealState.LEAKY,
+      immediate: false,
+      delaySeconds
+    };
+  }
+
+  /**
    * Handles event when all sensors close.
    *
    * State Transitions:
@@ -235,41 +295,11 @@ export class ZoneSealEngine {
 
       case ZoneSealState.OPEN_DELAY:
         // Cancel open delay, start close delay (or immediate if zero)
-        if (closeDelaySeconds === 0) {
-          this.currentState = ZoneSealState.SEALED;
-          this.delayDeadline = null;
-          return {
-            newState: ZoneSealState.SEALED,
-            immediate: true
-          };
-        }
-
-        this.currentState = ZoneSealState.CLOSE_DELAY;
-        this.delayDeadline = Date.now() + closeDelaySeconds * 1000;
-        return {
-          newState: ZoneSealState.SEALED,
-          immediate: false,
-          delaySeconds: closeDelaySeconds
-        };
+        return this.transitionToSealed(closeDelaySeconds);
 
       case ZoneSealState.LEAKY:
         // Start close delay (or immediate if zero)
-        if (closeDelaySeconds === 0) {
-          this.currentState = ZoneSealState.SEALED;
-          this.delayDeadline = null;
-          return {
-            newState: ZoneSealState.SEALED,
-            immediate: true
-          };
-        }
-
-        this.currentState = ZoneSealState.CLOSE_DELAY;
-        this.delayDeadline = Date.now() + closeDelaySeconds * 1000;
-        return {
-          newState: ZoneSealState.SEALED,
-          immediate: false,
-          delaySeconds: closeDelaySeconds
-        };
+        return this.transitionToSealed(closeDelaySeconds);
 
       case ZoneSealState.CLOSE_DELAY:
         // Already in close delay - no change
@@ -310,22 +340,7 @@ export class ZoneSealEngine {
     switch (this.currentState) {
       case ZoneSealState.SEALED:
         // Start open delay (or immediate if zero)
-        if (openDelaySeconds === 0) {
-          this.currentState = ZoneSealState.LEAKY;
-          this.delayDeadline = null;
-          return {
-            newState: ZoneSealState.LEAKY,
-            immediate: true
-          };
-        }
-
-        this.currentState = ZoneSealState.OPEN_DELAY;
-        this.delayDeadline = Date.now() + openDelaySeconds * 1000;
-        return {
-          newState: ZoneSealState.LEAKY,
-          immediate: false,
-          delaySeconds: openDelaySeconds
-        };
+        return this.transitionToLeaky(openDelaySeconds);
 
       case ZoneSealState.OPEN_DELAY:
         // Already in open delay - NO change, delay does NOT restart
@@ -343,22 +358,7 @@ export class ZoneSealEngine {
 
       case ZoneSealState.CLOSE_DELAY:
         // Cancel close delay, start open delay (or immediate if zero)
-        if (openDelaySeconds === 0) {
-          this.currentState = ZoneSealState.LEAKY;
-          this.delayDeadline = null;
-          return {
-            newState: ZoneSealState.LEAKY,
-            immediate: true
-          };
-        }
-
-        this.currentState = ZoneSealState.OPEN_DELAY;
-        this.delayDeadline = Date.now() + openDelaySeconds * 1000;
-        return {
-          newState: ZoneSealState.LEAKY,
-          immediate: false,
-          delaySeconds: openDelaySeconds
-        };
+        return this.transitionToLeaky(openDelaySeconds);
 
       default:
         // Unreachable - TypeScript exhaustiveness check

@@ -1,12 +1,105 @@
 {
   "pair": {
-    "select_trigger_sensors": {
-      "title": "Bewegungsmelder auswählen",
-      "intro": "Wählen Sie die Bewegungsmelder aus, die die Belegungserkennung auslösen."
+    "wiab_device": {
+      "select_room_type": {
+        "title": "Raumtyp wählen (optional)",
+        "intro": "Wählen Sie einen Raumtyp, um Zeitwerte automatisch mit empfohlenen Einstellungen für diesen Raum zu konfigurieren. Sie können diese Werte später in den Geräteeinstellungen anpassen oder diesen Schritt überspringen, um manuell zu konfigurieren.",
+        "error_prefix": "Fehler:",
+        "error_failed_to_load": "Raumvorlagen konnten nicht geladen werden:",
+        "door_motion_window": "Türbewegungsfenster:",
+        "empty_timeout": "Leer-Timeout:",
+        "pir_stale_timeout": "PIR-Timeout:",
+        "door_stale_timeout": "Tür-Timeout:",
+        "error_failed_apply": "Vorlage konnte nicht angewendet werden:",
+        "error_try_different": "Ein Fehler ist aufgetreten. Bitte versuchen Sie eine andere Vorlage.",
+        "error_template_not_found": "Vorlage nicht gefunden. Bitte wählen Sie eine andere Vorlage.",
+        "error_pairing_failed": "Kopplungs-Framework konnte nicht geladen werden. Bitte starten Sie die Homey-App neu und versuchen Sie es erneut.",
+        "error_code_init_failed": "Falls dies weiterhin auftritt, kontaktieren Sie den Support mit Fehlercode: HOMEY_INIT_FAILED",
+        "error_sdk_not_available": "Homey-SDK nicht verfügbar. Bitte starten Sie die Kopplung neu.",
+        "error_code_api_missing": "Falls dies weiterhin auftritt, kontaktieren Sie den Support mit Fehlercode: HOMEY_API_MISSING"
+      },
+      "select_trigger_sensors": {
+        "title": "Bewegungsmelder wählen",
+        "intro": "Wählen Sie die Bewegungsmelder aus, die die Anwesenheitserkennung auslösen.",
+        "search_placeholder": "Sensoren durchsuchen...",
+        "no_devices": "Keine Bewegungsmelder gefunden. Bitte fügen Sie zuerst Bewegungsmelder zu Ihrem Homey hinzu.",
+        "error_failed_to_load": "Bewegungsmelder konnten nicht geladen werden:",
+        "no_zone": "Keine Zone"
+      },
+      "select_reset_sensors": {
+        "title": "Rücksetzmelder wählen",
+        "intro": "Wählen Sie Kontaktmelder aus, die die Anwesenheit zurücksetzen, wenn sie geöffnet werden (z. B. Türen, Fenster).",
+        "skip_note": "Dieser Schritt ist optional. Sie können auf Weiter klicken, um fortzufahren, wenn Sie keine Rücksetzmelder verwenden möchten.",
+        "search_placeholder": "Sensoren durchsuchen...",
+        "no_devices": "Keine Kontaktmelder gefunden. Klicken Sie auf Weiter, um ohne Rücksetzmelder fortzufahren.",
+        "error_failed_to_load": "Kontaktmelder konnten nicht geladen werden:",
+        "no_zone": "Keine Zone"
+      }
     },
-    "select_reset_sensors": {
-      "title": "Tür-/Fensterkontakte auswählen",
-      "intro": "Wählen Sie die Tür- oder Fensterkontakte aus, die die Belegung beim Öffnen zurücksetzen."
+    "room_state": {
+      "select_wiab": {
+        "title": "WIAB-Gerät wählen",
+        "intro": "Wählen Sie das WIAB-Gerät (Wasp in a Box), das die Anwesenheitserkennung für diesen Raumzustands-Manager bereitstellt.",
+        "error_no_devices": "Keine WIAB-Geräte gefunden. Bitte erstellen Sie zuerst ein WIAB-Gerät.",
+        "label_wiab_device": "WIAB-Gerät",
+        "loading_devices": "Geräte werden geladen...",
+        "hint_device_selection": "Der Anwesenheitszustand des gewählten WIAB-Geräts wird als Eingabe für Raumzustandsübergänge verwendet.",
+        "error_pairing_failed": "Kopplungs-Framework konnte nicht geladen werden. Bitte starten Sie die Homey-App neu und versuchen Sie es erneut.",
+        "error_sdk_not_available": "Homey-SDK nicht verfügbar. Bitte starten Sie die Kopplung neu."
+      },
+      "define_states": {
+        "title": "Raumzustände konfigurieren",
+        "intro": "Der Raumzustands-Manager verfolgt erweiterte Anwesenheitszustände basierend auf dem gewählten WIAB-Gerät.",
+        "states_info_title": "Raumzustände",
+        "state_idle": "idle - Raum ist inaktiv (keine Aktivität erkannt)",
+        "state_extended_idle": "extended_idle - Raum war längere Zeit inaktiv (optional)",
+        "state_occupied": "occupied - Raum ist aktiv (Aktivität erkannt)",
+        "state_extended_occupied": "extended_occupied - Raum war längere Zeit aktiv (optional)",
+        "label_idle_timeout": "Erweitertes Idle-Timeout (Minuten)",
+        "hint_idle_timeout": "Minuten der Inaktivität vor dem Übergang zum erweiterten Idle-Zustand. Setzen Sie auf 0, um zu deaktivieren.",
+        "label_occupied_timeout": "Erweitertes Occupied-Timeout (Minuten)",
+        "hint_occupied_timeout": "Minuten der Aktivität vor dem Übergang zum erweiterten Occupied-Zustand. Setzen Sie auf 0, um zu deaktivieren."
+      }
+    },
+    "zone_seal": {
+      "select_contact_sensors": {
+        "title": "Kontaktmelder wählen",
+        "intro": "Wählen Sie die Tür- und Fenster-Kontaktmelder aus, die die Zonendichtheit definieren. Wenn EIN Sensor offen ist, wird die Zone als undicht betrachtet.",
+        "search_placeholder": "Sensoren durchsuchen...",
+        "no_devices": "Keine Kontaktmelder gefunden. Bitte fügen Sie zuerst Tür- oder Fenstermelder zu Ihrem Homey hinzu.",
+        "error_failed_to_load": "Kontaktmelder konnten nicht geladen werden:",
+        "no_zone": "Keine Zone"
+      }
+    },
+    "circuit_breaker": {
+      "intro": {
+        "title": "Schutzschalter",
+        "intro": "Schutzschalter bieten hierarchische Durchsatzsteuerung für Ihre Homey-Automatisierungen. Wie elektrische Schutzschalter können sie EINGESCHALTET (Abläufe zulassen) oder AUSGESCHALTET (Abläufe blockieren) sein.",
+        "key_feature": "Hauptmerkmal:",
+        "key_feature_text": "Schutzschalter können in einer übergeordneten Hierarchie organisiert werden. Wenn ein übergeordneter Schutzschalter AUSGESCHALTET wird, werden alle untergeordneten Schutzschalter automatisch ebenfalls AUSGESCHALTET.",
+        "hierarchical_control": "Hierarchische Steuerung:",
+        "hierarchical_control_text": "Organisieren Sie Schutzschalter in einer Baumstruktur (z. B. \"Haus\" → \"Etage 1\" → \"Wohnzimmer\")",
+        "cascade_behavior": "Kaskadierendes Verhalten:",
+        "cascade_behavior_text": "Das AUSSCHALTEN eines übergeordneten Schutzschalters schaltet automatisch alle untergeordneten Schutzschalter aus",
+        "independent_children": "Unabhängige untergeordnete Schutzschalter:",
+        "independent_children_text": "Untergeordnete Schutzschalter können unabhängig vom übergeordneten Zustand gesteuert werden",
+        "no_cycles": "Keine Zyklen:",
+        "no_cycles_text": "Das System verhindert automatisch zirkuläre Abhängigkeiten",
+        "root_breakers": "Haupt-Schutzschalter:",
+        "root_breakers_text": "Schutzschalter ohne übergeordneten Schutzschalter fungieren als oberste Kontrollen",
+        "next_step": "Im nächsten Schritt wählen Sie optional einen übergeordneten Schutzschalter für dieses Gerät. Sie können dies später jederzeit in den Geräteeinstellungen ändern."
+      },
+      "select_parent": {
+        "title": "Übergeordneten Schutzschalter wählen",
+        "intro": "Wählen Sie einen übergeordneten Schutzschalter für hierarchische Steuerung, oder wählen Sie \"Keine\", um einen Haupt-Schutzschalter zu erstellen.",
+        "error_failed_to_load": "Schutzschalter konnten nicht geladen werden. Bitte versuchen Sie es erneut.",
+        "label_parent_breaker": "Übergeordneter Schutzschalter",
+        "loading_breakers": "Schutzschalter werden geladen...",
+        "hint_parent_selection": "Wenn der übergeordnete Schutzschalter AUSGESCHALTET wird, wird dieser Schutzschalter automatisch ebenfalls AUSGESCHALTET.",
+        "option_none": "Keine (Haupt-Schutzschalter)",
+        "error_pairing_failed": "Kopplungs-Framework konnte nicht geladen werden. Bitte starten Sie die Homey-App neu und versuchen Sie es erneut.",
+        "error_sdk_not_available": "Homey-SDK nicht verfügbar. Bitte starten Sie die Kopplung neu."
+      }
     }
   }
 }
