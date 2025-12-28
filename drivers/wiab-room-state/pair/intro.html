@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .intro {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .feature-list {
+            margin: 20px 0;
+            padding-left: 20px;
+        }
+
+        .feature-list li {
+            margin-bottom: 12px;
+            line-height: 1.5;
+            color: #555;
+        }
+
+        .highlight {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .highlight strong {
+            color: #1976d2;
+        }
+
+    </style>
+</head>
+<body>
+    <h1 data-i18n="intro.title">Room State Manager</h1>
+    <p class="intro" data-i18n="intro.description">
+        The Room State Manager adds intelligent state tracking to your WIAB device.
+        It monitors occupancy and automatically transitions through states based on configurable timers, providing more context for your automations.
+    </p>
+
+    <div class="highlight">
+        <strong data-i18n="intro.key_feature">Key Feature:</strong> <span data-i18n="intro.key_feature_description">Four-state system that tracks not just if a room is occupied, but for how long - enabling time-aware automations.</span>
+    </div>
+
+    <ul class="feature-list">
+        <li><strong data-i18n="intro.idle">Idle:</strong> <span data-i18n="intro.idle_description">Room is unoccupied (no activity detected)</span></li>
+        <li><strong data-i18n="intro.extended_idle">Extended Idle:</strong> <span data-i18n="intro.extended_idle_description">Room has been unoccupied for an extended period (configurable timeout)</span></li>
+        <li><strong data-i18n="intro.occupied">Occupied:</strong> <span data-i18n="intro.occupied_description">Room is currently occupied (activity detected)</span></li>
+        <li><strong data-i18n="intro.extended_occupied">Extended Occupied:</strong> <span data-i18n="intro.extended_occupied_description">Room has been occupied for an extended period (configurable timeout)</span></li>
+        <li><strong data-i18n="intro.manual_override">Manual Override:</strong> <span data-i18n="intro.manual_override_description">Set states manually via flows and return to automatic mode when needed</span></li>
+    </ul>
+
+    <p class="intro" data-i18n="intro.next_step">
+        In the next steps, you'll select a WIAB device to monitor and configure the timeout durations for extended states.
+    </p>
+
+    <script>
+        // Simple i18n loader
+        const translations = {
+            en: {
+                "intro.title": "Room State Manager",
+                "intro.description": "The Room State Manager adds intelligent state tracking to your WIAB device. It monitors occupancy and automatically transitions through states based on configurable timers, providing more context for your automations.",
+                "intro.key_feature": "Key Feature:",
+                "intro.key_feature_description": "Four-state system that tracks not just if a room is occupied, but for how long - enabling time-aware automations.",
+                "intro.idle": "Idle:",
+                "intro.idle_description": "Room is unoccupied (no activity detected)",
+                "intro.extended_idle": "Extended Idle:",
+                "intro.extended_idle_description": "Room has been unoccupied for an extended period (configurable timeout)",
+                "intro.occupied": "Occupied:",
+                "intro.occupied_description": "Room is currently occupied (activity detected)",
+                "intro.extended_occupied": "Extended Occupied:",
+                "intro.extended_occupied_description": "Room has been occupied for an extended period (configurable timeout)",
+                "intro.manual_override": "Manual Override:",
+                "intro.manual_override_description": "Set states manually via flows and return to automatic mode when needed",
+                "intro.next_step": "In the next steps, you'll select a WIAB device to monitor and configure the timeout durations for extended states."
+            },
+            nl: {
+                "intro.title": "Kamerstatus Manager",
+                "intro.description": "De Kamerstatus Manager voegt intelligente statustracking toe aan uw WIAB-apparaat. Het monitort aanwezigheid en schakelt automatisch tussen statussen op basis van configureerbare timers, waardoor meer context voor uw automatiseringen wordt geboden.",
+                "intro.key_feature": "Belangrijkste functie:",
+                "intro.key_feature_description": "Vier-status systeem dat niet alleen bijhoudt of een kamer bezet is, maar ook hoe lang - waardoor tijdsbewuste automatiseringen mogelijk zijn.",
+                "intro.idle": "Vrij:",
+                "intro.idle_description": "Kamer is onbezet (geen activiteit gedetecteerd)",
+                "intro.extended_idle": "Verlengd Vrij:",
+                "intro.extended_idle_description": "Kamer is al langere tijd onbezet (configureerbare timeout)",
+                "intro.occupied": "Bezet:",
+                "intro.occupied_description": "Kamer is momenteel bezet (activiteit gedetecteerd)",
+                "intro.extended_occupied": "Verlengd Bezet:",
+                "intro.extended_occupied_description": "Kamer is al langere tijd bezet (configureerbare timeout)",
+                "intro.manual_override": "Handmatige overschrijving:",
+                "intro.manual_override_description": "Stel statussen handmatig in via flows en keer terug naar automatische modus wanneer nodig",
+                "intro.next_step": "In de volgende stappen selecteert u een WIAB-apparaat om te monitoren en configureert u de timeout-duur voor verlengde statussen."
+            },
+            de: {
+                "intro.title": "Raumzustand-Manager",
+                "intro.description": "Der Raumzustand-Manager fügt Ihrem WIAB-Gerät intelligente Zustandsverfolgung hinzu. Er überwacht die Belegung und wechselt automatisch zwischen Zuständen basierend auf konfigurierbaren Timern, um mehr Kontext für Ihre Automatisierungen zu bieten.",
+                "intro.key_feature": "Hauptfunktion:",
+                "intro.key_feature_description": "Vier-Zustands-System, das nicht nur verfolgt, ob ein Raum belegt ist, sondern auch wie lange - ermöglicht zeitbewusste Automatisierungen.",
+                "intro.idle": "Inaktiv:",
+                "intro.idle_description": "Raum ist unbesetzt (keine Aktivität erkannt)",
+                "intro.extended_idle": "Erweitert Inaktiv:",
+                "intro.extended_idle_description": "Raum ist längere Zeit unbesetzt (konfigurierbares Timeout)",
+                "intro.occupied": "Besetzt:",
+                "intro.occupied_description": "Raum ist derzeit besetzt (Aktivität erkannt)",
+                "intro.extended_occupied": "Erweitert Besetzt:",
+                "intro.extended_occupied_description": "Raum ist längere Zeit besetzt (konfigurierbares Timeout)",
+                "intro.manual_override": "Manuelle Überschreibung:",
+                "intro.manual_override_description": "Zustände manuell über Flows einstellen und bei Bedarf in den automatischen Modus zurückkehren",
+                "intro.next_step": "In den nächsten Schritten wählen Sie ein WIAB-Gerät zur Überwachung aus und konfigurieren die Timeout-Dauern für erweiterte Zustände."
+            },
+            no: {
+                "intro.title": "Romtilstand Manager",
+                "intro.description": "Romtilstand Manager legger til intelligent tilstandssporing til din WIAB-enhet. Den overvåker belegg og bytter automatisk mellom tilstander basert på konfigurerbare timere, og gir mer kontekst for automatiseringene dine.",
+                "intro.key_feature": "Hovedfunksjon:",
+                "intro.key_feature_description": "Fire-tilstands system som sporer ikke bare om et rom er opptatt, men hvor lenge - muliggjør tidsbevisste automatiseringer.",
+                "intro.idle": "Ledig:",
+                "intro.idle_description": "Rommet er ledig (ingen aktivitet oppdaget)",
+                "intro.extended_idle": "Utvidet Ledig:",
+                "intro.extended_idle_description": "Rommet har vært ledig i lengre tid (konfigurerbar timeout)",
+                "intro.occupied": "Opptatt:",
+                "intro.occupied_description": "Rommet er for øyeblikket opptatt (aktivitet oppdaget)",
+                "intro.extended_occupied": "Utvidet Opptatt:",
+                "intro.extended_occupied_description": "Rommet har vært opptatt i lengre tid (konfigurerbar timeout)",
+                "intro.manual_override": "Manuell overstyring:",
+                "intro.manual_override_description": "Sett tilstander manuelt via flows og gå tilbake til automatisk modus når det er nødvendig",
+                "intro.next_step": "I de neste trinnene velger du en WIAB-enhet å overvåke og konfigurerer timeout-varighetene for utvidede tilstander."
+            },
+            sv: {
+                "intro.title": "Rumstillstånd Manager",
+                "intro.description": "Rumstillstånd Manager lägger till intelligent tillståndsspårning till din WIAB-enhet. Den övervakar beläggning och byter automatiskt mellan tillstånd baserat på konfigurerbara timers, vilket ger mer kontext för dina automatiseringar.",
+                "intro.key_feature": "Huvudfunktion:",
+                "intro.key_feature_description": "Fyra-tillstånds system som spårar inte bara om ett rum är upptaget, utan hur länge - möjliggör tidsmedvetna automatiseringar.",
+                "intro.idle": "Ledigt:",
+                "intro.idle_description": "Rummet är ledigt (ingen aktivitet upptäckt)",
+                "intro.extended_idle": "Utökat Ledigt:",
+                "intro.extended_idle_description": "Rummet har varit ledigt under en längre period (konfigurerbar timeout)",
+                "intro.occupied": "Upptaget:",
+                "intro.occupied_description": "Rummet är för närvarande upptaget (aktivitet upptäckt)",
+                "intro.extended_occupied": "Utökat Upptaget:",
+                "intro.extended_occupied_description": "Rummet har varit upptaget under en längre period (konfigurerbar timeout)",
+                "intro.manual_override": "Manuell åsidosättning:",
+                "intro.manual_override_description": "Ställ in tillstånd manuellt via flöden och återgå till automatiskt läge vid behov",
+                "intro.next_step": "I nästa steg väljer du en WIAB-enhet att övervaka och konfigurerar timeout-varaktigheterna för utökade tillstånd."
+            }
+        };
+
+        // Get language from Homey
+        const language = window.Homey ? (window.Homey.getLanguage() || 'en') : 'en';
+        const lang = translations[language] || translations.en;
+
+        // Apply translations
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (lang[key]) {
+                el.textContent = lang[key];
+            }
+        });
+    </script>
+</body>
+</html>
