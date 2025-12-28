@@ -214,10 +214,16 @@ class CircuitBreakerDevice extends Homey.Device {
             }
           }
 
-          // If we couldn't warn the user, throw an error they'll see in flow execution
+          // If we couldn't warn the user via device warning, throw an error they'll see in flow execution
+          // This ensures critical failures are visible even when warning system is unavailable
           if (!userNotified) {
+            const failedDeviceIds = result.errors.map(e => e.deviceId).slice(0, 3).join(', ');
+            const moreDevices = result.errors.length > 3 ? ` and ${result.errors.length - 3} more` : '';
             throw new Error(
-              `Circuit breaker state changed but ${result.failed} of ${totalDevices} child devices failed to update. Check device warnings.`
+              `CRITICAL: Circuit breaker cascade failed for ${result.failed} of ${totalDevices} child devices. ` +
+              `Warning system unavailable - this error shown as fallback notification. ` +
+              `Failed devices: ${failedDeviceIds}${moreDevices}. ` +
+              `Wait a moment and try again. If problem persists, restart the app to restore warning system.`
             );
           }
         } else {
@@ -235,28 +241,44 @@ class CircuitBreakerDevice extends Homey.Device {
                 warningError
               );
             } else {
-              // Unexpected error (programming bug) - log with more visibility
+              // Unexpected error (programming bug) - log with CRITICAL severity but don't throw
+              // Cascade succeeded, so throwing would make successful operation appear to fail
               this.error(
-                `[${CircuitBreakerErrorId.WARNING_CLEAR_FAILED}] Unexpected error in warning clear operation:`,
+                `[${CircuitBreakerErrorId.WARNING_CLEAR_FAILED}] CRITICAL: Unexpected error in warning clear operation:`,
                 warningError
               );
-              // Throw to notify user that warning state is inconsistent
-              // This prevents silent failure where stale warnings persist indefinitely
-              throw new Error(
-                'Cascade succeeded but warning system failed. Device may show incorrect warning. Restart the app if warning persists.'
-              );
+
+              // Try to set a warning about the warning system being broken
+              // This provides user notification without failing the successful cascade
+              try {
+                await this.setWarning(
+                  'Warning system malfunction detected. Device is working correctly but warnings may be stale. Restart the app to fix.'
+                );
+              } catch (secondaryError) {
+                this.error(
+                  `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Cannot set warning about warning system failure:`,
+                  secondaryError
+                );
+                // Don't throw - cascade succeeded, warning system failure is secondary
+              }
             }
           }
         }
         } catch (cascadeError) {
+          // Extract error ID from HierarchyError if available to avoid double-logging
+          const errorId = (cascadeError as { errorId?: string })?.errorId ||
+            CircuitBreakerErrorId.CASCADE_ENGINE_FAILED;
+
+          // Log once with full context
           this.error(
-            `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Cascade engine threw exception:`,
-            cascadeError
+            `[${errorId}] Cascade failed:`,
+            cascadeError instanceof Error ? cascadeError.message : String(cascadeError)
           );
-          this.error(
-            `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Error details:`,
-            cascadeError instanceof Error ? cascadeError.stack : String(cascadeError)
-          );
+
+          // Only log stack trace if error has useful stack and hasn't been logged already
+          if (cascadeError instanceof Error && cascadeError.stack) {
+            this.error(`[${errorId}] Stack trace:`, cascadeError.stack);
+          }
 
           // Alert user about cascade failure via device warning
           try {
@@ -347,23 +369,25 @@ class CircuitBreakerDevice extends Homey.Device {
           error
         );
       } else {
-        // Unexpected error (programming bug) - log with more visibility
+        // Unexpected error (programming bug) - log with CRITICAL severity
+        // Flow cards are non-critical, so don't throw even for unexpected errors
         this.error(
-          `[${CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED}] Unexpected error in flow card trigger:`,
+          `[${CircuitBreakerErrorId.FLOW_CARD_TRIGGER_FAILED}] CRITICAL: Unexpected flow card error (possible SDK bug):`,
           error
         );
-        // CRITICAL: Notify user of unexpected flow card failures
-        // This ensures users know their automations may not be working
+
+        // Set warning to alert user about broken automations
+        // State change succeeded, so don't throw even if warning fails
         try {
           await this.setWarning(
-            'Flow automation triggers may not be working. Check app logs or restart the app.'
+            'Flow automations may not be working correctly. Circuit breaker state changes will continue to work. Check app logs or restart the app.'
           );
         } catch (warningError) {
-          this.error('Failed to set warning after flow card error:', warningError);
-          // If we can't warn the user via device warning, throw an error they'll see in flow execution
-          // This prevents silent failure where user never learns automations are broken
-          throw new Error(
-            'Flow card trigger failed and warning system is unavailable. Flow automations may not be working. Check app status or restart Homey.'
+          // Even if warning fails, don't throw - flow cards are non-critical
+          // State change succeeded, that's what matters
+          this.error(
+            `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Cannot warn user about flow card failure:`,
+            warningError
           );
         }
       }

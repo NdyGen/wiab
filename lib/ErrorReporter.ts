@@ -23,6 +23,7 @@
  */
 
 import { Logger, ErrorContext, ErrorSeverity } from './ErrorTypes';
+import { ErrorClassifier, ErrorCategory } from './ErrorClassifier';
 
 export class ErrorReporter {
   private logger: Logger;
@@ -134,53 +135,19 @@ export class ErrorReporter {
       return defaultMessage;
     }
 
-    const message = error.message.toLowerCase();
+    // Use ErrorClassifier for consistent error categorization
+    const classifier = new ErrorClassifier(this.logger);
+    const classification = classifier.classifyError(error);
 
-    // HomeyAPI not available
-    if (message.includes('homey api not available')) {
-      return 'The app is still initializing. Please wait a moment and try again.';
+    // Get user message from classifier
+    const userMessage = classifier.getUserMessage(classification);
+
+    // For unknown errors, include error message for debugging
+    if (classification.category === ErrorCategory.UNKNOWN) {
+      return `${defaultMessage}: ${error.message}`;
     }
 
-    // Network/timeout errors
-    if (
-      message.includes('timeout') ||
-      message.includes('etimedout') ||
-      message.includes('econnrefused')
-    ) {
-      return 'Request timed out. Please check your network connection and try again.';
-    }
-
-    // Permission errors
-    if (
-      message.includes('permission') ||
-      message.includes('unauthorized') ||
-      message.includes('forbidden')
-    ) {
-      return 'Permission denied. Please check app permissions in Homey settings.';
-    }
-
-    // Zone-related errors
-    if (message.includes('zone')) {
-      return 'Cannot access device zones. Some devices may not display zone information.';
-    }
-
-    // JSON parsing errors
-    if (message.includes('json') || message.includes('parse')) {
-      return 'Invalid configuration data. Please check device settings.';
-    }
-
-    // Device not found
-    if (message.includes('device not found') || message.includes('not found')) {
-      return 'Configured device not found. Please check device configuration.';
-    }
-
-    // Capability errors
-    if (message.includes('capability')) {
-      return 'Device capability error. Please verify device compatibility.';
-    }
-
-    // Generic fallback with error message
-    return `${defaultMessage}: ${error.message}`;
+    return userMessage;
   }
 
   /**

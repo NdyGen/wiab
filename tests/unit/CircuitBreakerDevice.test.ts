@@ -537,13 +537,13 @@ describe('CircuitBreakerDevice', () => {
       // The error is wrapped by the outer catch with a user-friendly message
       await expect(capabilityListener(false)).rejects.toThrow('Failed to update circuit breaker state');
 
-      // Cascade error should be logged with new error ID
+      // Cascade error should be logged with actual message format
       expect(device.error).toHaveBeenCalledWith(
-        `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Cascade engine threw exception:`,
-        expect.any(Error)
+        `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Cascade failed:`,
+        'Cascade engine failure'
       );
       expect(device.error).toHaveBeenCalledWith(
-        `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Error details:`,
+        `[${CircuitBreakerErrorId.CASCADE_ENGINE_FAILED}] Stack trace:`,
         expect.any(String)
       );
 

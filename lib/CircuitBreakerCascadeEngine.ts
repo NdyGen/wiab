@@ -23,6 +23,11 @@ import { HomeyAPI, CascadeResult, DeviceCascadeResult } from './types';
 import { CircuitBreakerHierarchyManager } from './CircuitBreakerHierarchyManager';
 import { CircuitBreakerErrorId } from '../constants/errorIds';
 import { DeviceNotFoundError, HierarchyError } from './CircuitBreakerErrors';
+import {
+  ErrorClassifier,
+  ErrorCategory,
+  ErrorReasonCode,
+} from './ErrorClassifier';
 
 /**
  * Interface for logging instance
@@ -227,39 +232,39 @@ export class CircuitBreakerCascadeEngine {
         success: true,
       };
     } catch (error) {
-      // Distinguish between system-level failures and device-level failures
+      // Use ErrorClassifier to determine if this is a system vs device error
       // System failures (HomeyAPI unavailable) should propagate up to abort cascade
       // Device failures (setCapabilityValue errors) are logged and cascade continues
-      //
-      // NOTE: Uses error message pattern matching to classify errors. This is pragmatic
-      // but could misclassify errors if messages don't match expected patterns.
+      const classifier = new ErrorClassifier(this.logger);
+      const classification = classifier.classifyError(error as Error);
 
-      if (error instanceof Error) {
-        const errorMsg = error.message.toLowerCase();
-
-        // Check for system-level failures that indicate HomeyAPI.devices.getDevices() failed
-        // These are failures in retrieving the device list, not failures updating a specific device
-        // Matches common HomeyAPI and network error patterns
-        if (
-          errorMsg.includes('homeyapi') ||
-          errorMsg.includes('api.devices.getdevices') ||
-          errorMsg.includes('econnrefused') ||
-          errorMsg.includes('enotfound') ||
-          (errorMsg.includes('getdevices') && errorMsg.includes('failed'))
-        ) {
-          // System-level error - throw to abort cascade
-          throw new Error(
-            `Cannot update devices: HomeyAPI unavailable (${error.message}). Wait and try again.`
-          );
-        }
+      // System-level failures abort the cascade
+      // These are network errors or API unavailability that affect all devices
+      if (
+        classification.category === ErrorCategory.TRANSIENT &&
+        (classification.reasonCode === ErrorReasonCode.API_UNAVAILABLE ||
+          classification.reasonCode === ErrorReasonCode.NETWORK_ERROR)
+      ) {
+        const userMessage = classifier.getUserMessage(classification);
+        throw new Error(`Cannot update devices: HomeyAPI unavailable. ${userMessage}`);
       }
 
-      // Device-level error - log and return failure result so cascade continues
-      // This includes setCapabilityValue failures, capability not supported, device offline, etc.
+      // Log all errors for debugging
       this.logger.error(
-        `[${CircuitBreakerErrorId.CHILD_UPDATE_FAILED}] Device update failed:`,
+        `[${CircuitBreakerErrorId.CHILD_UPDATE_FAILED}] Device update failed (${classification.reasonCode}):`,
         error
       );
+
+      // Warn about unknown errors that might be programming bugs
+      if (classification.category === ErrorCategory.UNKNOWN) {
+        this.logger.error(
+          `[${CircuitBreakerErrorId.CHILD_UPDATE_FAILED}] WARNING: Unclassified error may indicate programming bug:`,
+          error instanceof Error ? error.stack : error
+        );
+      }
+
+      // Device-level error or unknown error - log and return failure result so cascade continues
+      // This includes setCapabilityValue failures, capability not supported, device offline, etc.
       return {
         deviceId,
         success: false,
