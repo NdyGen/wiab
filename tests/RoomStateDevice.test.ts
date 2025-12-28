@@ -30,6 +30,9 @@ describe('RoomStateDevice', () => {
     device = new RoomStateDevice();
     Object.assign(device, {
       homey: mockHomey,
+      driver: {
+        homey: mockHomey,
+      },
       getData: jest.fn().mockReturnValue({ id: 'room-state-123' }),
       getName: jest.fn().mockReturnValue('Test Room State'),
       getSettings: jest.fn().mockReturnValue({
@@ -222,6 +225,135 @@ describe('RoomStateDevice', () => {
 
       await device.handleManualStateChange('occupied');
       expect(device.isManualOverride()).toBe(true);
+    });
+  });
+
+  describe('State-Specific Flow Triggers', () => {
+    it('should trigger room_state_became_occupied when state becomes occupied', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      // Change state to occupied
+      await device.handleManualStateChange('occupied');
+
+      // Get the mock trigger cards
+      interface MockHomeyWithFlow {
+        flow?: {
+          _getDeviceTriggerCard?: (id: string) => { trigger: jest.Mock } | undefined;
+        };
+      }
+      const genericTrigger = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_changed');
+      const specificTrigger = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_became_occupied');
+
+      // Verify both generic and state-specific triggers were called
+      expect(genericTrigger?.trigger).toHaveBeenCalled();
+      expect(specificTrigger?.trigger).toHaveBeenCalled();
+    });
+
+    it('should trigger room_state_became_extended_occupied when state becomes extended_occupied', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      // Change state to extended_occupied
+      await device.handleManualStateChange('extended_occupied');
+
+      // Get the mock trigger cards
+      interface MockHomeyWithFlow {
+        flow?: {
+          _getDeviceTriggerCard?: (id: string) => { trigger: jest.Mock } | undefined;
+        };
+      }
+      const genericTrigger = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_changed');
+      const specificTrigger = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_became_extended_occupied');
+
+      // Verify both generic and state-specific triggers were called
+      expect(genericTrigger?.trigger).toHaveBeenCalled();
+      expect(specificTrigger?.trigger).toHaveBeenCalled();
+    });
+
+    it('should trigger room_state_became_idle when state becomes idle', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: true }, // Start with occupied
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      // Clear init triggers
+      interface MockHomeyWithFlow {
+        flow?: {
+          _getDeviceTriggerCard?: (id: string) => { trigger: jest.Mock } | undefined;
+        };
+      }
+      let genericTrigger = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_changed');
+      genericTrigger?.trigger.mockClear();
+
+      // Change to idle
+      await device.handleManualStateChange('idle');
+
+      // Get the mock trigger cards
+      genericTrigger = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_changed');
+      const specificTrigger = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_became_idle');
+
+      // Verify both generic and state-specific triggers were called
+      expect(genericTrigger?.trigger).toHaveBeenCalled();
+      expect(specificTrigger?.trigger).toHaveBeenCalled();
+    });
+
+    it('should trigger room_state_became_extended_idle when state becomes extended_idle', async () => {
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      // First set to occupied to create all trigger cards
+      await device.handleManualStateChange('occupied');
+
+      // Get the mock trigger cards
+      interface MockHomeyWithFlow {
+        flow?: {
+          _getDeviceTriggerCard?: (id: string) => { trigger: jest.Mock } | undefined;
+        };
+      }
+      const genericTrigger = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_changed');
+      const specificTrigger = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_became_extended_idle');
+
+      // Clear previous calls
+      genericTrigger?.trigger.mockClear();
+      specificTrigger?.trigger.mockClear();
+
+      // Then change to extended_idle (this will create the extended_idle trigger card if not exists)
+      await device.handleManualStateChange('extended_idle');
+
+      // Get trigger cards again in case they were just created
+      const genericTriggerAfter = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_changed');
+      const specificTriggerAfter = (mockHomey as MockHomeyWithFlow).flow?._getDeviceTriggerCard?.('room_state_became_extended_idle');
+
+      // Verify both generic and state-specific triggers were called
+      expect(genericTriggerAfter?.trigger).toHaveBeenCalled();
+      expect(specificTriggerAfter?.trigger).toHaveBeenCalled();
     });
   });
 });

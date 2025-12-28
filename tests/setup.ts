@@ -21,6 +21,7 @@ export function createMockHomey() {
   const mockDrivers: Map<string, MockDriver> = new Map();
   const mockActionCards: Map<string, { registerRunListener: jest.Mock }> = new Map();
   const mockConditionCards: Map<string, { registerRunListener: jest.Mock }> = new Map();
+  const mockDeviceTriggerCards: Map<string, { trigger: jest.Mock }> = new Map();
 
   return {
     log: jest.fn((..._args: unknown[]) => {
@@ -64,11 +65,21 @@ export function createMockHomey() {
         }
         return mockConditionCards.get(id);
       }),
+      getDeviceTriggerCard: jest.fn((id: string) => {
+        if (!mockDeviceTriggerCards.has(id)) {
+          mockDeviceTriggerCards.set(id, {
+            trigger: jest.fn().mockResolvedValue(undefined),
+          });
+        }
+        return mockDeviceTriggerCards.get(id);
+      }),
       _getActionCard: (id: string) => mockActionCards.get(id),
       _getConditionCard: (id: string) => mockConditionCards.get(id),
+      _getDeviceTriggerCard: (id: string) => mockDeviceTriggerCards.get(id),
       _clear: () => {
         mockActionCards.clear();
         mockConditionCards.clear();
+        mockDeviceTriggerCards.clear();
       },
     },
   };

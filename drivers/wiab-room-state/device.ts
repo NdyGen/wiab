@@ -1082,6 +1082,8 @@ class RoomStateDevice extends Homey.Device {
   private async triggerStateChangedFlow(oldState: string, newState: string): Promise<void> {
     try {
       const driver = this.driver;
+
+      // Trigger generic state changed flow
       const stateChangedTrigger = driver.homey.flow.getDeviceTriggerCard(
         'room_state_changed'
       );
@@ -1097,6 +1099,23 @@ class RoomStateDevice extends Homey.Device {
         );
 
         this.log(`Flow triggered: state changed to "${newState}"`);
+      }
+
+      // Trigger state-specific flow based on new state
+      const stateSpecificTriggerMap: Record<string, string> = {
+        'extended_occupied': 'room_state_became_extended_occupied',
+        'occupied': 'room_state_became_occupied',
+        'idle': 'room_state_became_idle',
+        'extended_idle': 'room_state_became_extended_idle',
+      };
+
+      const specificTriggerId = stateSpecificTriggerMap[newState];
+      if (specificTriggerId) {
+        const specificTrigger = driver.homey.flow.getDeviceTriggerCard(specificTriggerId);
+        if (specificTrigger) {
+          await specificTrigger.trigger(this, {}, {});
+          this.log(`Flow triggered: ${specificTriggerId}`);
+        }
       }
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));

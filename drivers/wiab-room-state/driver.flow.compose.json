@@ -39,6 +39,46 @@
           }
         }
       ]
+    },
+    {
+      "id": "room_state_became_extended_occupied",
+      "title": {
+        "en": "Room became extended occupied",
+        "nl": "Kamer werd verlengd bezet",
+        "de": "Raum wurde erweitert besetzt",
+        "no": "Rom ble utvidet opptatt",
+        "sv": "Rummet blev utökat upptaget"
+      }
+    },
+    {
+      "id": "room_state_became_occupied",
+      "title": {
+        "en": "Room became occupied",
+        "nl": "Kamer werd bezet",
+        "de": "Raum wurde besetzt",
+        "no": "Rom ble opptatt",
+        "sv": "Rummet blev upptaget"
+      }
+    },
+    {
+      "id": "room_state_became_idle",
+      "title": {
+        "en": "Room became idle",
+        "nl": "Kamer werd vrij",
+        "de": "Raum wurde inaktiv",
+        "no": "Rom ble ledig",
+        "sv": "Rummet blev ledigt"
+      }
+    },
+    {
+      "id": "room_state_became_extended_idle",
+      "title": {
+        "en": "Room became extended idle",
+        "nl": "Kamer werd verlengd vrij",
+        "de": "Raum wurde erweitert inaktiv",
+        "no": "Rom ble utvidet ledig",
+        "sv": "Rummet blev utökat ledigt"
+      }
     }
   ],
   "conditions": [
