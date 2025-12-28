@@ -1,6 +1,23 @@
 {
   "pair": {
     "wiab_device": {
+      "intro": {
+        "title": "WIAB Enhet",
+        "description": "WIAB (Geting I En Låda) skapar en virtuell närvarosensor genom att övervaka fysiska sensorer i ditt rum. Som en geting fångad i en låda som förblir aktiv tills den hittar utgången, förblir enheten upptagen tills specifika villkor uppfylls.",
+        "key_feature": "Huvudfunktion:",
+        "key_feature_description": "Kombinerar flera sensorer för att skapa intelligent rumsnärvarodetektering med konfigurerbara aktiverings- och avaktiveringsutlösare.",
+        "trigger_sensors": "Utlösarsensorer:",
+        "trigger_sensors_description": "Rörelsesensorer eller andra enheter som aktiverar närvaro (geting kommer in i lådan)",
+        "reset_sensors": "Återställningssensorer:",
+        "reset_sensors_description": "Dörrkontakter eller andra sensorer som avaktiverar närvaro (geting hittar utgången)",
+        "edge_detection": "Flankdetektering:",
+        "edge_detection_description": "Endast FALSKT→SANT övergångar utlöser åtgärder, förhindrar upprepade aktiveringar",
+        "priority": "Prioritetslogik:",
+        "priority_description": "Återställningssensorer kontrolleras först, säkerställer att utgångar alltid har prioritet",
+        "polling": "Tillförlitlig polling:",
+        "polling_description": "Kontrollerar sensorer var 2:a sekund för konsekvent beteende",
+        "next_step": "I nästa steg väljer du en rumstyp, konfigurerar utlösarsensorer (för att upptäcka närvaro) och återställningssensorer (för att upptäcka utgångar)."
+      },
       "select_room_type": {
         "title": "Välj rumstyp (valfritt)",
         "intro": "Välj en rumstyp för att automatiskt konfigurera timervärdena med rekommenderade inställningar för det rummet. Du kan fortfarande justera dessa värden senare i enhetsinställningar, eller hoppa över detta steg för manuell konfiguration.",
@@ -37,6 +54,23 @@
       }
     },
     "room_state": {
+      "intro": {
+        "title": "Rumstillstånd Manager",
+        "description": "Rumstillstånd Manager lägger till intelligent tillståndsspårning till din WIAB-enhet. Den övervakar beläggning och byter automatiskt mellan tillstånd baserat på konfigurerbara timers, vilket ger mer kontext för dina automatiseringar.",
+        "key_feature": "Huvudfunktion:",
+        "key_feature_description": "Fyra-tillstånds system som spårar inte bara om ett rum är upptaget, utan hur länge - möjliggör tidsmedvetna automatiseringar.",
+        "idle": "Ledigt:",
+        "idle_description": "Rummet är ledigt (ingen aktivitet upptäckt)",
+        "extended_idle": "Utökat Ledigt:",
+        "extended_idle_description": "Rummet har varit ledigt under en längre period (konfigurerbar timeout)",
+        "occupied": "Upptaget:",
+        "occupied_description": "Rummet är för närvarande upptaget (aktivitet upptäckt)",
+        "extended_occupied": "Utökat Upptaget:",
+        "extended_occupied_description": "Rummet har varit upptaget under en längre period (konfigurerbar timeout)",
+        "manual_override": "Manuell åsidosättning:",
+        "manual_override_description": "Ställ in tillstånd manuellt via flöden och återgå till automatiskt läge vid behov",
+        "next_step": "I nästa steg väljer du en WIAB-enhet att övervaka och konfigurerar timeout-varaktigheterna för utökade tillstånd."
+      },
       "select_wiab": {
         "title": "Välj WIAB-enhet",
         "intro": "Välj WIAB-enheten (Wasp in a Box) som ska tillhandahålla närvarodata för denna rumstillståndshanterare.",
@@ -62,6 +96,23 @@
       }
     },
     "zone_seal": {
+      "intro": {
+        "title": "Zontätning",
+        "description": "Zontätning övervakar dörr- och fönsterkontaktsensorer i en zon för att avgöra om zonen är ordentligt tätad (alla dörrar och fönster stängda) eller läcker (minst en öppning upptäckt).",
+        "key_feature": "Huvudfunktion:",
+        "key_feature_description": "Aggregerar flera kontaktsensorer för att ge en enda tätad/läckande status, perfekt för säkerhetskontroller, klimatstyrning eller automatiseringsutlösare.",
+        "sealed": "Tätad:",
+        "sealed_description": "Alla övervakade dörrar och fönster är stängda",
+        "leaky": "Läckande:",
+        "leaky_description": "Minst en dörr eller fönster är öppet",
+        "stale_detection": "Föråldrad detektering:",
+        "stale_detection_description": "Identifierar sensorer som inte har rapporterat på ett tag, vilket indikerar möjliga batteri- eller anslutningsproblem",
+        "zone_based": "Zonbaserad:",
+        "zone_based_description": "Upptäcker automatiskt alla kontaktsensorer i den valda Homey-zonen",
+        "flow_triggers": "Flödesutlösare:",
+        "flow_triggers_description": "Utlös flöden när zonen blir tätad, läckande eller när föråldrade sensorer upptäcks",
+        "next_step": "I nästa steg väljer du en Homey-zon att övervaka. Alla kontaktsensorer i den zonen kommer automatiskt att inkluderas."
+      },
       "select_contact_sensors": {
         "title": "Välj dörrkontakter",
         "intro": "Välj dörr- och fönsterkontakterna som ska definiera zonens tätning. När NÅGON sensor är öppen anses zonen läcka.",

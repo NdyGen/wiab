@@ -1,6 +1,6 @@
 import Homey from 'homey';
 import { HomeyAPI, HomeyAPIDevice, PairingDeviceConfig } from '../../lib/types';
-import { TimerValues } from '../../lib/RoomTemplates';
+import { TimerValues, getAllTemplates } from '../../lib/RoomTemplates';
 import { PairingErrorId } from '../../constants/errorIds';
 
 /**
@@ -225,14 +225,22 @@ class WIABDriver extends Homey.Driver {
      */
     session.setHandler('get_room_templates', async () => {
       try {
-        const { getAllTemplates } = await import('../../lib/RoomTemplates');
         const templates = getAllTemplates();
 
-        // Return simplified template data for frontend (English only for now)
+        // Get user's language from Homey (defaults to 'en' if not available)
+        const userLanguage = this.homey.i18n.getLanguage();
+        const supportedLanguages = ['en', 'nl', 'de', 'no', 'sv'] as const;
+        const language = supportedLanguages.includes(userLanguage as typeof supportedLanguages[number])
+          ? (userLanguage as typeof supportedLanguages[number])
+          : 'en';
+
+        this.log(`Returning room templates in language: ${language}`);
+
+        // Return template data with localized names and descriptions
         return templates.map(t => ({
           id: t.id,
-          name: t.name.en,
-          description: t.description.en,
+          name: t.name[language],
+          description: t.description[language],
           timerValues: t.timerValues,
         }));
       } catch (error) {

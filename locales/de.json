@@ -1,6 +1,23 @@
 {
   "pair": {
     "wiab_device": {
+      "intro": {
+        "title": "WIAB Gerät",
+        "description": "WIAB (Wespe In Einer Box) erstellt einen virtuellen Anwesenheitssensor durch Überwachung physischer Sensoren in Ihrem Raum. Wie eine in einer Box gefangene Wespe, die aktiv bleibt, bis sie den Ausgang findet, bleibt das Gerät besetzt, bis bestimmte Bedingungen erfüllt sind.",
+        "key_feature": "Hauptfunktion:",
+        "key_feature_description": "Kombiniert mehrere Sensoren, um intelligente Raumbelegungserkennung mit konfigurierbaren Aktivierungs- und Deaktivierungsauslösern zu erstellen.",
+        "trigger_sensors": "Auslösesensoren:",
+        "trigger_sensors_description": "Bewegungssensoren oder andere Geräte, die Belegung aktivieren (Wespe betritt die Box)",
+        "reset_sensors": "Rücksetzsensoren:",
+        "reset_sensors_description": "Türkontakte oder andere Sensoren, die Belegung deaktivieren (Wespe findet den Ausgang)",
+        "edge_detection": "Flankenerkennung:",
+        "edge_detection_description": "Nur FALSCH→WAHR Übergänge lösen Aktionen aus, um wiederholte Aktivierungen zu verhindern",
+        "priority": "Prioritätslogik:",
+        "priority_description": "Rücksetzsensoren werden zuerst überprüft, um sicherzustellen, dass Ausgänge immer Vorrang haben",
+        "polling": "Zuverlässiges Polling:",
+        "polling_description": "Überprüft Sensoren alle 2 Sekunden für konsistentes Verhalten",
+        "next_step": "In den nächsten Schritten wählen Sie einen Raumtyp aus, konfigurieren Auslösesensoren (um Anwesenheit zu erkennen) und Rücksetzsensoren (um Ausgänge zu erkennen)."
+      },
       "select_room_type": {
         "title": "Raumtyp wählen (optional)",
         "intro": "Wählen Sie einen Raumtyp, um Zeitwerte automatisch mit empfohlenen Einstellungen für diesen Raum zu konfigurieren. Sie können diese Werte später in den Geräteeinstellungen anpassen oder diesen Schritt überspringen, um manuell zu konfigurieren.",
@@ -37,6 +54,23 @@
       }
     },
     "room_state": {
+      "intro": {
+        "title": "Raumzustand-Manager",
+        "description": "Der Raumzustand-Manager fügt Ihrem WIAB-Gerät intelligente Zustandsverfolgung hinzu. Er überwacht die Belegung und wechselt automatisch zwischen Zuständen basierend auf konfigurierbaren Timern, um mehr Kontext für Ihre Automatisierungen zu bieten.",
+        "key_feature": "Hauptfunktion:",
+        "key_feature_description": "Vier-Zustands-System, das nicht nur verfolgt, ob ein Raum belegt ist, sondern auch wie lange - ermöglicht zeitbewusste Automatisierungen.",
+        "idle": "Inaktiv:",
+        "idle_description": "Raum ist unbesetzt (keine Aktivität erkannt)",
+        "extended_idle": "Erweitert Inaktiv:",
+        "extended_idle_description": "Raum ist längere Zeit unbesetzt (konfigurierbares Timeout)",
+        "occupied": "Besetzt:",
+        "occupied_description": "Raum ist derzeit besetzt (Aktivität erkannt)",
+        "extended_occupied": "Erweitert Besetzt:",
+        "extended_occupied_description": "Raum ist längere Zeit besetzt (konfigurierbares Timeout)",
+        "manual_override": "Manuelle Überschreibung:",
+        "manual_override_description": "Zustände manuell über Flows einstellen und bei Bedarf in den automatischen Modus zurückkehren",
+        "next_step": "In den nächsten Schritten wählen Sie ein WIAB-Gerät zur Überwachung aus und konfigurieren die Timeout-Dauern für erweiterte Zustände."
+      },
       "select_wiab": {
         "title": "WIAB-Gerät wählen",
         "intro": "Wählen Sie das WIAB-Gerät (Wasp in a Box), das die Anwesenheitserkennung für diesen Raumzustands-Manager bereitstellt.",
@@ -62,6 +96,23 @@
       }
     },
     "zone_seal": {
+      "intro": {
+        "title": "Zonenabdichtung",
+        "description": "Zonenabdichtung überwacht Tür- und Fensterkontaktsensoren in einer Zone, um festzustellen, ob die Zone ordnungsgemäß abgedichtet ist (alle Türen und Fenster geschlossen) oder undicht ist (mindestens eine Öffnung erkannt).",
+        "key_feature": "Hauptfunktion:",
+        "key_feature_description": "Aggregiert mehrere Kontaktsensoren, um einen einzelnen abgedichtet/undicht Status bereitzustellen, perfekt für Sicherheitskontrollen, Klimaregelung oder Automatisierungsauslöser.",
+        "sealed": "Abgedichtet:",
+        "sealed_description": "Alle überwachten Türen und Fenster sind geschlossen",
+        "leaky": "Undicht:",
+        "leaky_description": "Mindestens eine Tür oder ein Fenster ist offen",
+        "stale_detection": "Veraltete Erkennung:",
+        "stale_detection_description": "Identifiziert Sensoren, die eine Weile nicht gemeldet haben, was auf mögliche Batterie- oder Konnektivitätsprobleme hinweist",
+        "zone_based": "Zonenbasiert:",
+        "zone_based_description": "Erkennt automatisch alle Kontaktsensoren in der ausgewählten Homey-Zone",
+        "flow_triggers": "Flow-Auslöser:",
+        "flow_triggers_description": "Auslösen von Flows, wenn die Zone abgedichtet, undicht wird oder wenn veraltete Sensoren erkannt werden",
+        "next_step": "Im nächsten Schritt wählen Sie eine Homey-Zone zur Überwachung aus. Alle Kontaktsensoren in dieser Zone werden automatisch einbezogen."
+      },
       "select_contact_sensors": {
         "title": "Kontaktmelder wählen",
         "intro": "Wählen Sie die Tür- und Fenster-Kontaktmelder aus, die die Zonendichtheit definieren. Wenn EIN Sensor offen ist, wird die Zone als undicht betrachtet.",

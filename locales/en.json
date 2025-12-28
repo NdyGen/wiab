@@ -1,6 +1,23 @@
 {
   "pair": {
     "wiab_device": {
+      "intro": {
+        "title": "WIAB Device",
+        "description": "WIAB (Wasp In A Box) creates a virtual occupancy sensor by monitoring physical sensors in your room. Like a wasp trapped in a box that stays active until it finds the exit, the device stays occupied until specific conditions are met.",
+        "key_feature": "Key Feature:",
+        "key_feature_description": "Combines multiple sensors to create intelligent room occupancy detection with configurable activation and deactivation triggers.",
+        "trigger_sensors": "Trigger Sensors:",
+        "trigger_sensors_description": "Motion sensors or other devices that activate occupancy (wasp enters the box)",
+        "reset_sensors": "Reset Sensors:",
+        "reset_sensors_description": "Door contacts or other sensors that deactivate occupancy (wasp finds the exit)",
+        "edge_detection": "Edge Detection:",
+        "edge_detection_description": "Only FALSE→TRUE transitions trigger actions, preventing repeated activations",
+        "priority": "Priority Logic:",
+        "priority_description": "Reset sensors are checked first, ensuring exits always take precedence",
+        "polling": "Reliable Polling:",
+        "polling_description": "Checks sensors every 2 seconds for consistent behavior",
+        "next_step": "In the next steps, you'll select a room type, configure trigger sensors (to detect presence), and reset sensors (to detect exits)."
+      },
       "select_room_type": {
         "title": "Select Room Type (Optional)",
         "intro": "Choose a room type to automatically configure timer values with recommended settings for that room. You can still adjust these values later in device settings, or skip this step to configure manually.",
@@ -37,6 +54,23 @@
       }
     },
     "room_state": {
+      "intro": {
+        "title": "Room State Manager",
+        "description": "The Room State Manager adds intelligent state tracking to your WIAB device. It monitors occupancy and automatically transitions through states based on configurable timers, providing more context for your automations.",
+        "key_feature": "Key Feature:",
+        "key_feature_description": "Four-state system that tracks not just if a room is occupied, but for how long - enabling time-aware automations.",
+        "idle": "Idle:",
+        "idle_description": "Room is unoccupied (no activity detected)",
+        "extended_idle": "Extended Idle:",
+        "extended_idle_description": "Room has been unoccupied for an extended period (configurable timeout)",
+        "occupied": "Occupied:",
+        "occupied_description": "Room is currently occupied (activity detected)",
+        "extended_occupied": "Extended Occupied:",
+        "extended_occupied_description": "Room has been occupied for an extended period (configurable timeout)",
+        "manual_override": "Manual Override:",
+        "manual_override_description": "Set states manually via flows and return to automatic mode when needed",
+        "next_step": "In the next steps, you'll select a WIAB device to monitor and configure the timeout durations for extended states."
+      },
       "select_wiab": {
         "title": "Select WIAB Device",
         "intro": "Select the WIAB (Wasp in a Box) device that will provide occupancy input for this Room State Manager.",
@@ -62,6 +96,23 @@
       }
     },
     "zone_seal": {
+      "intro": {
+        "title": "Zone Seal",
+        "description": "Zone Seal monitors door and window contact sensors in a zone to determine if the zone is properly sealed (all doors and windows closed) or leaky (at least one opening detected).",
+        "key_feature": "Key Feature:",
+        "key_feature_description": "Aggregates multiple contact sensors to provide a single sealed/leaky status, perfect for security checks, climate control, or automation triggers.",
+        "sealed": "Sealed:",
+        "sealed_description": "All monitored doors and windows are closed",
+        "leaky": "Leaky:",
+        "leaky_description": "At least one door or window is open",
+        "stale_detection": "Stale Detection:",
+        "stale_detection_description": "Identifies sensors that haven't reported in a while, indicating potential battery or connectivity issues",
+        "zone_based": "Zone-Based:",
+        "zone_based_description": "Automatically discovers all contact sensors in the selected Homey zone",
+        "flow_triggers": "Flow Triggers:",
+        "flow_triggers_description": "Trigger flows when zone becomes sealed, leaky, or when stale sensors are detected",
+        "next_step": "In the next step, you'll select a Homey zone to monitor. All contact sensors in that zone will be automatically included."
+      },
       "select_contact_sensors": {
         "title": "Select Contact Sensors",
         "intro": "Select the door and window contact sensors that will define the zone seal. When ANY sensor is open, the zone is considered leaky.",

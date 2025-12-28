@@ -32,6 +32,9 @@ export function createMockHomey() {
       // Uncomment for debugging tests:
       // console.error('[MOCK HOMEY ERROR]', ...args);
     }),
+    i18n: {
+      getLanguage: jest.fn(() => 'en'),
+    },
     drivers: {
       getDrivers: jest.fn(() => {
         const driversObj: Record<string, MockDriver> = {};

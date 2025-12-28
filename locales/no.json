@@ -1,6 +1,23 @@
 {
   "pair": {
     "wiab_device": {
+      "intro": {
+        "title": "WIAB Enhet",
+        "description": "WIAB (Veps I En Boks) oppretter en virtuell tilstedeværelsessensor ved å overvåke fysiske sensorer i rommet ditt. Som en veps fanget i en boks som forblir aktiv til den finner utgangen, forblir enheten opptatt til spesifikke betingelser er oppfylt.",
+        "key_feature": "Hovedfunksjon:",
+        "key_feature_description": "Kombinerer flere sensorer for å skape intelligent romtilstedeværelsesdeteksjon med konfigurerbare aktiverings- og deaktiveringsutløsere.",
+        "trigger_sensors": "Utløsersensorer:",
+        "trigger_sensors_description": "Bevegelsessensorer eller andre enheter som aktiverer tilstedeværelse (veps kommer inn i boksen)",
+        "reset_sensors": "Tilbakestillingssensorer:",
+        "reset_sensors_description": "Dørkontakter eller andre sensorer som deaktiverer tilstedeværelse (veps finner utgangen)",
+        "edge_detection": "Flankedeteksjon:",
+        "edge_detection_description": "Bare USANN→SANN overganger utløser handlinger, forhindrer gjentatte aktiveringer",
+        "priority": "Prioritetslogikk:",
+        "priority_description": "Tilbakestillingssensorer sjekkes først, sikrer at utganger alltid har forrang",
+        "polling": "Pålitelig polling:",
+        "polling_description": "Sjekker sensorer hvert 2. sekund for konsistent oppførsel",
+        "next_step": "I de neste trinnene velger du en romtype, konfigurerer utløsersensorer (for å oppdage tilstedeværelse) og tilbakestillingssensorer (for å oppdage utganger)."
+      },
       "select_room_type": {
         "title": "Velg Romtype (Valgfritt)",
         "intro": "Velg en romtype for å automatisk konfigurere timerverdier med anbefalte innstillinger for det rommet. Du kan fortsatt justere disse verdiene senere i enhetsinnstillinger, eller hopp over dette trinnet for manuell konfigurasjon.",
@@ -37,6 +54,23 @@
       }
     },
     "room_state": {
+      "intro": {
+        "title": "Romtilstand Manager",
+        "description": "Romtilstand Manager legger til intelligent tilstandssporing til din WIAB-enhet. Den overvåker belegg og bytter automatisk mellom tilstander basert på konfigurerbare timere, og gir mer kontekst for automatiseringene dine.",
+        "key_feature": "Hovedfunksjon:",
+        "key_feature_description": "Fire-tilstands system som sporer ikke bare om et rom er opptatt, men hvor lenge - muliggjør tidsbevisste automatiseringer.",
+        "idle": "Ledig:",
+        "idle_description": "Rommet er ledig (ingen aktivitet oppdaget)",
+        "extended_idle": "Utvidet Ledig:",
+        "extended_idle_description": "Rommet har vært ledig i lengre tid (konfigurerbar timeout)",
+        "occupied": "Opptatt:",
+        "occupied_description": "Rommet er for øyeblikket opptatt (aktivitet oppdaget)",
+        "extended_occupied": "Utvidet Opptatt:",
+        "extended_occupied_description": "Rommet har vært opptatt i lengre tid (konfigurerbar timeout)",
+        "manual_override": "Manuell overstyring:",
+        "manual_override_description": "Sett tilstander manuelt via flows og gå tilbake til automatisk modus når det er nødvendig",
+        "next_step": "I de neste trinnene velger du en WIAB-enhet å overvåke og konfigurerer timeout-varighetene for utvidede tilstander."
+      },
       "select_wiab": {
         "title": "Velg WIAB-enhet",
         "intro": "Velg WIAB-enheten (Wasp in a Box) som skal levere oppholdsdata for denne romtilstandshåndterer.",
@@ -62,6 +96,23 @@
       }
     },
     "zone_seal": {
+      "intro": {
+        "title": "Sone Tetting",
+        "description": "Sone Tetting overvåker dør- og vinduskontaktsensorer i en sone for å avgjøre om sonen er riktig tettet (alle dører og vinduer lukket) eller lekk (minst én åpning oppdaget).",
+        "key_feature": "Hovedfunksjon:",
+        "key_feature_description": "Samler flere kontaktsensorer for å gi en enkelt tettet/lekk status, perfekt for sikkerhetskontroller, klimastyring eller automatiseringsutløsere.",
+        "sealed": "Tettet:",
+        "sealed_description": "Alle overvåkede dører og vinduer er lukket",
+        "leaky": "Lekk:",
+        "leaky_description": "Minst én dør eller vindu er åpent",
+        "stale_detection": "Foreldet deteksjon:",
+        "stale_detection_description": "Identifiserer sensorer som ikke har rapportert på en stund, noe som indikerer mulige batteri- eller tilkoblingsproblemer",
+        "zone_based": "Sonebasert:",
+        "zone_based_description": "Oppdager automatisk alle kontaktsensorer i den valgte Homey-sonen",
+        "flow_triggers": "Flow-utløsere:",
+        "flow_triggers_description": "Utløs flows når sonen blir tettet, lekk eller når foreldede sensorer oppdages",
+        "next_step": "I neste trinn velger du en Homey-sone å overvåke. Alle kontaktsensorer i den sonen vil bli automatisk inkludert."
+      },
       "select_contact_sensors": {
         "title": "Velg Kontaktsensorer",
         "intro": "Velg dør- og vindusskontaktsensorer som vil definere sonens tetthet. Når NOEN sensor er åpen, anses sonen som lekkende.",
