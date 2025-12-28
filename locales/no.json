@@ -1,12 +1,105 @@
 {
   "pair": {
-    "select_trigger_sensors": {
-      "title": "Velg Bevegelsessensorer",
-      "intro": "Velg bevegelsessensorene som vil utløse tilstedeværelsesdeteksjon."
+    "wiab_device": {
+      "select_room_type": {
+        "title": "Velg Romtype (Valgfritt)",
+        "intro": "Velg en romtype for å automatisk konfigurere timerverdier med anbefalte innstillinger for det rommet. Du kan fortsatt justere disse verdiene senere i enhetsinnstillinger, eller hopp over dette trinnet for manuell konfigurasjon.",
+        "error_prefix": "Feil:",
+        "error_failed_to_load": "Kunne ikke laste rommal:",
+        "door_motion_window": "Dør-bevegelsesvindu:",
+        "empty_timeout": "Tidsavbrudd for tomt rom:",
+        "pir_stale_timeout": "Tidsavbrudd for inaktiv bevegelsessensor:",
+        "door_stale_timeout": "Tidsavbrudd for inaktiv dørsensor:",
+        "error_failed_apply": "Kunne ikke anvende mal:",
+        "error_try_different": "En feil oppstod. Vennligst prøv en annen mal.",
+        "error_template_not_found": "Mal ikke funnet. Vennligst velg en annen mal.",
+        "error_pairing_failed": "Pairing-rammeverket kunne ikke lastes. Vennligst omstart Homey-appen og prøv igjen.",
+        "error_code_init_failed": "Hvis dette vedvarer, kontakt kundestøtte med feilkode: HOMEY_INIT_FAILED",
+        "error_sdk_not_available": "Homey SDK er ikke tilgjengelig. Vennligst start pairing på nytt.",
+        "error_code_api_missing": "Hvis dette vedvarer, kontakt kundestøtte med feilkode: HOMEY_API_MISSING"
+      },
+      "select_trigger_sensors": {
+        "title": "Velg Bevegelsessensorer",
+        "intro": "Velg bevegelsessensorene som vil aktivere oppholddeteksjon.",
+        "search_placeholder": "Søk sensorer...",
+        "no_devices": "Ingen bevegelsessensorer funnet. Vennligst legg til bevegelsessensorer i Homey først.",
+        "error_failed_to_load": "Kunne ikke laste bevegelsessensorer:",
+        "no_zone": "Ingen sone"
+      },
+      "select_reset_sensors": {
+        "title": "Velg Tilbakestillingssensorer",
+        "intro": "Velg kontaktsensorer som vil tilbakestille oppholddeteksjon når de åpnes (f.eks. dører, vinduer).",
+        "skip_note": "Dette trinnet er valgfritt. Du kan klikke Neste for å hoppe over hvis du ikke ønsker å bruke tilbakestillingssensorer.",
+        "search_placeholder": "Søk sensorer...",
+        "no_devices": "Ingen kontaktsensorer funnet. Klikk Neste for å fortsette uten tilbakestillingssensorer.",
+        "error_failed_to_load": "Kunne ikke laste kontaktsensorer:",
+        "no_zone": "Ingen sone"
+      }
     },
-    "select_reset_sensors": {
-      "title": "Velg Dør-/Vindueskontakter",
-      "intro": "Velg dør- eller vindueskontaktene som vil nullstille tilstedeværelse når de åpnes."
+    "room_state": {
+      "select_wiab": {
+        "title": "Velg WIAB-enhet",
+        "intro": "Velg WIAB-enheten (Wasp in a Box) som skal levere oppholdsdata for denne romtilstandshåndterer.",
+        "error_no_devices": "Ingen WIAB-enheter funnet. Vennligst opprett en WIAB-enhet først.",
+        "label_wiab_device": "WIAB-enhet",
+        "loading_devices": "Laster enheter...",
+        "hint_device_selection": "Den valgte WIAB-enhetens oppholdstilstand vil bli brukt som inndata for romtilstandsoverganger.",
+        "error_pairing_failed": "Pairing-rammeverket kunne ikke lastes. Vennligst omstart Homey-appen og prøv igjen.",
+        "error_sdk_not_available": "Homey SDK er ikke tilgjengelig. Vennligst start pairing på nytt."
+      },
+      "define_states": {
+        "title": "Konfigurer Romtilstander",
+        "intro": "Romtilstandshåndterer sporer utvidede oppholdstilstander basert på WIAB-enheten du valgte.",
+        "states_info_title": "Romtilstander",
+        "state_idle": "inaktiv - Rom er inaktivt (ingen aktivitet oppdaget)",
+        "state_extended_idle": "utvidet_inaktiv - Rom har vært inaktivt en stund (valgfritt)",
+        "state_occupied": "opptatt - Rom er aktivt (aktivitet oppdaget)",
+        "state_extended_occupied": "utvidet_opptatt - Rom har vært aktivt en stund (valgfritt)",
+        "label_idle_timeout": "Utvidet Inaktivitetstidsavbrudd (minutter)",
+        "hint_idle_timeout": "Minutter med inaktivitet før overgang til utvidet_inaktiv-tilstand. Sett til 0 for å deaktivere.",
+        "label_occupied_timeout": "Utvidet Aktivitetstidsavbrudd (minutter)",
+        "hint_occupied_timeout": "Minutter med aktivitet før overgang til utvidet_opptatt-tilstand. Sett til 0 for å deaktivere."
+      }
+    },
+    "zone_seal": {
+      "select_contact_sensors": {
+        "title": "Velg Kontaktsensorer",
+        "intro": "Velg dør- og vindusskontaktsensorer som vil definere sonens tetthet. Når NOEN sensor er åpen, anses sonen som lekkende.",
+        "search_placeholder": "Søk sensorer...",
+        "no_devices": "Ingen kontaktsensorer funnet. Vennligst legg til dør- eller vindussensorer i Homey først.",
+        "error_failed_to_load": "Kunne ikke laste kontaktsensorer:",
+        "no_zone": "Ingen sone"
+      }
+    },
+    "circuit_breaker": {
+      "intro": {
+        "title": "Strømbryter",
+        "intro": "Strømbryterne gir hierarkisk flytskontroll for dine Homey-automatiseringer. Som elektriske strømbryterne kan de være SLÅTT PÅ (tillater flyt) eller SLÅTT AV (blokkerer flyt).",
+        "key_feature": "Hovedfunksjon:",
+        "key_feature_text": "Strømbryterne kan organiseres i et forelder-barn-hierarki. Når en overordnet bryter slås AV, slås alle underordnede brypere automatisk AV også.",
+        "hierarchical_control": "Hierarkisk Kontroll:",
+        "hierarchical_control_text": "Organiser brypere i en trestruktur (f.eks. \"Hus\" → \"Etasje 1\" → \"Stue\")",
+        "cascade_behavior": "Kaskadeatferd:",
+        "cascade_behavior_text": "Når du slår AV en overordnet bryter slås alle underordnede brypere automatisk AV",
+        "independent_children": "Uavhengige Underordnede:",
+        "independent_children_text": "Underordnede brypere kan fortsatt kontrolleres uavhengig uavhengig av foreldres tilstand",
+        "no_cycles": "Ingen Sirkler:",
+        "no_cycles_text": "Systemet forhindrer sirkulære avhengigheter automatisk",
+        "root_breakers": "Rotbrypere:",
+        "root_breakers_text": "Brypere uten forelder fungerer som toppnivåkontroller",
+        "next_step": "I neste trinn vil du eventuelt velge en overordnet strømbryter for denne enheten. Du kan alltid endre dette senere i enhetsinnstillinger."
+      },
+      "select_parent": {
+        "title": "Velg Overordnet Bryter",
+        "intro": "Velg en overordnet strømbryter for hierarkisk kontroll, eller velg \"Ingen\" for å opprette en rotbryter.",
+        "error_failed_to_load": "Kunne ikke laste strømbryterne. Vennligst prøv igjen.",
+        "label_parent_breaker": "Overordnet Strømbryter",
+        "loading_breakers": "Laster strømbryterne...",
+        "hint_parent_selection": "Når den overordnede bryteren slås AV, slås denne bryteren også AV automatisk.",
+        "option_none": "Ingen (Rotbryter)",
+        "error_pairing_failed": "Pairing-rammeverket kunne ikke lastes. Vennligst omstart Homey-appen og prøv igjen.",
+        "error_sdk_not_available": "Homey SDK er ikke tilgjengelig. Vennligst start pairing på nytt."
+      }
     }
   }
 }

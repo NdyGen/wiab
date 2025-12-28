@@ -118,12 +118,12 @@
     </style>
 </head>
 <body>
-    <h1 data-i18n="pair.select_trigger_sensors.title">Select Motion Sensors</h1>
-    <p class="intro" data-i18n="pair.select_trigger_sensors.intro">Select the motion sensors that will trigger occupancy detection.</p>
+    <h1 data-i18n="pair.wiab_device.select_trigger_sensors.title">Select Motion Sensors</h1>
+    <p class="intro" data-i18n="pair.wiab_device.select_trigger_sensors.intro">Select the motion sensors that will trigger occupancy detection.</p>
 
     <div id="trigger-error" class="error" style="display: none;"></div>
     <div id="trigger-loading" class="loading"></div>
-    <input type="text" id="trigger-search" class="search-box" placeholder="Search sensors..." style="display: none;">
+    <input type="text" id="trigger-search" class="search-box" data-i18n-placeholder="pair.wiab_device.select_trigger_sensors.search_placeholder" placeholder="Search sensors..." style="display: none;">
     <div id="trigger-device-list" class="device-list"></div>
 
     <script type="application/javascript">
@@ -147,7 +147,7 @@
                 })
                 .catch(function(error) {
                     console.error('Error loading motion sensors:', error);
-                    showError('Failed to load motion sensors: ' + (error.message || error));
+                    showError(Homey.__('pair.wiab_device.select_trigger_sensors.error_failed_to_load') + ' ' + (error.message || error));
                     document.getElementById('trigger-loading').style.display = 'none';
                 });
 
@@ -158,7 +158,7 @@
             container.innerHTML = '';
 
             if (devices.length === 0) {
-                container.innerHTML = '<div class="no-devices">No motion sensors found. Please add motion sensors to your Homey first.</div>';
+                container.innerHTML = '<div class="no-devices">' + Homey.__('pair.wiab_device.select_trigger_sensors.no_devices') + '</div>';
                 return;
             }
 
@@ -186,7 +186,7 @@
 
                 const zone = document.createElement('div');
                 zone.className = 'device-zone';
-                zone.textContent = device.zone || 'No zone';
+                zone.textContent = device.zone || Homey.__('pair.wiab_device.select_trigger_sensors.no_zone');
 
                 info.appendChild(name);
                 info.appendChild(zone);

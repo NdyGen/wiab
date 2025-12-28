@@ -136,13 +136,13 @@
     </style>
 </head>
 <body>
-    <h1 data-i18n="pair.select_reset_sensors.title">Select Reset Sensors</h1>
-    <p class="intro" data-i18n="pair.select_reset_sensors.intro">Select contact sensors that will reset occupancy when opened (e.g., doors, windows).</p>
-    <div class="skip-note">This step is optional. You can click Next to skip if you don't want to use reset sensors.</div>
+    <h1 data-i18n="pair.wiab_device.select_reset_sensors.title">Select Reset Sensors</h1>
+    <p class="intro" data-i18n="pair.wiab_device.select_reset_sensors.intro">Select contact sensors that will reset occupancy when opened (e.g., doors, windows).</p>
+    <div class="skip-note" data-i18n="pair.wiab_device.select_reset_sensors.skip_note">This step is optional. You can click Next to skip if you don't want to use reset sensors.</div>
 
     <div id="reset-error" class="error" style="display: none;"></div>
     <div id="reset-loading" class="loading"></div>
-    <input type="text" id="reset-search" class="search-box" placeholder="Search sensors..." style="display: none;">
+    <input type="text" id="reset-search" class="search-box" data-i18n-placeholder="pair.wiab_device.select_reset_sensors.search_placeholder" placeholder="Search sensors..." style="display: none;">
     <div id="reset-device-list" class="device-list"></div>
 
     <script type="application/javascript">
@@ -179,7 +179,7 @@
                         console.error('[DEBUG] ERROR in promise catch:', error);
                         console.error('[DEBUG] Error message:', error.message);
                         console.error('[DEBUG] Error stack:', error.stack);
-                        showError('Failed to load contact sensors: ' + (error.message || error));
+                        showError(Homey.__('pair.wiab_device.select_reset_sensors.error_failed_to_load') + ' ' + (error.message || error));
                         document.getElementById('reset-loading').style.display = 'none';
                     });
 
@@ -203,7 +203,7 @@
 
             if (!devices || devices.length === 0) {
                 console.log('[DEBUG] renderDevices - no devices, showing no-devices message');
-                container.innerHTML = '<div class="no-devices">No contact sensors found. Click Next to continue without reset sensors.</div>';
+                container.innerHTML = '<div class="no-devices">' + Homey.__('pair.wiab_device.select_reset_sensors.no_devices') + '</div>';
                 return;
             }
 
@@ -233,7 +233,7 @@
 
                 const zone = document.createElement('div');
                 zone.className = 'device-zone';
-                zone.textContent = device.zone || 'No zone';
+                zone.textContent = device.zone || Homey.__('pair.wiab_device.select_reset_sensors.no_zone');
 
                 info.appendChild(name);
                 info.appendChild(zone);

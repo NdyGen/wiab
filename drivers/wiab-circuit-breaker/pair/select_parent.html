@@ -76,21 +76,21 @@
     </style>
 </head>
 <body>
-    <h1>Select Parent Breaker</h1>
-    <p class="intro">
+    <h1 data-i18n="pair.circuit_breaker.select_parent.title">Select Parent Breaker</h1>
+    <p class="intro" data-i18n="pair.circuit_breaker.select_parent.intro">
         Choose a parent circuit breaker for hierarchical control, or select "None" to create a root-level breaker.
     </p>
 
     <div class="error" id="error">
-        <span id="errorMessage">Failed to load circuit breakers.</span>
+        <span id="errorMessage" data-i18n="pair.circuit_breaker.select_parent.error_failed_to_load">Failed to load circuit breakers. Please try again.</span>
     </div>
 
     <div class="form-group">
-        <label for="parentBreaker">Parent Circuit Breaker</label>
+        <label for="parentBreaker" data-i18n="pair.circuit_breaker.select_parent.label_parent_breaker">Parent Circuit Breaker</label>
         <select id="parentBreaker" disabled>
-            <option>Loading circuit breakers...</option>
+            <option data-i18n="pair.circuit_breaker.select_parent.loading_breakers">Loading circuit breakers...</option>
         </select>
-        <div class="hint">
+        <div class="hint" data-i18n="pair.circuit_breaker.select_parent.hint_parent_selection">
             When the parent breaker is turned OFF, this breaker will also turn OFF automatically.
         </div>
     </div>
@@ -150,7 +150,7 @@
                     // Add "None" option for root breakers
                     const noneOption = document.createElement('option');
                     noneOption.value = '';
-                    noneOption.textContent = 'None (Root Breaker)';
+                    noneOption.textContent = Homey.__('pair.circuit_breaker.select_parent.option_none');
                     parentBreakerSelect.appendChild(noneOption);
 
                     // Add existing breakers if any
@@ -209,7 +209,7 @@
                     console.error('Failed to initialize pairing page:', error);
                     document.body.innerHTML = '<div style="padding: 20px; color: red;">' +
                         '<h1>Error</h1>' +
-                        '<p>Pairing framework failed to load. Please restart the Homey app and try again.</p>' +
+                        '<p>' + Homey.__('pair.circuit_breaker.select_parent.error_pairing_failed') + '</p>' +
                         '<p>Error: ' + error.message + '</p>' +
                         '</div>';
                 }
@@ -217,7 +217,7 @@
                 console.error('CRITICAL: Homey API not available in pairing context');
                 document.body.innerHTML = '<div style="padding: 20px; color: red;">' +
                     '<h1>Error</h1>' +
-                    '<p>Homey SDK not available. Please restart pairing.</p>' +
+                    '<p>' + (typeof Homey !== 'undefined' ? Homey.__('pair.circuit_breaker.select_parent.error_sdk_not_available') : 'Homey SDK not available. Please restart pairing.') + '</p>' +
                     '</div>';
             }
         })();

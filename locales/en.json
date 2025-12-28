@@ -1,12 +1,105 @@
 {
   "pair": {
-    "select_trigger_sensors": {
-      "title": "Select Motion Sensors",
-      "intro": "Select the motion sensors that will trigger occupancy detection."
+    "wiab_device": {
+      "select_room_type": {
+        "title": "Select Room Type (Optional)",
+        "intro": "Choose a room type to automatically configure timer values with recommended settings for that room. You can still adjust these values later in device settings, or skip this step to configure manually.",
+        "error_prefix": "Error:",
+        "error_failed_to_load": "Failed to load room templates:",
+        "door_motion_window": "Door motion window:",
+        "empty_timeout": "Empty timeout:",
+        "pir_stale_timeout": "PIR stale timeout:",
+        "door_stale_timeout": "Door stale timeout:",
+        "error_failed_apply": "Failed to apply template:",
+        "error_try_different": "An error occurred. Please try a different template.",
+        "error_template_not_found": "Template not found. Please select another template.",
+        "error_pairing_failed": "Pairing framework failed to load. Please restart the Homey app and try again.",
+        "error_code_init_failed": "If this persists, contact support with error code: HOMEY_INIT_FAILED",
+        "error_sdk_not_available": "Homey SDK not available. Please restart pairing.",
+        "error_code_api_missing": "If this persists, contact support with error code: HOMEY_API_MISSING"
+      },
+      "select_trigger_sensors": {
+        "title": "Select Motion Sensors",
+        "intro": "Select the motion sensors that will trigger occupancy detection.",
+        "search_placeholder": "Search sensors...",
+        "no_devices": "No motion sensors found. Please add motion sensors to your Homey first.",
+        "error_failed_to_load": "Failed to load motion sensors:",
+        "no_zone": "No zone"
+      },
+      "select_reset_sensors": {
+        "title": "Select Reset Sensors",
+        "intro": "Select contact sensors that will reset occupancy when opened (e.g., doors, windows).",
+        "skip_note": "This step is optional. You can click Next to skip if you don't want to use reset sensors.",
+        "search_placeholder": "Search sensors...",
+        "no_devices": "No contact sensors found. Click Next to continue without reset sensors.",
+        "error_failed_to_load": "Failed to load contact sensors:",
+        "no_zone": "No zone"
+      }
     },
-    "select_reset_sensors": {
-      "title": "Select Door/Window Contacts",
-      "intro": "Select the door or window contacts that will reset occupancy when opened."
+    "room_state": {
+      "select_wiab": {
+        "title": "Select WIAB Device",
+        "intro": "Select the WIAB (Wasp in a Box) device that will provide occupancy input for this Room State Manager.",
+        "error_no_devices": "No WIAB devices found. Please create a WIAB device first.",
+        "label_wiab_device": "WIAB Device",
+        "loading_devices": "Loading devices...",
+        "hint_device_selection": "The selected WIAB device's occupancy state will be used as input for room state transitions.",
+        "error_pairing_failed": "Pairing framework failed to load. Please restart the Homey app and try again.",
+        "error_sdk_not_available": "Homey SDK not available. Please restart pairing."
+      },
+      "define_states": {
+        "title": "Configure Room States",
+        "intro": "The Room State Manager tracks extended occupancy states based on the WIAB device you selected.",
+        "states_info_title": "Room States",
+        "state_idle": "idle - Room is inactive (no activity detected)",
+        "state_extended_idle": "extended_idle - Room has been idle for a while (optional)",
+        "state_occupied": "occupied - Room is active (activity detected)",
+        "state_extended_occupied": "extended_occupied - Room has been active for a while (optional)",
+        "label_idle_timeout": "Extended Idle Timeout (minutes)",
+        "hint_idle_timeout": "Minutes of inactivity before transitioning to extended_idle state. Set to 0 to disable.",
+        "label_occupied_timeout": "Extended Occupied Timeout (minutes)",
+        "hint_occupied_timeout": "Minutes of activity before transitioning to extended_occupied state. Set to 0 to disable."
+      }
+    },
+    "zone_seal": {
+      "select_contact_sensors": {
+        "title": "Select Contact Sensors",
+        "intro": "Select the door and window contact sensors that will define the zone seal. When ANY sensor is open, the zone is considered leaky.",
+        "search_placeholder": "Search sensors...",
+        "no_devices": "No contact sensors found. Please add door or window sensors to your Homey first.",
+        "error_failed_to_load": "Failed to load contact sensors:",
+        "no_zone": "No zone"
+      }
+    },
+    "circuit_breaker": {
+      "intro": {
+        "title": "Circuit Breaker",
+        "intro": "Circuit Breakers provide hierarchical flow control for your Homey automations. Like electrical circuit breakers, they can be turned ON (allowing flows) or OFF (blocking flows).",
+        "key_feature": "Key Feature:",
+        "key_feature_text": "Circuit breakers can be organized in a parent-child hierarchy. When a parent breaker is turned OFF, all of its child breakers automatically turn OFF as well.",
+        "hierarchical_control": "Hierarchical Control:",
+        "hierarchical_control_text": "Organize breakers in a tree structure (e.g., \"House\" → \"Floor 1\" → \"Living Room\")",
+        "cascade_behavior": "Cascade Behavior:",
+        "cascade_behavior_text": "Turning OFF a parent automatically turns OFF all descendants",
+        "independent_children": "Independent Children:",
+        "independent_children_text": "Children can still be controlled independently regardless of parent state",
+        "no_cycles": "No Cycles:",
+        "no_cycles_text": "The system prevents circular dependencies automatically",
+        "root_breakers": "Root Breakers:",
+        "root_breakers_text": "Breakers without a parent act as top-level controls",
+        "next_step": "In the next step, you'll optionally select a parent circuit breaker for this device. You can always change this later in device settings."
+      },
+      "select_parent": {
+        "title": "Select Parent Breaker",
+        "intro": "Choose a parent circuit breaker for hierarchical control, or select \"None\" to create a root-level breaker.",
+        "error_failed_to_load": "Failed to load circuit breakers. Please try again.",
+        "label_parent_breaker": "Parent Circuit Breaker",
+        "loading_breakers": "Loading circuit breakers...",
+        "hint_parent_selection": "When the parent breaker is turned OFF, this breaker will also turn OFF automatically.",
+        "option_none": "None (Root Breaker)",
+        "error_pairing_failed": "Pairing framework failed to load. Please restart the Homey app and try again.",
+        "error_sdk_not_available": "Homey SDK not available. Please restart pairing."
+      }
     }
   }
 }

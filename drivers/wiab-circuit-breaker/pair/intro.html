@@ -48,26 +48,26 @@
     </style>
 </head>
 <body>
-    <h1>Circuit Breaker</h1>
-    <p class="intro">
+    <h1 data-i18n="pair.circuit_breaker.intro.title">Circuit Breaker</h1>
+    <p class="intro" data-i18n="pair.circuit_breaker.intro.intro">
         Circuit Breakers provide hierarchical flow control for your Homey automations.
         Like electrical circuit breakers, they can be turned ON (allowing flows) or OFF (blocking flows).
     </p>
 
     <div class="highlight">
-        <strong>Key Feature:</strong> Circuit breakers can be organized in a parent-child hierarchy.
-        When a parent breaker is turned OFF, all of its child breakers automatically turn OFF as well.
+        <strong data-i18n="pair.circuit_breaker.intro.key_feature">Key Feature:</strong> <span data-i18n="pair.circuit_breaker.intro.key_feature_text">Circuit breakers can be organized in a parent-child hierarchy.
+        When a parent breaker is turned OFF, all of its child breakers automatically turn OFF as well.</span>
     </div>
 
     <ul class="feature-list">
-        <li><strong>Hierarchical Control:</strong> Organize breakers in a tree structure (e.g., "House" → "Floor 1" → "Living Room")</li>
-        <li><strong>Cascade Behavior:</strong> Turning OFF a parent automatically turns OFF all descendants</li>
-        <li><strong>Independent Children:</strong> Children can still be controlled independently regardless of parent state</li>
-        <li><strong>No Cycles:</strong> The system prevents circular dependencies automatically</li>
-        <li><strong>Root Breakers:</strong> Breakers without a parent act as top-level controls</li>
+        <li><strong data-i18n="pair.circuit_breaker.intro.hierarchical_control">Hierarchical Control:</strong> <span data-i18n="pair.circuit_breaker.intro.hierarchical_control_text">Organize breakers in a tree structure (e.g., "House" → "Floor 1" → "Living Room")</span></li>
+        <li><strong data-i18n="pair.circuit_breaker.intro.cascade_behavior">Cascade Behavior:</strong> <span data-i18n="pair.circuit_breaker.intro.cascade_behavior_text">Turning OFF a parent automatically turns OFF all descendants</span></li>
+        <li><strong data-i18n="pair.circuit_breaker.intro.independent_children">Independent Children:</strong> <span data-i18n="pair.circuit_breaker.intro.independent_children_text">Children can still be controlled independently regardless of parent state</span></li>
+        <li><strong data-i18n="pair.circuit_breaker.intro.no_cycles">No Cycles:</strong> <span data-i18n="pair.circuit_breaker.intro.no_cycles_text">The system prevents circular dependencies automatically</span></li>
+        <li><strong data-i18n="pair.circuit_breaker.intro.root_breakers">Root Breakers:</strong> <span data-i18n="pair.circuit_breaker.intro.root_breakers_text">Breakers without a parent act as top-level controls</span></li>
     </ul>
 
-    <p class="intro">
+    <p class="intro" data-i18n="pair.circuit_breaker.intro.next_step">
         In the next step, you'll optionally select a parent circuit breaker for this device.
         You can always change this later in device settings.
     </p>
