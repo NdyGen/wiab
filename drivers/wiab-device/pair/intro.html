@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            padding: 20px;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .intro {
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+
+        .feature-list {
+            margin: 20px 0;
+            padding-left: 20px;
+        }
+
+        .feature-list li {
+            margin-bottom: 12px;
+            line-height: 1.5;
+            color: #555;
+        }
+
+        .highlight {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 16px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+
+        .highlight strong {
+            color: #1976d2;
+        }
+
+    </style>
+</head>
+<body>
+    <h1 data-i18n="intro.title">WIAB Device</h1>
+    <p class="intro" data-i18n="intro.description">
+        WIAB (Wasp In A Box) creates a virtual occupancy sensor by monitoring physical sensors in your room.
+        Like a wasp trapped in a box that stays active until it finds the exit, the device stays occupied until specific conditions are met.
+    </p>
+
+    <div class="highlight">
+        <strong data-i18n="intro.key_feature">Key Feature:</strong> <span data-i18n="intro.key_feature_description">Combines multiple sensors to create intelligent room occupancy detection with configurable activation and deactivation triggers.</span>
+    </div>
+
+    <ul class="feature-list">
+        <li><strong data-i18n="intro.trigger_sensors">Trigger Sensors:</strong> <span data-i18n="intro.trigger_sensors_description">Motion sensors or other devices that activate occupancy (wasp enters the box)</span></li>
+        <li><strong data-i18n="intro.reset_sensors">Reset Sensors:</strong> <span data-i18n="intro.reset_sensors_description">Door contacts or other sensors that deactivate occupancy (wasp finds the exit)</span></li>
+        <li><strong data-i18n="intro.edge_detection">Edge Detection:</strong> <span data-i18n="intro.edge_detection_description">Only FALSE→TRUE transitions trigger actions, preventing repeated activations</span></li>
+        <li><strong data-i18n="intro.priority">Priority Logic:</strong> <span data-i18n="intro.priority_description">Reset sensors are checked first, ensuring exits always take precedence</span></li>
+        <li><strong data-i18n="intro.polling">Reliable Polling:</strong> <span data-i18n="intro.polling_description">Checks sensors every 2 seconds for consistent behavior</span></li>
+    </ul>
+
+    <p class="intro" data-i18n="intro.next_step">
+        In the next steps, you'll select a room type, configure trigger sensors (to detect presence), and reset sensors (to detect exits).
+    </p>
+
+    <script>
+        // Simple i18n loader
+        const translations = {
+            en: {
+                "intro.title": "WIAB Device",
+                "intro.description": "WIAB (Wasp In A Box) creates a virtual occupancy sensor by monitoring physical sensors in your room. Like a wasp trapped in a box that stays active until it finds the exit, the device stays occupied until specific conditions are met.",
+                "intro.key_feature": "Key Feature:",
+                "intro.key_feature_description": "Combines multiple sensors to create intelligent room occupancy detection with configurable activation and deactivation triggers.",
+                "intro.trigger_sensors": "Trigger Sensors:",
+                "intro.trigger_sensors_description": "Motion sensors or other devices that activate occupancy (wasp enters the box)",
+                "intro.reset_sensors": "Reset Sensors:",
+                "intro.reset_sensors_description": "Door contacts or other sensors that deactivate occupancy (wasp finds the exit)",
+                "intro.edge_detection": "Edge Detection:",
+                "intro.edge_detection_description": "Only FALSE→TRUE transitions trigger actions, preventing repeated activations",
+                "intro.priority": "Priority Logic:",
+                "intro.priority_description": "Reset sensors are checked first, ensuring exits always take precedence",
+                "intro.polling": "Reliable Polling:",
+                "intro.polling_description": "Checks sensors every 2 seconds for consistent behavior",
+                "intro.next_step": "In the next steps, you'll select a room type, configure trigger sensors (to detect presence), and reset sensors (to detect exits)."
+            },
+            nl: {
+                "intro.title": "WIAB Apparaat",
+                "intro.description": "WIAB (Wesp In Een Doos) creëert een virtuele aanwezigheidssensor door fysieke sensoren in uw kamer te monitoren. Net als een wesp die in een doos gevangen zit en actief blijft totdat hij de uitgang vindt, blijft het apparaat bezet totdat aan specifieke voorwaarden is voldaan.",
+                "intro.key_feature": "Belangrijkste functie:",
+                "intro.key_feature_description": "Combineert meerdere sensoren om intelligente kamer aanwezigheidsdetectie te creëren met configureerbare activerings- en deactiveringstriggers.",
+                "intro.trigger_sensors": "Triggersensoren:",
+                "intro.trigger_sensors_description": "Bewegingssensoren of andere apparaten die aanwezigheid activeren (wesp komt de doos in)",
+                "intro.reset_sensors": "Resetsensoren:",
+                "intro.reset_sensors_description": "Deurcontacten of andere sensoren die aanwezigheid deactiveren (wesp vindt de uitgang)",
+                "intro.edge_detection": "Randdetectie:",
+                "intro.edge_detection_description": "Alleen ONWAAR→WAAR overgangen activeren acties, waardoor herhaalde activeringen worden voorkomen",
+                "intro.priority": "Prioriteitslogica:",
+                "intro.priority_description": "Resetsensoren worden eerst gecontroleerd, zodat uitgangen altijd voorrang hebben",
+                "intro.polling": "Betrouwbare polling:",
+                "intro.polling_description": "Controleert sensoren elke 2 seconden voor consistent gedrag",
+                "intro.next_step": "In de volgende stappen selecteert u een kamertype, configureert u triggersensoren (om aanwezigheid te detecteren) en resetsensoren (om uitgangen te detecteren)."
+            },
+            de: {
+                "intro.title": "WIAB Gerät",
+                "intro.description": "WIAB (Wespe In Einer Box) erstellt einen virtuellen Anwesenheitssensor durch Überwachung physischer Sensoren in Ihrem Raum. Wie eine in einer Box gefangene Wespe, die aktiv bleibt, bis sie den Ausgang findet, bleibt das Gerät besetzt, bis bestimmte Bedingungen erfüllt sind.",
+                "intro.key_feature": "Hauptfunktion:",
+                "intro.key_feature_description": "Kombiniert mehrere Sensoren, um intelligente Raumbelegungserkennung mit konfigurierbaren Aktivierungs- und Deaktivierungsauslösern zu erstellen.",
+                "intro.trigger_sensors": "Auslösesensoren:",
+                "intro.trigger_sensors_description": "Bewegungssensoren oder andere Geräte, die Belegung aktivieren (Wespe betritt die Box)",
+                "intro.reset_sensors": "Rücksetzsensoren:",
+                "intro.reset_sensors_description": "Türkontakte oder andere Sensoren, die Belegung deaktivieren (Wespe findet den Ausgang)",
+                "intro.edge_detection": "Flankenerkennung:",
+                "intro.edge_detection_description": "Nur FALSCH→WAHR Übergänge lösen Aktionen aus, um wiederholte Aktivierungen zu verhindern",
+                "intro.priority": "Prioritätslogik:",
+                "intro.priority_description": "Rücksetzsensoren werden zuerst überprüft, um sicherzustellen, dass Ausgänge immer Vorrang haben",
+                "intro.polling": "Zuverlässiges Polling:",
+                "intro.polling_description": "Überprüft Sensoren alle 2 Sekunden für konsistentes Verhalten",
+                "intro.next_step": "In den nächsten Schritten wählen Sie einen Raumtyp aus, konfigurieren Auslösesensoren (um Anwesenheit zu erkennen) und Rücksetzsensoren (um Ausgänge zu erkennen)."
+            },
+            no: {
+                "intro.title": "WIAB Enhet",
+                "intro.description": "WIAB (Veps I En Boks) oppretter en virtuell tilstedeværelsessensor ved å overvåke fysiske sensorer i rommet ditt. Som en veps fanget i en boks som forblir aktiv til den finner utgangen, forblir enheten opptatt til spesifikke betingelser er oppfylt.",
+                "intro.key_feature": "Hovedfunksjon:",
+                "intro.key_feature_description": "Kombinerer flere sensorer for å skape intelligent romtilstedeværelsesdeteksjon med konfigurerbare aktiverings- og deaktiveringsutløsere.",
+                "intro.trigger_sensors": "Utløsersensorer:",
+                "intro.trigger_sensors_description": "Bevegelsessensorer eller andre enheter som aktiverer tilstedeværelse (veps kommer inn i boksen)",
+                "intro.reset_sensors": "Tilbakestillingssensorer:",
+                "intro.reset_sensors_description": "Dørkontakter eller andre sensorer som deaktiverer tilstedeværelse (veps finner utgangen)",
+                "intro.edge_detection": "Flankedeteksjon:",
+                "intro.edge_detection_description": "Bare USANN→SANN overganger utløser handlinger, forhindrer gjentatte aktiveringer",
+                "intro.priority": "Prioritetslogikk:",
+                "intro.priority_description": "Tilbakestillingssensorer sjekkes først, sikrer at utganger alltid har forrang",
+                "intro.polling": "Pålitelig polling:",
+                "intro.polling_description": "Sjekker sensorer hvert 2. sekund for konsistent oppførsel",
+                "intro.next_step": "I de neste trinnene velger du en romtype, konfigurerer utløsersensorer (for å oppdage tilstedeværelse) og tilbakestillingssensorer (for å oppdage utganger)."
+            },
+            sv: {
+                "intro.title": "WIAB Enhet",
+                "intro.description": "WIAB (Geting I En Låda) skapar en virtuell närvarosensor genom att övervaka fysiska sensorer i ditt rum. Som en geting fångad i en låda som förblir aktiv tills den hittar utgången, förblir enheten upptagen tills specifika villkor uppfylls.",
+                "intro.key_feature": "Huvudfunktion:",
+                "intro.key_feature_description": "Kombinerar flera sensorer för att skapa intelligent rumsnärvarodetektering med konfigurerbara aktiverings- och avaktiveringsutlösare.",
+                "intro.trigger_sensors": "Utlösarsensorer:",
+                "intro.trigger_sensors_description": "Rörelsesensorer eller andra enheter som aktiverar närvaro (geting kommer in i lådan)",
+                "intro.reset_sensors": "Återställningssensorer:",
+                "intro.reset_sensors_description": "Dörrkontakter eller andra sensorer som avaktiverar närvaro (geting hittar utgången)",
+                "intro.edge_detection": "Flankdetektering:",
+                "intro.edge_detection_description": "Endast FALSKT→SANT övergångar utlöser åtgärder, förhindrar upprepade aktiveringar",
+                "intro.priority": "Prioritetslogik:",
+                "intro.priority_description": "Återställningssensorer kontrolleras först, säkerställer att utgångar alltid har prioritet",
+                "intro.polling": "Tillförlitlig polling:",
+                "intro.polling_description": "Kontrollerar sensorer var 2:a sekund för konsekvent beteende",
+                "intro.next_step": "I nästa steg väljer du en rumstyp, konfigurerar utlösarsensorer (för att upptäcka närvaro) och återställningssensorer (för att upptäcka utgångar)."
+            }
+        };
+
+        // Get language from Homey
+        const language = window.Homey ? (window.Homey.getLanguage() || 'en') : 'en';
+        const lang = translations[language] || translations.en;
+
+        // Apply translations
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (lang[key]) {
+                el.textContent = lang[key];
+            }
+        });
+    </script>
+</body>
+</html>
