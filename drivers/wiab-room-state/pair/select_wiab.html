@@ -76,21 +76,21 @@
     </style>
 </head>
 <body>
-    <h1>Select WIAB Device</h1>
-    <p class="intro">
+    <h1 data-i18n="pair.room_state.select_wiab.title">Select WIAB Device</h1>
+    <p class="intro" data-i18n="pair.room_state.select_wiab.intro">
         Select the WIAB (Wasp in a Box) device that will provide occupancy input for this Room State Manager.
     </p>
 
     <div class="error" id="error">
-        <span>No WIAB devices found. Please create a WIAB device first.</span>
+        <span data-i18n="pair.room_state.select_wiab.error_no_devices">No WIAB devices found. Please create a WIAB device first.</span>
     </div>
 
     <div class="form-group">
-        <label for="wiabDevice">WIAB Device</label>
+        <label for="wiabDevice" data-i18n="pair.room_state.select_wiab.label_wiab_device">WIAB Device</label>
         <select id="wiabDevice" disabled>
-            <option>Loading devices...</option>
+            <option data-i18n="pair.room_state.select_wiab.loading_devices">Loading devices...</option>
         </select>
-        <div class="hint">
+        <div class="hint" data-i18n="pair.room_state.select_wiab.hint_device_selection">
             The selected WIAB device's occupancy state will be used as input for room state transitions.
         </div>
     </div>
@@ -207,7 +207,7 @@
                     console.error('Failed to initialize pairing page:', error);
                     document.body.innerHTML = '<div style="padding: 20px; color: red;">' +
                         '<h1>Error</h1>' +
-                        '<p>Pairing framework failed to load. Please restart the Homey app and try again.</p>' +
+                        '<p>' + Homey.__('pair.room_state.select_wiab.error_pairing_failed') + '</p>' +
                         '<p>Error: ' + error.message + '</p>' +
                         '</div>';
                 }
@@ -215,7 +215,7 @@
                 console.error('CRITICAL: Homey API not available in pairing context');
                 document.body.innerHTML = '<div style="padding: 20px; color: red;">' +
                     '<h1>Error</h1>' +
-                    '<p>Homey SDK not available. Please restart pairing.</p>' +
+                    '<p>' + (typeof Homey !== 'undefined' ? Homey.__('pair.room_state.select_wiab.error_sdk_not_available') : 'Homey SDK not available. Please restart pairing.') + '</p>' +
                     '</div>';
             }
         })();

@@ -118,12 +118,12 @@
     </style>
 </head>
 <body>
-    <h1 data-i18n="pair.select_contact_sensors.title">Select Contact Sensors</h1>
-    <p class="intro" data-i18n="pair.select_contact_sensors.intro">Select the door and window contact sensors that will define the zone seal. When ANY sensor is open, the zone is considered leaky.</p>
+    <h1 data-i18n="pair.zone_seal.select_contact_sensors.title">Select Contact Sensors</h1>
+    <p class="intro" data-i18n="pair.zone_seal.select_contact_sensors.intro">Select the door and window contact sensors that will define the zone seal. When ANY sensor is open, the zone is considered leaky.</p>
 
     <div id="contact-error" class="error" style="display: none;"></div>
     <div id="contact-loading" class="loading"></div>
-    <input type="text" id="contact-search" class="search-box" placeholder="Search sensors..." style="display: none;">
+    <input type="text" id="contact-search" class="search-box" data-i18n-placeholder="pair.zone_seal.select_contact_sensors.search_placeholder" placeholder="Search sensors..." style="display: none;">
     <div id="contact-device-list" class="device-list"></div>
 
     <script type="application/javascript">
@@ -147,7 +147,7 @@
                 })
                 .catch(function(error) {
                     console.error('Error loading contact sensors:', error);
-                    showError('Failed to load contact sensors: ' + (error.message || error));
+                    showError(Homey.__('pair.zone_seal.select_contact_sensors.error_failed_to_load') + ' ' + (error.message || error));
                     document.getElementById('contact-loading').style.display = 'none';
                 });
 
@@ -158,7 +158,7 @@
             container.innerHTML = '';
 
             if (devices.length === 0) {
-                container.innerHTML = '<div class="no-devices">No contact sensors found. Please add door or window sensors to your Homey first.</div>';
+                container.innerHTML = '<div class="no-devices">' + Homey.__('pair.zone_seal.select_contact_sensors.no_devices') + '</div>';
                 return;
             }
 
@@ -186,7 +186,7 @@
 
                 const zone = document.createElement('div');
                 zone.className = 'device-zone';
-                zone.textContent = device.zone || 'No zone';
+                zone.textContent = device.zone || Homey.__('pair.zone_seal.select_contact_sensors.no_zone');
 
                 info.appendChild(name);
                 info.appendChild(zone);
