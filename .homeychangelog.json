@@ -49,5 +49,8 @@
   },
   "1.2.5": {
     "en": "minor improvements in documentation and ui to improve user experience."
+  },
+  "1.2.6": {
+    "en": "minor fixes"
   }
 }
