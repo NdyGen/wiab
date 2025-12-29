@@ -104,6 +104,12 @@ class WIABDevice extends Homey.Device {
       await this.addCapability('occupancy_state');
     }
 
+    // Ensure alarm_paused capability exists (for migration of existing devices)
+    if (!this.hasCapability('alarm_paused')) {
+      this.log('Adding alarm_paused capability to existing device');
+      await this.addCapability('alarm_paused');
+    }
+
     // Initialize to UNOCCUPIED (spec 5.1)
     this.occupancyState = OccupancyState.UNOCCUPIED;
     this.lastStableOccupancy = StableOccupancyState.UNOCCUPIED;
@@ -113,6 +119,46 @@ class WIABDevice extends Homey.Device {
 
     // Set initial boolean output from stable state
     await this.updateOccupancyOutput();
+
+    // Initialize pause indicator to false
+    await this.setCapabilityValue('alarm_paused', false).catch((err) => {
+      this.error('Failed to initialize alarm_paused capability:', err);
+    });
+
+    /**
+     * Registers the alarm_paused capability listener to handle UI toggle events.
+     *
+     * This listener syncs the UI toggle with internal pause state:
+     * - When user toggles ON → pauses device with current stable occupancy
+     * - When user toggles OFF → unpauses device and resumes monitoring
+     *
+     * The listener includes smart deduplication: programmatic setCapabilityValue()
+     * calls (from pauseDevice/unpauseDevice methods) are ignored if the internal
+     * state already matches, preventing infinite loops.
+     *
+     * State flow:
+     * 1. User clicks toggle → listener fires
+     * 2. Listener checks isPaused flag
+     * 3. If state change needed → calls pauseDevice() or unpauseDevice()
+     * 4. Those methods call setCapabilityValue() → listener fires again
+     * 5. Listener sees isPaused already matches → ignores (no loop)
+     */
+    this.registerCapabilityListener('alarm_paused', async (value: boolean) => {
+      this.log(`Pause toggle changed to: ${value}`);
+
+      // Check if state change is needed (prevent loops from programmatic sets)
+      if (value && !this.isPaused) {
+        // User toggled pause ON - pause with current stable state
+        this.log('User requested pause via UI toggle');
+        await this.pauseDevice(this.lastStableOccupancy);
+      } else if (!value && this.isPaused) {
+        // User toggled pause OFF - unpause
+        this.log('User requested unpause via UI toggle');
+        await this.unpauseDevice();
+      } else {
+        this.log(`Pause state already ${value ? 'paused' : 'unpaused'} - ignoring redundant toggle`);
+      }
+    });
 
     // Register action handlers
     this.registerActionHandlers();
@@ -791,6 +837,11 @@ class WIABDevice extends Homey.Device {
       // Update capabilities
       await this.updateOccupancyOutput();
 
+      // Set pause indicator
+      await this.setCapabilityValue('alarm_paused', true).catch((err) => {
+        this.error('Failed to set alarm_paused capability:', err);
+      });
+
       this.log(`Device paused with state: ${state}`);
     } catch (error) {
       this.error('Failed to pause device:', error);
@@ -821,6 +872,11 @@ class WIABDevice extends Homey.Device {
 
       // Mark as unpaused
       this.isPaused = false;
+
+      // Clear pause indicator
+      await this.setCapabilityValue('alarm_paused', false).catch((err) => {
+        this.error('Failed to clear alarm_paused capability:', err);
+      });
 
       // Reinitialize state machine to UNOCCUPIED (like onInit)
       this.occupancyState = OccupancyState.UNOCCUPIED;

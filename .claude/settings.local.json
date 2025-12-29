@@ -110,7 +110,8 @@
       "Bash(xattr:*)",
       "Bash(git clean:*)",
       "Bash(gh label:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []
