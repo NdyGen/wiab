@@ -1,0 +1,21 @@
+{
+  "type": "boolean",
+  "title": {
+    "en": "Paused",
+    "nl": "Gepauzeerd",
+    "de": "Pausiert",
+    "no": "Pauset",
+    "sv": "Pausad"
+  },
+  "desc": {
+    "en": "Indicates when the device is paused and ignoring sensor events",
+    "nl": "Geeft aan wanneer het apparaat is gepauzeerd en sensorgebeurtenissen negeert",
+    "de": "Zeigt an, wenn das Gerät pausiert ist und Sensorereignisse ignoriert",
+    "no": "Indikerer når enheten er pauset og ignorerer sensorhendelser",
+    "sv": "Indikerar när enheten är pausad och ignorerar sensorhändelser"
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "uiQuickAction": false
+}

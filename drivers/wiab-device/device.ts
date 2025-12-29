@@ -104,6 +104,12 @@ class WIABDevice extends Homey.Device {
       await this.addCapability('occupancy_state');
     }
 
+    // Ensure alarm_paused capability exists (for migration of existing devices)
+    if (!this.hasCapability('alarm_paused')) {
+      this.log('Adding alarm_paused capability to existing device');
+      await this.addCapability('alarm_paused');
+    }
+
     // Initialize to UNOCCUPIED (spec 5.1)
     this.occupancyState = OccupancyState.UNOCCUPIED;
     this.lastStableOccupancy = StableOccupancyState.UNOCCUPIED;
@@ -113,6 +119,11 @@ class WIABDevice extends Homey.Device {
 
     // Set initial boolean output from stable state
     await this.updateOccupancyOutput();
+
+    // Initialize pause indicator to false
+    await this.setCapabilityValue('alarm_paused', false).catch((err) => {
+      this.error('Failed to initialize alarm_paused capability:', err);
+    });
 
     // Register action handlers
     this.registerActionHandlers();
@@ -791,6 +802,11 @@ class WIABDevice extends Homey.Device {
       // Update capabilities
       await this.updateOccupancyOutput();
 
+      // Set pause indicator
+      await this.setCapabilityValue('alarm_paused', true).catch((err) => {
+        this.error('Failed to set alarm_paused capability:', err);
+      });
+
       this.log(`Device paused with state: ${state}`);
     } catch (error) {
       this.error('Failed to pause device:', error);
@@ -821,6 +837,11 @@ class WIABDevice extends Homey.Device {
 
       // Mark as unpaused
       this.isPaused = false;
+
+      // Clear pause indicator
+      await this.setCapabilityValue('alarm_paused', false).catch((err) => {
+        this.error('Failed to clear alarm_paused capability:', err);
+      });
 
       // Reinitialize state machine to UNOCCUPIED (like onInit)
       this.occupancyState = OccupancyState.UNOCCUPIED;
