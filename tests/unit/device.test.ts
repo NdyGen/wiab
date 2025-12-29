@@ -60,6 +60,7 @@ describe('WIABDevice', () => {
     device.setCapabilityValue = jest.fn().mockResolvedValue(undefined);
     device.hasCapability = jest.fn(() => true);
     device.addCapability = jest.fn().mockResolvedValue(undefined);
+    device.registerCapabilityListener = jest.fn();
   });
 
   describe('onInit', () => {

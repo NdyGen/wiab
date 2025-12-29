@@ -125,6 +125,24 @@ class WIABDevice extends Homey.Device {
       this.error('Failed to initialize alarm_paused capability:', err);
     });
 
+    // Register pause toggle listener
+    this.registerCapabilityListener('alarm_paused', async (value: boolean) => {
+      this.log(`Pause toggle changed to: ${value}`);
+
+      // Check if state change is needed (prevent loops from programmatic sets)
+      if (value && !this.isPaused) {
+        // User toggled pause ON - pause with current stable state
+        this.log('User requested pause via UI toggle');
+        await this.pauseDevice(this.lastStableOccupancy);
+      } else if (!value && this.isPaused) {
+        // User toggled pause OFF - unpause
+        this.log('User requested unpause via UI toggle');
+        await this.unpauseDevice();
+      } else {
+        this.log(`Pause state already ${value ? 'paused' : 'unpaused'} - ignoring redundant toggle`);
+      }
+    });
+
     // Register action handlers
     this.registerActionHandlers();
 
