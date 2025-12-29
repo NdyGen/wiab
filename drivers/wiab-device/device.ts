@@ -125,7 +125,24 @@ class WIABDevice extends Homey.Device {
       this.error('Failed to initialize alarm_paused capability:', err);
     });
 
-    // Register pause toggle listener
+    /**
+     * Registers the alarm_paused capability listener to handle UI toggle events.
+     *
+     * This listener syncs the UI toggle with internal pause state:
+     * - When user toggles ON → pauses device with current stable occupancy
+     * - When user toggles OFF → unpauses device and resumes monitoring
+     *
+     * The listener includes smart deduplication: programmatic setCapabilityValue()
+     * calls (from pauseDevice/unpauseDevice methods) are ignored if the internal
+     * state already matches, preventing infinite loops.
+     *
+     * State flow:
+     * 1. User clicks toggle → listener fires
+     * 2. Listener checks isPaused flag
+     * 3. If state change needed → calls pauseDevice() or unpauseDevice()
+     * 4. Those methods call setCapabilityValue() → listener fires again
+     * 5. Listener sees isPaused already matches → ignores (no loop)
+     */
     this.registerCapabilityListener('alarm_paused', async (value: boolean) => {
       this.log(`Pause toggle changed to: ${value}`);
 
