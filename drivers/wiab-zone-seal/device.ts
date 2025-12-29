@@ -507,7 +507,7 @@ class WIABZoneSealDevice extends Homey.Device {
       const anyOpen = this.isAnyNonStaleSensorOpen();
 
       // If all sensors are stale, both allClosed and anyOpen will be false/true respectively
-      // Treat as all closed (sealed)
+      // Treat as leaky (fail-safe: unknown state should trigger alerts)
       if (!anyOpen && allClosed) {
         const nonStaleCount = this.contactSensors.filter((sensor) => {
           const info = this.staleSensorMap.get(sensor.deviceId);
@@ -515,8 +515,8 @@ class WIABZoneSealDevice extends Homey.Device {
         }).length;
 
         if (nonStaleCount === 0) {
-          this.log('All sensors are stale, treating zone as sealed');
-          const transition = this.engine.handleAllSensorsClosed();
+          this.log('All sensors are stale, treating zone as leaky (fail-safe)');
+          const transition = this.engine.handleAnySensorOpened();
           await this.processStateTransition(transition);
           return;
         }
