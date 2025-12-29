@@ -84,6 +84,7 @@ class WIABDevice extends Homey.Device {
   // Pause/unpause state management
   private isPaused: boolean = false;
   private pausedWithState: StableOccupancyState = StableOccupancyState.UNOCCUPIED;
+  private isInitializing: boolean = false;
 
   /**
    * Initializes the WIAB device.
@@ -98,6 +99,9 @@ class WIABDevice extends Homey.Device {
   async onInit(): Promise<void> {
     this.log('WIAB device initializing with quad-state occupancy model');
 
+    // Mark device as initializing to prevent listener loops
+    this.isInitializing = true;
+
     // Ensure occupancy_state capability exists (for migration of existing devices)
     if (!this.hasCapability('occupancy_state')) {
       this.log('Adding occupancy_state capability to existing device');
@@ -108,6 +112,10 @@ class WIABDevice extends Homey.Device {
     if (!this.hasCapability('alarm_paused')) {
       this.log('Adding alarm_paused capability to existing device');
       await this.addCapability('alarm_paused');
+      // Immediately set to true (inverted: true = active/highlighted) after adding
+      await this.setCapabilityValue('alarm_paused', true).catch((err) => {
+        this.error('Failed to initialize alarm_paused capability during migration:', err);
+      });
     }
 
     // Initialize to UNOCCUPIED (spec 5.1)
@@ -120,17 +128,19 @@ class WIABDevice extends Homey.Device {
     // Set initial boolean output from stable state
     await this.updateOccupancyOutput();
 
-    // Initialize pause indicator to false
-    await this.setCapabilityValue('alarm_paused', false).catch((err) => {
-      this.error('Failed to initialize alarm_paused capability:', err);
-    });
-
     /**
      * Registers the alarm_paused capability listener to handle UI toggle events.
      *
-     * This listener syncs the UI toggle with internal pause state:
-     * - When user toggles ON → pauses device with current stable occupancy
-     * - When user toggles OFF → unpauses device and resumes monitoring
+     * IMPORTANT: alarm_paused uses INVERTED semantics to leverage Homey's UI highlighting:
+     * - TRUE (highlighted) = device is ACTIVE/monitoring sensors
+     * - FALSE (dimmed) = device is PAUSED/ignoring sensors
+     *
+     * This inversion makes paused devices appear visually "disabled" (dimmed) while
+     * active devices appear normal (highlighted), providing better visual feedback.
+     *
+     * User interaction flow:
+     * - When user toggles to FALSE (dimmed) → pauses device with current stable occupancy
+     * - When user toggles to TRUE (highlighted) → unpauses device and resumes monitoring
      *
      * The listener includes smart deduplication: programmatic setCapabilityValue()
      * calls (from pauseDevice/unpauseDevice methods) are ignored if the internal
@@ -144,20 +154,33 @@ class WIABDevice extends Homey.Device {
      * 5. Listener sees isPaused already matches → ignores (no loop)
      */
     this.registerCapabilityListener('alarm_paused', async (value: boolean) => {
+      // Ignore events during initialization to prevent race conditions
+      if (this.isInitializing) {
+        this.log('Ignoring alarm_paused change during initialization');
+        return;
+      }
+
       this.log(`Pause toggle changed to: ${value}`);
 
       // Check if state change is needed (prevent loops from programmatic sets)
-      if (value && !this.isPaused) {
-        // User toggled pause ON - pause with current stable state
+      // INVERTED: FALSE = paused (dimmed), TRUE = active (highlighted)
+      if (!value && !this.isPaused) {
+        // User toggled to FALSE (dimmed) - pause with current stable state
         this.log('User requested pause via UI toggle');
         await this.pauseDevice(this.lastStableOccupancy);
-      } else if (!value && this.isPaused) {
-        // User toggled pause OFF - unpause
+      } else if (value && this.isPaused) {
+        // User toggled to TRUE (highlighted) - unpause
         this.log('User requested unpause via UI toggle');
         await this.unpauseDevice();
       } else {
-        this.log(`Pause state already ${value ? 'paused' : 'unpaused'} - ignoring redundant toggle`);
+        this.log(`Pause state already ${value ? 'active' : 'paused'} - ignoring redundant toggle`);
       }
+    });
+
+    // Set initial value for alarm_paused (for existing devices that already have the capability)
+    // This ensures devices start in active/highlighted state
+    await this.setCapabilityValue('alarm_paused', true).catch((err) => {
+      this.error('Failed to initialize alarm_paused capability:', err);
     });
 
     // Register action handlers
@@ -165,6 +188,9 @@ class WIABDevice extends Homey.Device {
 
     // Register condition handlers
     this.registerConditionHandlers();
+
+    // Clear initialization flag to allow listener to process user interactions
+    this.isInitializing = false;
 
     this.log('WIAB device initialization complete');
   }
@@ -837,8 +863,8 @@ class WIABDevice extends Homey.Device {
       // Update capabilities
       await this.updateOccupancyOutput();
 
-      // Set pause indicator
-      await this.setCapabilityValue('alarm_paused', true).catch((err) => {
+      // Set pause indicator (inverted: false = paused/dimmed)
+      await this.setCapabilityValue('alarm_paused', false).catch((err) => {
         this.error('Failed to set alarm_paused capability:', err);
       });
 
@@ -873,8 +899,8 @@ class WIABDevice extends Homey.Device {
       // Mark as unpaused
       this.isPaused = false;
 
-      // Clear pause indicator
-      await this.setCapabilityValue('alarm_paused', false).catch((err) => {
+      // Clear pause indicator (inverted: true = active/highlighted)
+      await this.setCapabilityValue('alarm_paused', true).catch((err) => {
         this.error('Failed to clear alarm_paused capability:', err);
       });
 
