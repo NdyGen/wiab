@@ -11,6 +11,8 @@ coverage/
 .env
 .homeyrc
 
+# Local development files
+*.local.*
 
 # Added by Homey CLI
 /.homeybuild/
