@@ -270,6 +270,7 @@ describe('WIABZoneSealDevice - Integration', () => {
 
       // Act - sensor opens
       callback(true);
+      await Promise.resolve(); // Let handler promise start
 
       // Verify we're in OPEN_DELAY (no immediate transition)
       expect(device.setCapabilityValue).not.toHaveBeenCalled();
@@ -298,10 +299,13 @@ describe('WIABZoneSealDevice - Integration', () => {
       // Arrange - sensor opens
       const callback = capabilityCallbacks.get('sensor1')!;
       callback(true);
+      await Promise.resolve(); // Let handler promise start
 
       // Act - sensor "flickers" (closes and opens again quickly)
       callback(false);
+      await Promise.resolve();
       callback(true);
+      await Promise.resolve();
       jest.clearAllMocks();
 
       // Fast-forward 10 seconds
@@ -412,7 +416,7 @@ describe('WIABZoneSealDevice - Integration', () => {
       expect(typeof hasStale).toBe('boolean');
     });
 
-    it('should clear stale flag when sensor reports', () => {
+    it('should clear stale flag when sensor reports', async () => {
       // This test verifies that sensor updates clear the stale flag
       // Rather than trying to make a sensor stale (which is timing-complex),
       // we'll test that the update mechanism resets the stale tracking
@@ -420,6 +424,7 @@ describe('WIABZoneSealDevice - Integration', () => {
       // Act - sensor reports (value change)
       const callback = capabilityCallbacks.get('sensor1')!;
       callback(false); // Any update should update lastUpdated timestamp
+      await Promise.resolve(); // Let handler promise start
 
       // Assert - updateStaleSensorTracking should have been called
       // Sensor should not be stale after a recent update
@@ -867,6 +872,7 @@ describe('WIABZoneSealDevice - Integration', () => {
       // Trigger sensor to create a delay timer
       const callback = capabilityCallbacks.get('sensor1')!;
       callback(true);
+      await Promise.resolve(); // Let handler promise start
 
       // Act - delete device
       await device.onDeleted();
@@ -1034,7 +1040,8 @@ describe('WIABZoneSealDevice - Integration', () => {
       // Act - sensor opens, immediate transition (zero delay)
       const callback = capabilityCallbacks.get('sensor1')!;
       callback(true);
-      await Promise.resolve(); // Let async operations complete
+      await Promise.resolve(); // Let handler promise start
+      await Promise.resolve(); // Let nested promises complete
 
       // Assert - Verify that zone status changed to leaky
       expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_zone_leaky', true);

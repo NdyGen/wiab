@@ -4,6 +4,7 @@ import { CircuitBreakerCascadeEngine } from '../../lib/CircuitBreakerCascadeEngi
 import { validateCircuitBreakerSettings } from '../../lib/CircuitBreakerSettingsValidator';
 import { HomeyAPI } from '../../lib/types';
 import { CircuitBreakerErrorId } from '../../constants/errorIds';
+import { BaseWIABDevice } from '../../lib/BaseWIABDevice';
 import { ErrorReporter } from '../../lib/ErrorReporter';
 import { ErrorSeverity } from '../../lib/ErrorTypes';
 import { ErrorHandler } from '../../lib/ErrorHandler';
@@ -40,7 +41,7 @@ interface WIABApp extends Homey.App {
  * - Propagation is bidirectional: ON→ON and OFF→OFF
  * - State changes propagate recursively through entire descendant tree
  */
-class CircuitBreakerDevice extends Homey.Device {
+class CircuitBreakerDevice extends BaseWIABDevice {
   private hierarchyManager?: CircuitBreakerHierarchyManager;
   private cascadeEngine?: CircuitBreakerCascadeEngine;
   private homeyDeviceId?: string;
@@ -56,6 +57,9 @@ class CircuitBreakerDevice extends Homey.Device {
    */
   async onInit(): Promise<void> {
     this.log('Circuit breaker device initializing');
+
+    // Initialize error handling utilities from base class
+    this.initializeErrorHandling();
 
     try {
       // Get HomeyAPI instance from app

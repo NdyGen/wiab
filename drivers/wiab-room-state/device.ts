@@ -3,9 +3,7 @@ import { RoomStateEngine } from '../../lib/RoomStateEngine';
 import type { StateConfig, RoomStateSettings, HomeyAPI } from '../../lib/types';
 import { validateRoomStateSettings } from '../../lib/RoomStateSettingsValidator';
 import { RoomStateErrorId } from '../../constants/errorIds';
-import { WarningManager } from '../../lib/WarningManager';
-import { ErrorReporter } from '../../lib/ErrorReporter';
-import { RetryManager } from '../../lib/RetryManager';
+import { BaseWIABDevice } from '../../lib/BaseWIABDevice';
 import { ErrorSeverity } from '../../lib/ErrorTypes';
 
 /**
@@ -34,7 +32,7 @@ interface WIABApp extends Homey.App {
  * 2. onSettings() - Reconfigure when settings change
  * 3. onDeleted() - Cleanup timers and capability listeners
  */
-class RoomStateDevice extends Homey.Device {
+class RoomStateDevice extends BaseWIABDevice {
   private stateEngine?: RoomStateEngine;
   private wiabDevice?: { id: string; name: string };
   private wiabCapabilityListener?: (() => void) | null;
@@ -42,11 +40,6 @@ class RoomStateDevice extends Homey.Device {
   private lastActivityTimestamp: number | null = null;
   private isWiabOccupied: boolean = false;
   private manualOverride: boolean = false;
-
-  // Error handling utilities
-  private warningManager?: WarningManager;
-  private errorReporter?: ErrorReporter;
-  private retryManager?: RetryManager;
 
   // Debug logging control
   private static readonly ENABLE_DEBUG_LOGGING = false;
@@ -67,10 +60,8 @@ class RoomStateDevice extends Homey.Device {
   async onInit(): Promise<void> {
     this.log('Room State device initializing');
 
-    // Initialize error handling utilities FIRST
-    this.warningManager = new WarningManager(this, this);
-    this.errorReporter = new ErrorReporter(this);
-    this.retryManager = new RetryManager(this);
+    // Initialize error handling utilities from base class
+    this.initializeErrorHandling();
 
     try {
       // Register capability listeners for manual state changes
@@ -84,7 +75,7 @@ class RoomStateDevice extends Homey.Device {
       // Primary error - CRITICAL
       const err = error instanceof Error ? error : new Error(String(error));
 
-      this.errorReporter.reportError({
+      this.errorReporter!.reportError({
         errorId: RoomStateErrorId.DEVICE_INIT_FAILED,
         severity: ErrorSeverity.CRITICAL,
         userMessage: 'Device initialization failed. Check WIAB device assignment.',
@@ -93,7 +84,7 @@ class RoomStateDevice extends Homey.Device {
       });
 
       try {
-        await this.warningManager.setWarning(
+        await this.warningManager!.setWarning(
           RoomStateErrorId.DEVICE_INIT_FAILED,
           'Initialization failed. Check device settings and WIAB device assignment.'
         );
@@ -110,10 +101,10 @@ class RoomStateDevice extends Homey.Device {
 
     // Cleanup phase - only attempt warning clear after successful initialization
     try {
-      await this.warningManager.clearWarning();
+      await this.warningManager!.clearWarning();
     } catch (warningError) {
       const err = warningError instanceof Error ? warningError : new Error(String(warningError));
-      this.errorReporter.reportError({
+      this.errorReporter!.reportError({
         errorId: RoomStateErrorId.WARNING_CLEAR_FAILED,
         severity: ErrorSeverity.MEDIUM,
         userMessage: 'Warning indicator update failed',

@@ -61,6 +61,12 @@ export enum DeviceErrorId {
 
   /** Failed to update occupancy output capabilities */
   OCCUPANCY_UPDATE_FAILED = 'DEVICE_005',
+
+  /** T_ENTER timer expiry handler failed */
+  ENTER_TIMER_EXPIRY_FAILED = 'DEVICE_006',
+
+  /** T_CLEAR timer expiry handler failed */
+  CLEAR_TIMER_EXPIRY_FAILED = 'DEVICE_007',
 }
 
 /**
