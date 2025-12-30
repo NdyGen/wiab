@@ -17,19 +17,42 @@ import { ErrorClassifier } from './ErrorClassifier';
  * 2. Access error handling utilities via protected properties
  * 3. Follow standard error handling patterns from CLAUDE.md
  *
- * Example:
+ * Example (based on actual Zone Seal implementation):
  * ```typescript
- * class MyDevice extends BaseWIABDevice {
+ * class WIABZoneSealDevice extends BaseWIABDevice {
  *   async onInit(): Promise<void> {
- *     this.log('Device initializing');
+ *     this.log('WIAB Zone Seal device initializing');
+ *
+ *     // Initialize error handling utilities first
  *     this.initializeErrorHandling();
  *
  *     try {
- *       // Device-specific initialization
+ *       await this.loadSensorConfiguration();
+ *       await this.initializeState();
  *       await this.setupMonitoring();
+ *
+ *       this.log('WIAB Zone Seal device initialization complete');
  *     } catch (error) {
- *       this.errorReporter!.reportError({...});
- *       await this.warningManager!.setWarning(...);
+ *       await this.handleInitializationError(error);
+ *     }
+ *   }
+ *
+ *   private async handleInitializationError(error: unknown): Promise<void> {
+ *     this.errorReporter!.reportError({
+ *       errorId: ErrorId.DEVICE_INIT_FAILED,
+ *       severity: ErrorSeverity.CRITICAL,
+ *       userMessage: 'Device initialization failed. Check configuration.',
+ *       technicalMessage: `Failed to initialize: ${error instanceof Error ? error.message : 'Unknown error'}`,
+ *       context: { deviceId: this.getData().id },
+ *     });
+ *
+ *     try {
+ *       await this.warningManager!.setWarning(
+ *         ErrorId.DEVICE_INIT_FAILED,
+ *         'Device initialization failed. Check sensor configuration in settings.'
+ *       );
+ *     } catch (warningError) {
+ *       this.error('Failed to set warning:', warningError);
  *     }
  *   }
  * }
