@@ -52,5 +52,8 @@
   },
   "1.2.6": {
     "en": "minor fixes"
+  },
+  "1.2.7": {
+    "en": "Fixed critical Zone Seal fail-safe bug where stale sensors could incorrectly mark zones as sealed. Improved error handling to prevent crashes. Internal code quality improvements."
   }
 }
