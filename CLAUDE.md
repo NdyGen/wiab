@@ -12,6 +12,39 @@
 4. **70% test coverage minimum** - Enforced by Jest; PR will fail if coverage drops
 5. **Use Homey Compose** - Edit `.homeycompose/` files, never edit generated `app.json`
 6. **Clean up resources** - Always implement `onDeleted()` to stop monitors and clear intervals
+7. **Use /wiab-dev for all coding tasks** - The `/wiab-dev` command enforces all guidelines and prevents anti-patterns
+
+---
+
+## Development Workflow
+
+### Default Agent for Coding Tasks
+
+**CRITICAL: Always use the `/wiab-dev` command for all coding tasks.**
+
+The `/wiab-dev` custom command is the specialized WIAB development agent that:
+- Internalizes all 500+ lines of CLAUDE.md guidelines
+- Prevents anti-patterns proactively (setTimeout errors, missing coverage, etc.)
+- Enforces error handling patterns (ErrorReporter + WarningManager)
+- Enforces fail-safe behavior for stale sensor detection
+- Maintains 70% test coverage requirement
+- Validates conventional commit format
+- Runs all checks before completion
+
+**Usage:**
+```bash
+/wiab-dev add battery monitoring to circuit breaker
+/wiab-dev fix stale sensor detection in zone seal
+/wiab-dev refactor error handling in room state device
+/wiab-dev add integration tests for delayed state transitions
+```
+
+**When NOT to use /wiab-dev:**
+- Pure research/exploration tasks (use search/read tools directly)
+- Git operations (use git commands directly)
+- Documentation-only changes (edit directly)
+
+**For all other coding tasks, use /wiab-dev.**
 
 ---
 
