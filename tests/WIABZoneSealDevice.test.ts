@@ -657,6 +657,181 @@ describe('WIABZoneSealDevice - Integration', () => {
         expect.stringContaining('evaluating 1/2 non-stale sensors')
       );
     });
+
+    it('should detect stale sensor via timeout and apply fail-safe behavior', async () => {
+      // Integration test proving timeout → stale detection → re-evaluation → fail-safe
+      // This test demonstrates the complete fail-safe flow when a sensor goes stale via timeout
+
+      // Arrange - Setup device with 2 sensors, stale timeout = 30 minutes
+      await setupDeviceWithTwoSensors(30);
+
+      // Open sensor1 (window opens)
+      const callback1 = capabilityCallbacks.get('sensor1')!;
+      callback1(true);
+      await Promise.resolve();
+
+      // Verify zone is LEAKY
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Clear mocks to isolate timeout detection logs
+      jest.clearAllMocks();
+
+      // Act - Advance time by 31 minutes (past stale threshold)
+      // Move system time forward to trigger stale detection
+      jest.setSystemTime(Date.now() + 31 * 60 * 1000);
+
+      // Advance timer for stale check interval (60 seconds)
+      jest.advanceTimersByTime(60000);
+      await Promise.resolve();
+
+      // Assert - Sensor1 should be marked as stale
+      const staleSensorMap = (device as any).staleSensorMap;
+      expect(staleSensorMap.get('sensor1').isStale).toBe(true);
+
+      // Zone should remain LEAKY (fail-safe activated via timeout-based detection)
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Verify logs show "Sensor became stale" with sensor name and duration
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('became stale')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Door 1')
+      );
+
+      // Verify logs show "Fail-safe: X stale sensor(s) were open"
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('stale sensor(s) were open')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('treating zone as leaky')
+      );
+    });
+
+    it('should apply fail-safe when any stale sensor was open, even with other stale sensors closed', async () => {
+      // Test proving: ANY stale sensor with last value "open" triggers fail-safe,
+      // regardless of other stale sensors' states
+
+      // Arrange - Setup device with 3 sensors
+      const sensors = [
+        { deviceId: 'sensor1', deviceName: 'Window 1', capability: 'alarm_contact' },
+        { deviceId: 'sensor2', deviceName: 'Door 1', capability: 'alarm_contact' },
+        { deviceId: 'sensor3', deviceName: 'Door 2', capability: 'alarm_contact' },
+      ];
+
+      device.getSetting = jest.fn((key: string) => {
+        if (key === 'contactSensors') return JSON.stringify(sensors);
+        if (key === 'openDelaySeconds') return 0;
+        if (key === 'closeDelaySeconds') return 0;
+        if (key === 'staleContactMinutes') return 30;
+        return undefined;
+      });
+
+      mockHomeyApi.devices.getDevices.mockResolvedValue({
+        sensor1: {
+          name: 'Window 1',
+          capabilitiesObj: {
+            alarm_contact: { value: false },
+          },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor1', callback);
+            return {};
+          }),
+        },
+        sensor2: {
+          name: 'Door 1',
+          capabilitiesObj: {
+            alarm_contact: { value: false },
+          },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor2', callback);
+            return {};
+          }),
+        },
+        sensor3: {
+          name: 'Door 2',
+          capabilitiesObj: {
+            alarm_contact: { value: false },
+          },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor3', callback);
+            return {};
+          }),
+        },
+      });
+
+      await device.onInit();
+
+      // Open sensor1 (window opens)
+      const callback1 = capabilityCallbacks.get('sensor1')!;
+      callback1(true);
+      await Promise.resolve();
+
+      // Leave sensor2 and sensor3 closed
+
+      // Act - Mark all 3 sensors as stale
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+      staleSensorMap.get('sensor2').isStale = true;
+      staleSensorMap.get('sensor3').isStale = true;
+
+      jest.clearAllMocks();
+
+      // Trigger handleSensorUpdate()
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should be LEAKY (because sensor1 was open, even though sensor2 and sensor3 were closed)
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Verify logs show "1 stale sensor(s) were open" (only sensor1)
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('1 stale sensor(s) were open')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('treating zone as leaky')
+      );
+    });
+
+    it('should treat zone as leaky when all sensors are stale and all were open', async () => {
+      // Test proving: When all sensors stale + all open, fail-safe keeps zone LEAKY (not sealed)
+
+      // Arrange - Setup device with 2 sensors
+      await setupDeviceWithTwoSensors(30);
+
+      // Open both sensor1 and sensor2
+      const callback1 = capabilityCallbacks.get('sensor1')!;
+      const callback2 = capabilityCallbacks.get('sensor2')!;
+
+      callback1(true);
+      callback2(true);
+      await Promise.resolve();
+
+      // Verify zone is LEAKY
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Act - Mark both sensors as stale
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+      staleSensorMap.get('sensor2').isStale = true;
+
+      jest.clearAllMocks();
+
+      // Trigger handleSensorUpdate()
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should remain LEAKY
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Verify logs show "2 stale sensor(s) were open"
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('2 stale sensor(s) were open')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('treating zone as leaky')
+      );
+    });
   });
 
   describe('onDeleted - resource cleanup', () => {
