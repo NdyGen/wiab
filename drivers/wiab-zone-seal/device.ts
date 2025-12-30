@@ -8,11 +8,7 @@ import {
 import { ContactSensorAggregator } from '../../lib/ContactSensorAggregator';
 import { ZoneSealEngine, StateTransition } from '../../lib/ZoneSealEngine';
 import { validateSensorSettings, validateNumber } from '../../lib/SensorSettingsValidator';
-import { WarningManager } from '../../lib/WarningManager';
-import { ErrorReporter } from '../../lib/ErrorReporter';
-import { FlowCardErrorHandler } from '../../lib/FlowCardErrorHandler';
-import { RetryManager } from '../../lib/RetryManager';
-import { ErrorClassifier } from '../../lib/ErrorClassifier';
+import { BaseWIABDevice } from '../../lib/BaseWIABDevice';
 import { ZoneSealErrorId } from '../../constants/errorIds';
 import { ErrorSeverity } from '../../lib/ErrorTypes';
 
@@ -64,9 +60,9 @@ interface StaleSensorInfo {
  * - Conditions: is_sealed, has_stale_sensors
  *
  * @class WIABZoneSealDevice
- * @extends {Homey.Device}
+ * @extends {BaseWIABDevice}
  */
-class WIABZoneSealDevice extends Homey.Device {
+class WIABZoneSealDevice extends BaseWIABDevice {
   private contactSensors: SensorConfig[] = [];
   private aggregator?: ContactSensorAggregator;
   private engine?: ZoneSealEngine;
@@ -76,12 +72,12 @@ class WIABZoneSealDevice extends Homey.Device {
   private staleCheckInterval?: NodeJS.Timeout;
   private staleTimeoutMs: number = 30 * 60 * 1000; // Default 30 minutes
 
-  // Error handling utilities
-  private warningManager?: WarningManager;
-  private errorReporter?: ErrorReporter;
-  private flowCardHandler?: FlowCardErrorHandler;
-  private retryManager?: RetryManager;
-  private errorClassifier?: ErrorClassifier;
+  // Error handling utilities inherited from BaseWIABDevice:
+  // - warningManager
+  // - errorReporter
+  // - flowCardHandler
+  // - retryManager
+  // - errorClassifier
 
   /**
    * Initializes the WIAB Zone Seal device.
@@ -117,20 +113,6 @@ class WIABZoneSealDevice extends Homey.Device {
     } catch (error) {
       await this.handleInitializationError(error);
     }
-  }
-
-  /**
-   * Initializes error handling utilities.
-   *
-   * Sets up WarningManager, ErrorReporter, FlowCardErrorHandler, RetryManager,
-   * and ErrorClassifier for structured error handling and reporting.
-   */
-  private initializeErrorHandling(): void {
-    this.warningManager = new WarningManager(this, this);
-    this.errorReporter = new ErrorReporter(this);
-    this.flowCardHandler = new FlowCardErrorHandler(this.homey, this);
-    this.retryManager = new RetryManager(this);
-    this.errorClassifier = new ErrorClassifier(this);
   }
 
   /**

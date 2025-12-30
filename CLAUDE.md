@@ -609,6 +609,84 @@ LEAKY → all close → CLOSE_DELAY (if delay configured) → SEALED
 - Log errors with context: `this.error(\`Failed for ${id}:\`, error)`
 - Return safe defaults (empty arrays, null) on validation failure
 
+### Async Fire-and-Forget Pattern
+
+When calling async methods that should execute independently without blocking the caller, use the `void` keyword to explicitly mark them as fire-and-forget.
+
+**When to use fire-and-forget (`void asyncMethod()`):**
+- Event handlers and callbacks (sensor updates, listeners)
+- Background operations that don't affect control flow
+- Operations where the caller doesn't need to wait for completion
+- Non-critical operations that have their own error handling
+
+**When to use `await asyncMethod()`:**
+- Initialization sequences where order matters
+- Critical path operations where errors must propagate
+- Operations whose results are needed for subsequent logic
+- State updates that must complete before continuing
+
+**Examples:**
+
+```typescript
+// ✅ GOOD - Fire-and-forget for event handler
+private registerDeviceListener(device: HomeyAPIDevice, sensor: SensorConfig): void {
+  const handler = (value: boolean) => {
+    this.updateStaleSensorTracking(sensor.deviceId);
+    this.aggregator?.updateSensorState(sensor.deviceId, value);
+
+    // Fire-and-forget: event handler doesn't need to wait
+    void this.handleSensorUpdate();
+  };
+
+  device.makeCapabilityInstance(sensor.capability, handler);
+}
+
+// ✅ GOOD - Fire-and-forget for background operation
+private checkForStaleSensors(): void {
+  if (hasChanges) {
+    this.checkForStaleStateChanged();
+
+    // Trigger re-evaluation without blocking stale check
+    void this.handleSensorUpdate();
+  }
+}
+
+// ✅ GOOD - Await for initialization (order matters)
+async onInit(): Promise<void> {
+  this.initializeErrorHandling();
+
+  try {
+    await this.loadSensorConfiguration();  // Must complete first
+    await this.initializeState();          // Depends on config
+    await this.setupMonitoring();          // Depends on state
+  } catch (error) {
+    await this.handleInitializationError(error);
+  }
+}
+
+// ❌ BAD - Missing void (causes unhandled promise warnings)
+private registerListener(): void {
+  const handler = (value: boolean) => {
+    this.handleUpdate();  // Should be: void this.handleUpdate()
+  };
+}
+
+// ❌ BAD - Using await when fire-and-forget is appropriate
+private checkSensors(): void {
+  if (hasChanges) {
+    await this.handleUpdate();  // Blocks unnecessarily, changes return type
+  }
+}
+```
+
+**Why this matters:**
+- Prevents "floating promise" warnings from linters
+- Makes intent explicit (fire-and-forget vs. sequential)
+- Avoids blocking operations unnecessarily
+- Documents async control flow for maintainers
+
+**Key Principle:** Use `void` for async calls that should execute independently; use `await` when order, results, or error propagation matter.
+
 ### Production Debugging Logging
 
 When logging state decisions, include context that helps diagnose issues in production:
