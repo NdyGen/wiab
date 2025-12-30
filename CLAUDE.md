@@ -391,14 +391,41 @@ for (const sensor of this.sensors) {
 
 **CRITICAL:** When sensors become stale, treat as unsafe state:
 
-- **Zone Seal:** All stale sensors → zone is LEAKY (not sealed)
+- **Zone Seal:** Stale sensors with last value "open" → zone is LEAKY (not sealed)
 - **WIAB:** All stale sensors → occupancy UNCERTAIN
 - **Circuit Breaker:** Stale devices → warning triggered
 
 **Rationale:** Unknown state should trigger alerts rather than false sense of security.
 
-Example (Zone Seal):
+**Priority Order for Fail-Safe Checks:**
+
+When evaluating state with potentially stale data, check fail-safe conditions in this order:
+
+1. **Check individual stale sensor last values FIRST** (highest priority)
+2. Check if all sensors are stale
+3. Evaluate non-stale sensors normally
+
+Example (Zone Seal with Issue #109 fix):
 ```typescript
+// PRIORITY 1: Check if ANY stale sensor's last value was "open"
+const staleSensorsOpen = this.contactSensors.filter((sensor) => {
+  const info = this.staleSensorMap.get(sensor.deviceId);
+  if (!info || !info.isStale) return false;
+
+  const lastValue = this.aggregator?.getSensorState(sensor.deviceId);
+  return lastValue === true;  // Last known value was "open"
+});
+
+if (staleSensorsOpen.length > 0) {
+  // Fail-safe: Stale sensor was open → keep zone leaky
+  const sensorNames = staleSensorsOpen.map(s => s.deviceName || s.deviceId).join(', ');
+  this.log(`Fail-safe: ${staleSensorsOpen.length} stale sensor(s) were open (${sensorNames}), treating zone as leaky`);
+  const transition = this.engine.handleAnySensorOpened();
+  await this.processStateTransition(transition);
+  return;
+}
+
+// PRIORITY 2: Check if all sensors are stale
 const nonStaleCount = this.contactSensors.filter(sensor => {
   const info = this.staleSensorMap.get(sensor.deviceId);
   return info && !info.isStale;
@@ -411,7 +438,54 @@ if (nonStaleCount === 0) {
   await this.processStateTransition(transition);
   return;
 }
+
+// PRIORITY 3: Normal evaluation of non-stale sensors
+const allClosed = this.areNonStaleSensorsClosed();
+const anyOpen = this.isAnyNonStaleSensorOpen();
+// ... continue with normal logic
 ```
+
+**Key Principle:** Stale sensors with last value indicating "unsafe" state (open, motion, etc.) must prevent the system from reporting a "safe" state (sealed, unoccupied, etc.), even if other fresh sensors indicate safety.
+
+### Immediate Re-evaluation on Staleness
+
+**CRITICAL:** When sensors become stale, trigger immediate state re-evaluation:
+
+```typescript
+private checkForStaleSensors(): void {
+  const now = Date.now();
+  let hasChanges = false;
+
+  for (const sensor of this.contactSensors) {
+    const info = this.staleSensorMap.get(sensor.deviceId);
+    if (!info) continue;
+
+    const timeSinceUpdate = now - info.lastUpdated;
+    const shouldBeStale = timeSinceUpdate > this.staleTimeoutMs;
+
+    if (shouldBeStale && !info.isStale) {
+      info.isStale = true;
+      hasChanges = true;
+
+      // Enhanced logging for production debugging
+      const currentValue = this.aggregator?.getSensorState(sensor.deviceId);
+      this.log(`Sensor became stale: ${sensor.deviceName || sensor.deviceId} (last value: ${currentValue}, stale for: ${Math.round(timeSinceUpdate / 60000)}min)`);
+
+      void this.triggerSensorBecameStale(sensor.deviceName || sensor.deviceId, sensor.deviceId);
+    }
+  }
+
+  if (hasChanges) {
+    this.checkForStaleStateChanged();
+
+    // CRITICAL: Trigger immediate re-evaluation
+    // Don't wait for next sensor event to apply fail-safe
+    void this.handleSensorUpdate();
+  }
+}
+```
+
+**Why:** Waiting for the next sensor event to apply fail-safe behavior could leave the device in an incorrect state for extended periods.
 
 ---
 
@@ -472,6 +546,29 @@ LEAKY → all close → CLOSE_DELAY (if delay configured) → SEALED
 - Fail gracefully, never crash
 - Log errors with context: `this.error(\`Failed for ${id}:\`, error)`
 - Return safe defaults (empty arrays, null) on validation failure
+
+### Production Debugging Logging
+
+When logging state decisions, include context that helps diagnose issues in production:
+
+**Good - Actionable Logs:**
+```typescript
+// Shows WHY decision was made and what data led to it
+this.log(`Sensor update: allClosed=${allClosed}, anyOpen=${anyOpen} (evaluating ${nonStaleSensorCount}/${this.contactSensors.length} non-stale sensors)`);
+
+this.log(`Fail-safe: ${staleSensorsOpen.length} stale sensor(s) were open (${sensorNames}), treating zone as leaky`);
+
+this.log(`Sensor became stale: ${sensorName} (last value: ${currentValue}, stale for: ${duration}min)`);
+```
+
+**Bad - Vague Logs:**
+```typescript
+this.log('Sensor update');  // No context
+this.log('Zone is leaky');  // Doesn't explain why
+this.log('Sensor stale');   // Which sensor? For how long?
+```
+
+**Pattern:** Include counts, names, durations, and reasoning in logs to make production debugging possible without code access.
 
 ### Naming
 - Classes/Interfaces: `PascalCase`
@@ -612,6 +709,49 @@ it('should detect stale sensors after timeout', async () => {
   );
 });
 ```
+
+#### Integration Tests for Timeout-Based Detection
+
+For testing stale detection via actual timeouts (not just direct state manipulation):
+
+```typescript
+it('should detect stale sensor via timeout and apply fail-safe', async () => {
+  // Arrange - Setup device with 30-minute stale timeout
+  await setupDeviceWithSensors(30);
+
+  // Open sensor (window opens)
+  const callback = capabilityCallbacks.get('sensor1')!;
+  callback(true);
+  await Promise.resolve();
+
+  // Verify zone is LEAKY
+  expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+  jest.clearAllMocks();
+
+  // Act - Advance time by 31 minutes (past stale threshold)
+  jest.setSystemTime(Date.now() + 31 * 60 * 1000);
+  jest.advanceTimersByTime(60000);  // Trigger stale check interval
+  await Promise.resolve();
+
+  // Assert - Sensor marked stale, zone remains LEAKY (fail-safe)
+  const staleSensorMap = (device as any).staleSensorMap;
+  expect(staleSensorMap.get('sensor1').isStale).toBe(true);
+  expect((device as any).engine.getCurrentState()).toBe('leaky');
+  expect(device.log).toHaveBeenCalledWith(
+    expect.stringContaining('stale sensor(s) were open')
+  );
+  expect(device.log).toHaveBeenCalledWith(
+    expect.stringContaining('treating zone as leaky')
+  );
+});
+```
+
+**Key Techniques:**
+- Use `jest.setSystemTime()` to advance system clock for timeout detection
+- Use `jest.advanceTimersByTime()` to trigger interval-based checks
+- Combine both for integration testing of time-based behavior
+- Clear mocks before time advancement to isolate timeout-triggered logs
 
 ### What to Test
 - State transitions and state machine logic
