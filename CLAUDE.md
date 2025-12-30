@@ -42,6 +42,35 @@ All must pass. No exceptions.
 - **`main`** - Production-ready, protected, all PRs target here
 - **`feature/*`** - Feature branches, created from main, deleted after merge
 
+### Branch Protection Rules
+
+**The `main` branch is protected with the following rules:**
+
+| Rule | Enforced | Effect |
+|------|----------|--------|
+| Require pull request before merging | ✅ Yes | Cannot push directly to main |
+| Require status checks to pass | ✅ Yes | CI must pass (build, lint, test, coverage, validate) |
+| Require branches to be up to date | ✅ Yes | Must merge latest main before PR merge |
+| Require conversation resolution | ✅ Yes | All PR comments must be resolved |
+| Do not allow bypassing | ✅ Yes | Administrators cannot override these rules |
+| Require approvals | ❌ No | Solo developer can merge own PRs |
+
+**What this means:**
+- ❌ **Direct pushes to main are blocked** - All changes must go through PRs
+- ❌ **Cannot bypass CI checks** - All tests, linting, coverage must pass
+- ❌ **Cannot force push or delete main** - Branch is fully protected
+- ✅ **Can merge own PRs** - No external approval needed for solo development
+- ✅ **Branch protection applies to everyone** - Including repository administrators
+
+**If you try to push directly to main:**
+```bash
+git push origin main
+# Error: GH006: Protected branch update failed for refs/heads/main.
+# Required status check "build" is expected.
+```
+
+Always use feature branches and PRs, even for small fixes.
+
 ### Creating a Feature Branch
 
 **From main worktree:**
