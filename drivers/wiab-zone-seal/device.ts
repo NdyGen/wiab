@@ -502,27 +502,51 @@ class WIABZoneSealDevice extends Homey.Device {
         return;
       }
 
+      // Fail-safe: If any STALE sensor's last value was "open", treat zone as leaky
+      const staleSensorsOpen = this.contactSensors.filter((sensor) => {
+        const info = this.staleSensorMap.get(sensor.deviceId);
+        if (!info || !info.isStale) {
+          return false;
+        }
+
+        const lastValue = this.aggregator?.getSensorState(sensor.deviceId);
+        return lastValue === true;
+      });
+
+      if (staleSensorsOpen.length > 0) {
+        const sensorNames = staleSensorsOpen
+          .map((s) => s.deviceName || s.deviceId)
+          .join(', ');
+        this.log(
+          `Fail-safe: ${staleSensorsOpen.length} stale sensor(s) were open (${sensorNames}), treating zone as leaky`
+        );
+
+        const transition = this.engine.handleAnySensorOpened();
+        await this.processStateTransition(transition);
+        return;
+      }
+
       // Check aggregated state (stale sensors are ignored by the check methods)
       const allClosed = this.areNonStaleSensorsClosed();
       const anyOpen = this.isAnyNonStaleSensorOpen();
 
       // If all sensors are stale, both allClosed and anyOpen will be false/true respectively
       // Treat as leaky (fail-safe: unknown state should trigger alerts)
-      if (!anyOpen && allClosed) {
-        const nonStaleCount = this.contactSensors.filter((sensor) => {
-          const info = this.staleSensorMap.get(sensor.deviceId);
-          return info && !info.isStale;
-        }).length;
+      const nonStaleSensorCount = this.contactSensors.filter((sensor) => {
+        const info = this.staleSensorMap.get(sensor.deviceId);
+        return !info || !info.isStale;
+      }).length;
 
-        if (nonStaleCount === 0) {
-          this.log('All sensors are stale, treating zone as leaky (fail-safe)');
-          const transition = this.engine.handleAnySensorOpened();
-          await this.processStateTransition(transition);
-          return;
-        }
+      if (!anyOpen && allClosed && nonStaleSensorCount === 0) {
+        this.log('All sensors are stale, treating zone as leaky (fail-safe)');
+        const transition = this.engine.handleAnySensorOpened();
+        await this.processStateTransition(transition);
+        return;
       }
 
-      this.log(`Sensor update: allClosed=${allClosed}, anyOpen=${anyOpen}`);
+      this.log(
+        `Sensor update: allClosed=${allClosed}, anyOpen=${anyOpen} (evaluating ${nonStaleSensorCount}/${this.contactSensors.length} non-stale sensors)`
+      );
 
       // Capture current state before evaluating transition (for redundancy check)
       const previousState = this.engine.getCurrentState();
@@ -843,7 +867,11 @@ class WIABZoneSealDevice extends Homey.Device {
         info.isStale = true;
         hasChanges = true;
 
-        this.log(`Sensor became stale: ${sensor.deviceName || sensor.deviceId}`);
+        // Add detailed logging with current value
+        const currentValue = this.aggregator?.getSensorState(sensor.deviceId);
+        this.log(
+          `Sensor became stale: ${sensor.deviceName || sensor.deviceId} (last value: ${currentValue}, stale for: ${Math.round(timeSinceUpdate / 60000)}min)`
+        );
 
         // Trigger sensor_became_stale flow card (fire-and-forget)
         void this.triggerSensorBecameStale(sensor.deviceName || sensor.deviceId, sensor.deviceId);
@@ -853,6 +881,8 @@ class WIABZoneSealDevice extends Homey.Device {
     // Check if stale state changed (any sensors stale or all fresh)
     if (hasChanges) {
       this.checkForStaleStateChanged();
+      // Trigger immediate re-evaluation when sensors become stale
+      void this.handleSensorUpdate();
     }
   }
 

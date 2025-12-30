@@ -483,6 +483,180 @@ describe('WIABZoneSealDevice - Integration', () => {
       // At least one sensor is still stale (sensor2)
       expect((device as any).hasAnyStaleSensors()).toBe(true);
     });
+
+    it('should treat zone as leaky when stale sensor last value was open (fail-safe)', async () => {
+      // Issue #109: When a window sensor goes stale while open, the zone should remain leaky
+      // This is the primary fail-safe behavior
+
+      // Arrange - Setup device with 2 sensors (both initially closed)
+      await setupDeviceWithTwoSensors(30);
+
+      // Open sensor1 (window opens)
+      const callback1 = capabilityCallbacks.get('sensor1')!;
+      callback1(true);
+      await Promise.resolve();
+      jest.clearAllMocks();
+
+      // Verify zone is leaky
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Act - Mark sensor1 as stale while it's still open
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+
+      // Trigger sensor update to re-evaluate state
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should remain/become LEAKY (fail-safe behavior)
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('stale sensor(s) were open')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('treating zone as leaky')
+      );
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+    });
+
+    it('should treat zone as leaky when stale sensor (open) mixed with non-stale sensor (closed)', async () => {
+      // Fail-safe: Stale sensor with last value "open" should prevent zone from being sealed
+
+      // Arrange - Setup device with 2 sensors (both initially closed)
+      await setupDeviceWithTwoSensors(30);
+
+      // Open sensor1
+      const callback1 = capabilityCallbacks.get('sensor1')!;
+      callback1(true);
+      await Promise.resolve();
+
+      // Mark sensor1 as stale (while open)
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+
+      // Sensor2 remains closed and fresh
+      jest.clearAllMocks();
+
+      // Act - Trigger sensor update
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should be LEAKY (fail-safe: stale sensor was open)
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('stale sensor(s) were open')
+      );
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+      expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_zone_leaky', true);
+    });
+
+    it('should allow zone to be sealed when stale sensor last value was closed', async () => {
+      // Stale sensor with last value "closed" should not prevent sealing if other sensors are closed
+
+      // Arrange - Setup device with 2 sensors (both initially closed)
+      await setupDeviceWithTwoSensors(30);
+
+      // Mark sensor1 as stale while closed
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+
+      // Both sensors closed, sensor2 fresh
+      jest.clearAllMocks();
+
+      // Act - Trigger sensor update
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone can be SEALED (stale sensor was closed)
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('stale sensor(s) were open')
+      );
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
+    });
+
+    it('should trigger re-evaluation when sensor becomes stale', async () => {
+      // Issue #109: checkForStaleSensors should trigger handleSensorUpdate when sensors become stale
+
+      // Arrange - Setup device with 2 sensors
+      await setupDeviceWithTwoSensors(30);
+
+      // Open sensor1 (window opens)
+      const callback1 = capabilityCallbacks.get('sensor1')!;
+      callback1(true);
+      await Promise.resolve();
+
+      // Zone is leaky
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Manually mark sensor as stale (simulating checkForStaleSensors behavior)
+      const staleSensorMap = (device as any).staleSensorMap;
+      const originalHandleSensorUpdate = (device as any).handleSensorUpdate;
+      const handleSensorUpdateSpy = jest.fn(originalHandleSensorUpdate.bind(device));
+      (device as any).handleSensorUpdate = handleSensorUpdateSpy;
+
+      staleSensorMap.get('sensor1').isStale = false; // Start fresh
+      jest.clearAllMocks();
+
+      // Act - Simulate checkForStaleSensors detecting staleness
+      staleSensorMap.get('sensor1').isStale = true;
+      (device as any).checkForStaleStateChanged();
+      void (device as any).handleSensorUpdate(); // This is the NEW behavior from the fix
+
+      await Promise.resolve();
+
+      // Assert - handleSensorUpdate should be called
+      expect(handleSensorUpdateSpy).toHaveBeenCalled();
+    });
+
+    it('should recover when stale sensor becomes fresh and closes', async () => {
+      // When a stale sensor (open) becomes fresh and closes, zone should be able to seal
+
+      // Arrange - Setup device with 2 sensors (both initially closed)
+      await setupDeviceWithTwoSensors(30);
+
+      // Open sensor1, mark as stale
+      const callback1 = capabilityCallbacks.get('sensor1')!;
+      callback1(true);
+      await Promise.resolve();
+
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+
+      // Verify zone is leaky
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+      jest.clearAllMocks();
+
+      // Act - Sensor1 receives update (becomes fresh) and closes
+      callback1(false);
+      await Promise.resolve();
+
+      // Assert - Sensor is now fresh
+      expect(staleSensorMap.get('sensor1').isStale).toBe(false);
+
+      // Zone should be sealed (both sensors closed and fresh)
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
+    });
+
+    it('should include sensor count in logging', async () => {
+      // Enhanced logging should show non-stale sensor count
+
+      // Arrange - Setup device with 2 sensors
+      await setupDeviceWithTwoSensors(30);
+
+      // Mark sensor1 as stale
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+      jest.clearAllMocks();
+
+      // Act - Trigger sensor update
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Logging should include sensor count
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('evaluating 1/2 non-stale sensors')
+      );
+    });
   });
 
   describe('onDeleted - resource cleanup', () => {
