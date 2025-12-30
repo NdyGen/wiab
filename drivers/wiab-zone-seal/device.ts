@@ -691,8 +691,34 @@ class WIABZoneSealDevice extends Homey.Device {
     this.log(`Scheduling ${delaySeconds}s delay timer for transition to ${targetState}`);
 
     this.delayTimer = setTimeout(async () => {
-      this.log(`Delay timer expired, transitioning to ${targetState}`);
-      await this.updateZoneSealState(targetState);
+      try {
+        // Validate device still initialized
+        if (!this.engine || !this.errorReporter) {
+          this.log(`Delay timer cancelled: device deinitialized`);
+          return;
+        }
+
+        this.log(`Delay timer expired, transitioning to ${targetState}`);
+        await this.updateZoneSealState(targetState);
+      } catch (error) {
+        // CRITICAL: Prevent unhandled rejection
+        if (!this.errorReporter) {
+          this.error(`Delayed transition failed (device likely deleted):`, error);
+          return;
+        }
+
+        this.errorReporter.reportError({
+          errorId: ZoneSealErrorId.DELAYED_TRANSITION_FAILED,
+          severity: ErrorSeverity.HIGH,
+          userMessage: 'Delayed state transition failed. Device may be out of sync.',
+          technicalMessage: `Failed to transition to ${targetState}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          context: {
+            deviceId: this.getData().id,
+            targetState,
+            delaySeconds,
+          },
+        });
+      }
     }, delaySeconds * 1000);
   }
 

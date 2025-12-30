@@ -673,12 +673,38 @@ class RoomStateDevice extends Homey.Device {
       const delayMs = afterMinutes * 60 * 1000;
       this.log(`Scheduling transition to "${targetState}" in ${afterMinutes} minutes`);
 
-      this.stateTimer = setTimeout(() => {
-        this.log(`Timer fired: transitioning to "${targetState}"`);
-        this.executeStateTransition(
-          targetState,
-          `Timer expired after ${afterMinutes} minutes`
-        );
+      this.stateTimer = setTimeout(async () => {
+        try {
+          // Validate device still initialized
+          if (!this.stateEngine || !this.errorReporter) {
+            this.log(`State timer cancelled: device deinitialized`);
+            return;
+          }
+
+          this.log(`Timer fired: transitioning to "${targetState}"`);
+          await this.executeStateTransition(
+            targetState,
+            `Timer expired after ${afterMinutes} minutes`
+          );
+        } catch (error) {
+          // CRITICAL: Prevent unhandled rejection
+          if (!this.errorReporter) {
+            this.error(`Delayed state transition failed (device likely deleted):`, error);
+            return;
+          }
+
+          this.errorReporter.reportError({
+            errorId: RoomStateErrorId.DELAYED_STATE_TRANSITION_FAILED,
+            severity: ErrorSeverity.HIGH,
+            userMessage: 'Delayed state transition failed. Device may be out of sync.',
+            technicalMessage: `Failed to transition to "${targetState}" after ${afterMinutes} minutes: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            context: {
+              deviceId: this.getData().id,
+              targetState,
+              afterMinutes,
+            },
+          });
+        }
       }, delayMs);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));

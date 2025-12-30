@@ -185,6 +185,9 @@ export enum RoomStateErrorId {
 
   /** Failed to return to automatic mode */
   AUTOMATIC_MODE_FAILED = 'ROOM_STATE_021',
+
+  /** Delayed state transition failed after timer fired */
+  DELAYED_STATE_TRANSITION_FAILED = 'ROOM_STATE_022',
 }
 
 /**
@@ -237,6 +240,9 @@ export enum ZoneSealErrorId {
 
   /** Failed to clear device warning */
   WARNING_CLEAR_FAILED = 'ZONE_SEAL_012',
+
+  /** Delayed state transition failed after timer fired */
+  DELAYED_TRANSITION_FAILED = 'ZONE_SEAL_013',
 }
 
 /**

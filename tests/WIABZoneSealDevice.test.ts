@@ -1112,4 +1112,120 @@ describe('WIABZoneSealDevice - Integration', () => {
       expect(device.error).toHaveBeenCalled();
     });
   });
+
+  describe('Delayed transition error handling', () => {
+    it('should handle errors when delayed transition fails', async () => {
+      // Arrange
+      const sensors = [
+        { deviceId: 'sensor1', deviceName: 'Door 1', capability: 'alarm_contact' },
+      ];
+
+      device.getSetting = jest.fn((key: string) => {
+        if (key === 'contactSensors') return JSON.stringify(sensors);
+        if (key === 'openDelaySeconds') return 5;
+        if (key === 'closeDelaySeconds') return 0;
+        if (key === 'staleContactMinutes') return 30;
+        return undefined;
+      });
+
+      mockHomeyApi.devices.getDevices.mockResolvedValue({
+        sensor1: {
+          id: 'sensor1',
+          name: 'Door 1',
+          capabilitiesObj: { alarm_contact: { value: false } },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor1:alarm_contact', callback);
+            return { value: false, on: jest.fn() };
+          }),
+        },
+      });
+
+      await device.onInit();
+
+      // Mock errorReporter.reportError after init
+      const mockReportError = jest.fn();
+      (device as any).errorReporter = {
+        reportError: mockReportError,
+      };
+
+      // Mock updateZoneSealState to throw error
+      const originalUpdate = (device as any).updateZoneSealState;
+      (device as any).updateZoneSealState = jest.fn().mockRejectedValue(
+        new Error('State update failed')
+      );
+
+      // Simulate sensor opening to trigger delay timer
+      const callback = capabilityCallbacks.get('sensor1:alarm_contact');
+      if (callback) {
+        callback(true);
+      }
+
+      // Act - advance timers to fire delayed transition
+      jest.advanceTimersByTime(5000);
+      await Promise.resolve(); // Let promise rejection propagate
+
+      // Assert - error should be reported, not thrown
+      expect(mockReportError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorId: 'ZONE_SEAL_013',
+          severity: 'high',
+          userMessage: 'Delayed state transition failed. Device may be out of sync.',
+        })
+      );
+
+      // Restore
+      (device as any).updateZoneSealState = originalUpdate;
+    });
+
+    it('should handle device deletion during delay timer', async () => {
+      // Arrange
+      const sensors = [
+        { deviceId: 'sensor1', deviceName: 'Door 1', capability: 'alarm_contact' },
+      ];
+
+      device.getSetting = jest.fn((key: string) => {
+        if (key === 'contactSensors') return JSON.stringify(sensors);
+        if (key === 'openDelaySeconds') return 5;
+        if (key === 'closeDelaySeconds') return 0;
+        if (key === 'staleContactMinutes') return 30;
+        return undefined;
+      });
+
+      mockHomeyApi.devices.getDevices.mockResolvedValue({
+        sensor1: {
+          id: 'sensor1',
+          name: 'Door 1',
+          capabilitiesObj: { alarm_contact: { value: false } },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor1:alarm_contact', callback);
+            return { value: false, on: jest.fn() };
+          }),
+        },
+      });
+
+      await device.onInit();
+
+      // Clear log calls from init
+      (device.log as jest.Mock).mockClear();
+
+      // Simulate sensor opening to trigger delay timer
+      const callback = capabilityCallbacks.get('sensor1:alarm_contact');
+      if (callback) {
+        callback(true);
+      }
+
+      // Act - delete device (deinitialize)
+      (device as any).engine = null;
+      (device as any).errorReporter = null;
+
+      // Advance timers to fire delayed transition
+      jest.advanceTimersByTime(5000);
+      await Promise.resolve();
+
+      // Assert - should log cancellation, not crash
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Delay timer cancelled: device deinitialized')
+      );
+    });
+  });
 });

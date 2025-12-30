@@ -3,6 +3,8 @@
  * Focused on achieving 70% coverage without memory issues
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import RoomStateDevice from '../drivers/wiab-room-state/device';
 import { createMockHomey, createMockHomeyApi, createMockDevice } from './setup';
 
@@ -354,6 +356,97 @@ describe('RoomStateDevice', () => {
       // Verify both generic and state-specific triggers were called
       expect(genericTriggerAfter?.trigger).toHaveBeenCalled();
       expect(specificTriggerAfter?.trigger).toHaveBeenCalled();
+    });
+  });
+
+  describe('Delayed state transition error handling', () => {
+    it('should handle errors when delayed state transition fails', async () => {
+      // Arrange
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      // Mock errorReporter.reportError after init
+      const mockReportError = jest.fn();
+      (device as any).errorReporter = {
+        reportError: mockReportError,
+      };
+
+      // Mock executeStateTransition to throw error
+      const originalExecute = (device as any).executeStateTransition;
+      (device as any).executeStateTransition = jest.fn().mockRejectedValue(
+        new Error('State transition failed')
+      );
+
+      // Use fake timers only for this test
+      jest.useFakeTimers();
+
+      // Act - schedule a timed transition
+      (device as any).scheduleStateTransition('idle', 5);
+
+      // Advance timers to fire delayed transition
+      jest.advanceTimersByTime(5 * 60 * 1000);
+      await Promise.resolve(); // Let promise rejection propagate
+      await Promise.resolve(); // Extra tick for async handling
+
+      // Restore real timers
+      jest.useRealTimers();
+
+      // Assert - error should be reported, not thrown
+      expect(mockReportError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorId: 'ROOM_STATE_022',
+          severity: 'high',
+          userMessage: 'Delayed state transition failed. Device may be out of sync.',
+        })
+      );
+
+      // Restore
+      (device as any).executeStateTransition = originalExecute;
+    });
+
+    it('should handle device deletion during state timer', async () => {
+      // Arrange
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+
+      // Clear log calls from init
+      (device.log as jest.Mock).mockClear();
+
+      // Use fake timers only for this test
+      jest.useFakeTimers();
+
+      // Act - schedule a timed transition
+      (device as any).scheduleStateTransition('idle', 5);
+
+      // Delete device (deinitialize)
+      (device as any).stateEngine = null;
+      (device as any).errorReporter = null;
+
+      // Advance timers to fire delayed transition
+      jest.advanceTimersByTime(5 * 60 * 1000);
+      await Promise.resolve();
+
+      // Restore real timers
+      jest.useRealTimers();
+
+      // Assert - should log cancellation, not crash
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('State timer cancelled: device deinitialized')
+      );
     });
   });
 });
