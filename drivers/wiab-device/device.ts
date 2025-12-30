@@ -102,6 +102,25 @@ class WIABDevice extends Homey.Device {
     // Mark device as initializing to prevent listener loops
     this.isInitializing = true;
 
+    // Orchestrate initialization steps
+    await this.migrateCapabilities();
+    this.initializeState();
+    await this.setupMonitoring();
+    this.registerFlowCardHandlers();
+
+    // Clear initialization flag to allow listener to process user interactions
+    this.isInitializing = false;
+
+    this.log('WIAB device initialization complete');
+  }
+
+  /**
+   * Migrates device capabilities for existing devices.
+   *
+   * Ensures all required capabilities exist and are properly initialized.
+   * This method handles backward compatibility for devices created with older versions.
+   */
+  private async migrateCapabilities(): Promise<void> {
     // Ensure occupancy_state capability exists (for migration of existing devices)
     if (!this.hasCapability('occupancy_state')) {
       this.log('Adding occupancy_state capability to existing device');
@@ -117,11 +136,29 @@ class WIABDevice extends Homey.Device {
         this.error('Failed to initialize alarm_paused capability during migration:', err);
       });
     }
+  }
 
+  /**
+   * Initializes device state variables to default values.
+   *
+   * Per spec 5.1: Initialize to UNOCCUPIED state.
+   */
+  private initializeState(): void {
     // Initialize to UNOCCUPIED (spec 5.1)
     this.occupancyState = OccupancyState.UNOCCUPIED;
     this.lastStableOccupancy = StableOccupancyState.UNOCCUPIED;
+  }
 
+  /**
+   * Sets up monitoring and initializes output capabilities.
+   *
+   * This method:
+   * - Sets up sensor monitoring with current settings
+   * - Sets initial boolean output from stable state
+   * - Registers pause capability listener
+   * - Initializes alarm_paused capability to active state
+   */
+  private async setupMonitoring(): Promise<void> {
     // Setup sensor monitoring with current settings
     await this.setupSensorMonitoring();
 
@@ -182,17 +219,20 @@ class WIABDevice extends Homey.Device {
     await this.setCapabilityValue('alarm_paused', true).catch((err) => {
       this.error('Failed to initialize alarm_paused capability:', err);
     });
+  }
 
+  /**
+   * Registers all flow card handlers for actions and conditions.
+   *
+   * Called during device initialization to register the handlers that will
+   * be invoked when flow cards are used in flows.
+   */
+  private registerFlowCardHandlers(): void {
     // Register action handlers
     this.registerActionHandlers();
 
     // Register condition handlers
     this.registerConditionHandlers();
-
-    // Clear initialization flag to allow listener to process user interactions
-    this.isInitializing = false;
-
-    this.log('WIAB device initialization complete');
   }
 
   /**
@@ -592,7 +632,21 @@ class WIABDevice extends Homey.Device {
     const timeoutMs = timeoutSeconds * 1000;
 
     this.enterTimerDeadline = Date.now() + timeoutMs;
-    this.enterTimer = setTimeout(() => this.handleEnterTimerExpiry(), timeoutMs);
+    this.enterTimer = setTimeout(async () => {
+      try {
+        // Validate device still initialized
+        if (!this.sensorMonitor) {
+          this.log('T_ENTER timer cancelled: device deinitialized');
+          return;
+        }
+
+        this.log(`T_ENTER timer expired after ${timeoutSeconds}s`);
+        await this.handleEnterTimerExpiry();
+      } catch (error) {
+        // CRITICAL: Prevent unhandled rejection
+        this.error(`[${DeviceErrorId.ENTER_TIMER_EXPIRY_FAILED}] T_ENTER timer expiry failed (device may be deleted):`, error);
+      }
+    }, timeoutMs);
 
     this.log(`T_ENTER timer started: ${timeoutSeconds}s`);
   }
@@ -687,7 +741,21 @@ class WIABDevice extends Homey.Device {
     this.clearTimerDeadline = now + timeoutMs;
     this.clearTimerAnchor = now;
 
-    this.clearTimer = setTimeout(() => this.handleClearTimerExpiry(), timeoutMs);
+    this.clearTimer = setTimeout(async () => {
+      try {
+        // Validate device still initialized
+        if (!this.sensorMonitor) {
+          this.log('T_CLEAR timer cancelled: device deinitialized');
+          return;
+        }
+
+        this.log(`T_CLEAR timer expired after ${timeoutSeconds}s`);
+        await this.handleClearTimerExpiry();
+      } catch (error) {
+        // CRITICAL: Prevent unhandled rejection
+        this.error(`[${DeviceErrorId.CLEAR_TIMER_EXPIRY_FAILED}] T_CLEAR timer expiry failed (device may be deleted):`, error);
+      }
+    }, timeoutMs);
 
     this.log(`T_CLEAR timer started: ${timeoutSeconds}s`);
   }

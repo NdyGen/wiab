@@ -8,11 +8,7 @@ import {
 import { ContactSensorAggregator } from '../../lib/ContactSensorAggregator';
 import { ZoneSealEngine, StateTransition } from '../../lib/ZoneSealEngine';
 import { validateSensorSettings, validateNumber } from '../../lib/SensorSettingsValidator';
-import { WarningManager } from '../../lib/WarningManager';
-import { ErrorReporter } from '../../lib/ErrorReporter';
-import { FlowCardErrorHandler } from '../../lib/FlowCardErrorHandler';
-import { RetryManager } from '../../lib/RetryManager';
-import { ErrorClassifier } from '../../lib/ErrorClassifier';
+import { BaseWIABDevice } from '../../lib/BaseWIABDevice';
 import { ZoneSealErrorId } from '../../constants/errorIds';
 import { ErrorSeverity } from '../../lib/ErrorTypes';
 
@@ -64,9 +60,9 @@ interface StaleSensorInfo {
  * - Conditions: is_sealed, has_stale_sensors
  *
  * @class WIABZoneSealDevice
- * @extends {Homey.Device}
+ * @extends {BaseWIABDevice}
  */
-class WIABZoneSealDevice extends Homey.Device {
+class WIABZoneSealDevice extends BaseWIABDevice {
   private contactSensors: SensorConfig[] = [];
   private aggregator?: ContactSensorAggregator;
   private engine?: ZoneSealEngine;
@@ -76,12 +72,12 @@ class WIABZoneSealDevice extends Homey.Device {
   private staleCheckInterval?: NodeJS.Timeout;
   private staleTimeoutMs: number = 30 * 60 * 1000; // Default 30 minutes
 
-  // Error handling utilities
-  private warningManager?: WarningManager;
-  private errorReporter?: ErrorReporter;
-  private flowCardHandler?: FlowCardErrorHandler;
-  private retryManager?: RetryManager;
-  private errorClassifier?: ErrorClassifier;
+  // Error handling utilities inherited from BaseWIABDevice:
+  // - warningManager
+  // - errorReporter
+  // - flowCardHandler
+  // - retryManager
+  // - errorClassifier
 
   /**
    * Initializes the WIAB Zone Seal device.
@@ -105,51 +101,91 @@ class WIABZoneSealDevice extends Homey.Device {
   async onInit(): Promise<void> {
     this.log('WIAB Zone Seal device initializing');
 
-    // Initialize error handling utilities first
-    this.warningManager = new WarningManager(this, this);
-    this.errorReporter = new ErrorReporter(this);
-    this.flowCardHandler = new FlowCardErrorHandler(this.homey, this);
-    this.retryManager = new RetryManager(this);
-    this.errorClassifier = new ErrorClassifier(this);
+    // Orchestrate initialization steps
+    this.initializeErrorHandling();
 
     try {
-      // Setup sensor monitoring with current settings
-      await this.setupSensorMonitoring();
-
-      // Register flow card handlers
-      this.registerFlowCardHandlers();
-
-      // Clear any previous warning on successful initialization
-      try {
-        await this.warningManager.clearWarning();
-      } catch (warningError) {
-        this.error('Failed to clear warning after successful initialization:', warningError);
-      }
+      await this.loadSensorConfiguration();
+      await this.initializeState();
+      await this.setupMonitoring();
 
       this.log('WIAB Zone Seal device initialization complete');
     } catch (error) {
-      // Issue #1 FIX: Report error with stack trace and set device warning
-      const err = error instanceof Error ? error : new Error(String(error));
-
-      this.errorReporter.reportError({
-        errorId: ZoneSealErrorId.DEVICE_INIT_FAILED,
-        severity: ErrorSeverity.CRITICAL,
-        userMessage: 'Device initialization failed. Check sensor configuration.',
-        technicalMessage: `Failed to initialize Zone Seal device: ${err.message}\n${err.stack || 'No stack trace available'}`,
-        context: { deviceId: this.getData().id },
-      });
-
-      try {
-        await this.warningManager.setWarning(
-          ZoneSealErrorId.DEVICE_INIT_FAILED,
-          'Device initialization failed. Check sensor configuration in settings.'
-        );
-      } catch (warningError) {
-        this.error('Failed to set warning on device:', warningError);
-      }
-
-      // Don't throw - allow device to exist in degraded mode
+      await this.handleInitializationError(error);
     }
+  }
+
+  /**
+   * Loads and validates sensor configuration.
+   *
+   * This method sets up sensor monitoring with current settings, which includes:
+   * - Retrieving sensor configuration from settings
+   * - Validating sensor configuration
+   * - Initializing ContactSensorAggregator and ZoneSealEngine
+   */
+  private async loadSensorConfiguration(): Promise<void> {
+    await this.setupSensorMonitoring();
+  }
+
+  /**
+   * Initializes device state and registers flow card handlers.
+   *
+   * Called after sensor configuration is loaded to set up the device's
+   * operational state.
+   */
+  private async initializeState(): Promise<void> {
+    // Register flow card handlers
+    this.registerFlowCardHandlers();
+
+    // Clear any previous warning on successful initialization
+    try {
+      await this.warningManager!.clearWarning();
+    } catch (warningError) {
+      this.error('Failed to clear warning after successful initialization:', warningError);
+    }
+  }
+
+  /**
+   * Sets up monitoring (stale sensor tracking and event listeners).
+   *
+   * Note: Most monitoring setup is handled by setupSensorMonitoring().
+   * This method is a placeholder for any additional monitoring setup
+   * that may be added in the future.
+   */
+  private async setupMonitoring(): Promise<void> {
+    // Monitoring is already set up by setupSensorMonitoring()
+    // This method exists for consistency with the WIAB device pattern
+    // and for future extensibility
+  }
+
+  /**
+   * Handles initialization errors by reporting and setting device warning.
+   *
+   * Device remains in degraded mode instead of failing completely.
+   *
+   * @param error - The error that occurred during initialization
+   */
+  private async handleInitializationError(error: unknown): Promise<void> {
+    const err = error instanceof Error ? error : new Error(String(error));
+
+    this.errorReporter!.reportError({
+      errorId: ZoneSealErrorId.DEVICE_INIT_FAILED,
+      severity: ErrorSeverity.CRITICAL,
+      userMessage: 'Device initialization failed. Check sensor configuration.',
+      technicalMessage: `Failed to initialize Zone Seal device: ${err.message}\n${err.stack || 'No stack trace available'}`,
+      context: { deviceId: this.getData().id },
+    });
+
+    try {
+      await this.warningManager!.setWarning(
+        ZoneSealErrorId.DEVICE_INIT_FAILED,
+        'Device initialization failed. Check sensor configuration in settings.'
+      );
+    } catch (warningError) {
+      this.error('Failed to set warning on device:', warningError);
+    }
+
+    // Don't throw - allow device to exist in degraded mode
   }
 
   /**
@@ -461,8 +497,8 @@ class WIABZoneSealDevice extends Homey.Device {
       // Update aggregator
       this.aggregator?.updateSensorState(sensor.deviceId, isOpen);
 
-      // Handle state transitions
-      this.handleSensorUpdate();
+      // Handle state transitions (fire-and-forget)
+      void this.handleSensorUpdate();
     };
 
     // Subscribe to capability changes via WebSocket using makeCapabilityInstance
@@ -489,9 +525,9 @@ class WIABZoneSealDevice extends Homey.Device {
   /**
    * Handles sensor update by evaluating state transitions.
    *
-   * This method is called whenever a sensor's state changes. It determines
-   * whether the zone is sealed or leaky, and handles state transitions
-   * according to the configured delay logic.
+   * This method orchestrates the state evaluation process by:
+   * 1. Checking fail-safe conditions (stale sensors)
+   * 2. Evaluating normal state transitions if no fail-safe triggered
    *
    * @private
    * @returns {Promise<void>}
@@ -502,72 +538,14 @@ class WIABZoneSealDevice extends Homey.Device {
         return;
       }
 
-      // Fail-safe: If any STALE sensor's last value was "open", treat zone as leaky
-      const staleSensorsOpen = this.contactSensors.filter((sensor) => {
-        const info = this.staleSensorMap.get(sensor.deviceId);
-        if (!info || !info.isStale) {
-          return false;
-        }
-
-        const lastValue = this.aggregator?.getSensorState(sensor.deviceId);
-        return lastValue === true;
-      });
-
-      if (staleSensorsOpen.length > 0) {
-        const sensorNames = staleSensorsOpen
-          .map((s) => s.deviceName || s.deviceId)
-          .join(', ');
-        this.log(
-          `Fail-safe: ${staleSensorsOpen.length} stale sensor(s) were open (${sensorNames}), treating zone as leaky`
-        );
-
-        const transition = this.engine.handleAnySensorOpened();
-        await this.processStateTransition(transition);
-        return;
+      // PRIORITY 1: Check fail-safe conditions (stale sensors)
+      const failSafeTriggered = await this.checkFailSafeConditions();
+      if (failSafeTriggered) {
+        return; // Fail-safe triggered, exit early
       }
 
-      // Check aggregated state (stale sensors are ignored by the check methods)
-      const allClosed = this.areNonStaleSensorsClosed();
-      const anyOpen = this.isAnyNonStaleSensorOpen();
-
-      // If all sensors are stale, both allClosed and anyOpen will be false/true respectively
-      // Treat as leaky (fail-safe: unknown state should trigger alerts)
-      const nonStaleSensorCount = this.contactSensors.filter((sensor) => {
-        const info = this.staleSensorMap.get(sensor.deviceId);
-        return !info || !info.isStale;
-      }).length;
-
-      if (!anyOpen && allClosed && nonStaleSensorCount === 0) {
-        this.log('All sensors are stale, treating zone as leaky (fail-safe)');
-        const transition = this.engine.handleAnySensorOpened();
-        await this.processStateTransition(transition);
-        return;
-      }
-
-      this.log(
-        `Sensor update: allClosed=${allClosed}, anyOpen=${anyOpen} (evaluating ${nonStaleSensorCount}/${this.contactSensors.length} non-stale sensors)`
-      );
-
-      // Capture current state before evaluating transition (for redundancy check)
-      const previousState = this.engine.getCurrentState();
-
-      // Evaluate state transition
-      let transition: StateTransition;
-
-      if (allClosed) {
-        // All non-stale sensors closed
-        transition = this.engine.handleAllSensorsClosed();
-      } else if (anyOpen) {
-        // At least one non-stale sensor open
-        transition = this.engine.handleAnySensorOpened();
-      } else {
-        // Should not happen (either all closed or any open)
-        this.log('Warning: Unexpected sensor state (neither all closed nor any open)');
-        return;
-      }
-
-      // Process the transition with previous state for redundancy check
-      await this.processStateTransition(transition, previousState);
+      // PRIORITY 2: Evaluate normal state transition
+      await this.evaluateNormalStateTransition();
     } catch (error) {
       this.errorReporter!.reportError({
         errorId: ZoneSealErrorId.SENSOR_UPDATE_HANDLER_FAILED,
@@ -582,6 +560,110 @@ class WIABZoneSealDevice extends Homey.Device {
 
       // Don't throw - sensor updates are frequent, continue monitoring
     }
+  }
+
+  /**
+   * Checks fail-safe conditions for stale sensors.
+   *
+   * Fail-safe priority order:
+   * 1. If any stale sensor's last value was "open" → treat zone as leaky
+   * 2. If all sensors are stale → treat zone as leaky
+   *
+   * @private
+   * @returns {Promise<boolean>} True if fail-safe was triggered
+   */
+  private async checkFailSafeConditions(): Promise<boolean> {
+    if (!this.aggregator || !this.engine) {
+      return false;
+    }
+
+    // PRIORITY 1: Check if ANY stale sensor's last value was "open"
+    const staleSensorsOpen = this.contactSensors.filter((sensor) => {
+      const info = this.staleSensorMap.get(sensor.deviceId);
+      if (!info || !info.isStale) {
+        return false;
+      }
+
+      const lastValue = this.aggregator?.getSensorState(sensor.deviceId);
+      return lastValue === true;
+    });
+
+    if (staleSensorsOpen.length > 0) {
+      const sensorNames = staleSensorsOpen
+        .map((s) => s.deviceName || s.deviceId)
+        .join(', ');
+      this.log(
+        `Fail-safe: ${staleSensorsOpen.length} stale sensor(s) were open (${sensorNames}), treating zone as leaky`
+      );
+
+      const transition = this.engine.handleAnySensorOpened();
+      await this.processStateTransition(transition);
+      return true;
+    }
+
+    // PRIORITY 2: Check if all sensors are stale
+    const nonStaleSensorCount = this.contactSensors.filter((sensor) => {
+      const info = this.staleSensorMap.get(sensor.deviceId);
+      return !info || !info.isStale;
+    }).length;
+
+    if (nonStaleSensorCount === 0) {
+      this.log('All sensors are stale, treating zone as leaky (fail-safe)');
+      const transition = this.engine.handleAnySensorOpened();
+      await this.processStateTransition(transition);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Evaluates normal state transition based on non-stale sensor states.
+   *
+   * Determines whether zone should be sealed or leaky based on current
+   * sensor values, then processes the appropriate state transition.
+   *
+   * @private
+   * @returns {Promise<void>}
+   */
+  private async evaluateNormalStateTransition(): Promise<void> {
+    if (!this.aggregator || !this.engine) {
+      return;
+    }
+
+    // Check aggregated state (stale sensors are ignored)
+    const allClosed = this.areNonStaleSensorsClosed();
+    const anyOpen = this.isAnyNonStaleSensorOpen();
+
+    const nonStaleSensorCount = this.contactSensors.filter((sensor) => {
+      const info = this.staleSensorMap.get(sensor.deviceId);
+      return !info || !info.isStale;
+    }).length;
+
+    this.log(
+      `Sensor update: allClosed=${allClosed}, anyOpen=${anyOpen} (evaluating ${nonStaleSensorCount}/${this.contactSensors.length} non-stale sensors)`
+    );
+
+    // Capture current state before evaluating transition (for redundancy check)
+    const previousState = this.engine.getCurrentState();
+
+    // Evaluate state transition
+    let transition: StateTransition;
+
+    if (allClosed) {
+      // All non-stale sensors closed
+      transition = this.engine.handleAllSensorsClosed();
+    } else if (anyOpen) {
+      // At least one non-stale sensor open
+      transition = this.engine.handleAnySensorOpened();
+    } else {
+      // Should not happen (either all closed or any open)
+      this.log('Warning: Unexpected sensor state (neither all closed nor any open)');
+      return;
+    }
+
+    // Process the transition with previous state for redundancy check
+    await this.processStateTransition(transition, previousState);
   }
 
   /**
