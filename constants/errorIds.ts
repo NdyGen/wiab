@@ -243,6 +243,9 @@ export enum ZoneSealErrorId {
 
   /** Failed to clear device warning */
   WARNING_CLEAR_FAILED = 'ZONE_SEAL_012',
+
+  /** Delayed state transition failed */
+  DELAYED_TRANSITION_FAILED = 'ZONE_SEAL_013',
 }
 
 /**

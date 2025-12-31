@@ -318,6 +318,67 @@ describe('WIABZoneSealDevice - Integration', () => {
       );
       expect(leakyCalls.length).toBeLessThanOrEqual(1);
     });
+
+    it('should report error when delayed transition fails', async () => {
+      // Arrange - sensor opens to trigger delay timer
+      const callback = capabilityCallbacks.get('sensor1')!;
+      callback(true);
+      await Promise.resolve();
+
+      // Mock errorReporter to capture error reports
+      const mockReportError = jest.fn();
+      (device as any).errorReporter = {
+        reportError: mockReportError,
+      };
+
+      // Mock updateZoneSealState to throw error
+      const originalUpdateState = (device as any).updateZoneSealState;
+      (device as any).updateZoneSealState = jest.fn().mockRejectedValue(
+        new Error('State update failed')
+      );
+
+      jest.clearAllMocks();
+
+      // Act - Fast-forward timer to trigger delayed transition
+      jest.advanceTimersByTime(10000);
+      await Promise.resolve();
+
+      // Assert - Error should be reported via ErrorReporter
+      expect(mockReportError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          errorId: 'ZONE_SEAL_013', // DELAYED_TRANSITION_FAILED
+          severity: 'high',
+          userMessage: 'Delayed state transition failed. Device may be out of sync.',
+          technicalMessage: expect.stringContaining('State update failed'),
+        })
+      );
+
+      // Cleanup
+      (device as any).updateZoneSealState = originalUpdateState;
+    });
+
+    it('should handle device deletion during delayed transition gracefully', async () => {
+      // Arrange - sensor opens to trigger delay timer
+      const callback = capabilityCallbacks.get('sensor1')!;
+      callback(true);
+      await Promise.resolve();
+
+      // Simulate device deletion by clearing errorReporter and engine
+      (device as any).errorReporter = null;
+      (device as any).engine = null;
+
+      jest.clearAllMocks();
+
+      // Act - Fast-forward timer to trigger delayed transition
+      jest.advanceTimersByTime(10000);
+      await Promise.resolve();
+
+      // Assert - Should log cancellation and not throw
+      expect(device.log).toHaveBeenCalledWith('Delay timer cancelled: device deinitialized');
+
+      // Should not attempt state update
+      expect(device.setCapabilityValue).not.toHaveBeenCalled();
+    });
   });
 
   describe('stale sensor detection', () => {
