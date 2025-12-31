@@ -55,5 +55,8 @@
   },
   "1.2.7": {
     "en": "Fixed critical Zone Seal fail-safe bug where stale sensors could incorrectly mark zones as sealed. Improved error handling to prevent crashes. Internal code quality improvements."
+  },
+  "1.2.8": {
+    "en": "minor zone seal edge case fix."
   }
 }
