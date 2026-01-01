@@ -54,6 +54,9 @@ class CircuitBreakerDevice extends BaseWIABDevice {
    * - Cascade engine for state propagation
    * - Capability listener for onoff state changes
    * - Initial state from capability value
+   *
+   * Performance Optimizations:
+   * - Overall 30-second timeout prevents indefinite hanging
    */
   async onInit(): Promise<void> {
     this.log('Circuit breaker device initializing');
@@ -61,6 +64,40 @@ class CircuitBreakerDevice extends BaseWIABDevice {
     // Initialize error handling utilities from base class
     this.initializeErrorHandling();
 
+    const INIT_TIMEOUT_MS = 30000; // 30 seconds
+
+    try {
+      // Wrap initialization in timeout to prevent indefinite hanging
+      await Promise.race([
+        this.performInitialization(),
+        new Promise<void>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Initialization timeout after 30 seconds')),
+            INIT_TIMEOUT_MS
+          )
+        ),
+      ]);
+
+      const currentState = this.getCapabilityValue('onoff') ?? true;
+      const parentId = this.getSetting('parentId');
+      this.log(
+        `Circuit breaker initialized: state=${currentState ? 'ON' : 'OFF'}, parent=${parentId || 'none'}`
+      );
+    } catch (error) {
+      this.error(`[${CircuitBreakerErrorId.DEVICE_INIT_FAILED}] Device initialization failed:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Performs the actual initialization steps.
+   *
+   * Separated from onInit() to allow timeout wrapper.
+   *
+   * @private
+   * @returns {Promise<void>}
+   */
+  private async performInitialization(): Promise<void> {
     try {
       // Get HomeyAPI instance from app
       const app = this.homey.app as WIABApp;
@@ -134,16 +171,8 @@ class CircuitBreakerDevice extends BaseWIABDevice {
       this.registerCapabilityListener('onoff', async (value: boolean) => {
         await this.onCapabilityOnoff(value);
       });
-
-      // Log initialization success
-      const currentState = this.getCapabilityValue('onoff') ?? true;
-      const parentId = this.getSetting('parentId');
-      this.log(
-        `Circuit breaker initialized: state=${currentState ? 'ON' : 'OFF'}, parent=${parentId || 'none'}`
-      );
     } catch (error) {
-      this.error(`[${CircuitBreakerErrorId.DEVICE_INIT_FAILED}] Device initialization failed:`, error);
-      throw error;
+      throw error; // Re-throw to be caught by onInit
     }
   }
 

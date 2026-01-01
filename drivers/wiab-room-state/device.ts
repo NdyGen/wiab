@@ -56,6 +56,9 @@ class RoomStateDevice extends BaseWIABDevice {
    *    - Monitors WIAB device occupancy changes
    *    - Initializes capabilities with initial state
    * 4. Clear any initialization warnings on success
+   *
+   * Performance Optimizations:
+   * - Overall 30-second timeout prevents indefinite hanging
    */
   async onInit(): Promise<void> {
     this.log('Room State device initializing');
@@ -63,12 +66,19 @@ class RoomStateDevice extends BaseWIABDevice {
     // Initialize error handling utilities from base class
     this.initializeErrorHandling();
 
-    try {
-      // Register capability listeners for manual state changes
-      this.registerCapabilityListeners();
+    const INIT_TIMEOUT_MS = 30000; // 30 seconds
 
-      // Setup WIAB device monitoring and state engine
-      await this.setupRoomStateManagement();
+    try {
+      // Wrap initialization in timeout to prevent indefinite hanging
+      await Promise.race([
+        this.performInitialization(),
+        new Promise<void>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Initialization timeout after 30 seconds')),
+            INIT_TIMEOUT_MS
+          )
+        ),
+      ]);
 
       this.log('Room State device initialized successfully');
     } catch (error) {
@@ -113,6 +123,22 @@ class RoomStateDevice extends BaseWIABDevice {
       });
       // Don't throw - warning clear failure shouldn't fail initialization
     }
+  }
+
+  /**
+   * Performs the actual initialization steps.
+   *
+   * Separated from onInit() to allow timeout wrapper.
+   *
+   * @private
+   * @returns {Promise<void>}
+   */
+  private async performInitialization(): Promise<void> {
+    // Register capability listeners for manual state changes
+    this.registerCapabilityListeners();
+
+    // Setup WIAB device monitoring and state engine
+    await this.setupRoomStateManagement();
   }
 
   /**

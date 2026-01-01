@@ -1516,4 +1516,74 @@ describe('WIABZoneSealDevice - Integration', () => {
       expect(device.error).toHaveBeenCalled();
     });
   });
+
+  describe('Performance Optimizations', () => {
+    it('should timeout initialization after 30 seconds', async () => {
+      // Arrange - Mock HomeyAPI to never become available
+      const sensors = [
+        { deviceId: 'sensor1', deviceName: 'Door 1', capability: 'alarm_contact' },
+      ];
+
+      device.getSetting = jest.fn((key: string) => {
+        if (key === 'contactSensors') return JSON.stringify(sensors);
+        if (key === 'openDelaySeconds') return 0;
+        if (key === 'closeDelaySeconds') return 0;
+        if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
+        return undefined;
+      });
+
+      // Make HomeyAPI never available
+      (device as any).homey.app.homeyApi = undefined;
+
+      // Act - Start initialization (non-blocking)
+      const initPromise = device.onInit();
+
+      // Advance time to trigger timeout
+      jest.advanceTimersByTime(30000);
+      await Promise.resolve(); // Allow promise to settle
+
+      await initPromise; // Wait for initialization to complete
+
+      // Assert - should have timed out and set warning
+      expect(device.setWarning).toHaveBeenCalled();
+    });
+
+    it('should complete initialization within timeout when HomeyAPI available', async () => {
+      // Arrange
+      const sensors = [
+        { deviceId: 'sensor1', deviceName: 'Door 1', capability: 'alarm_contact' },
+      ];
+
+      device.getSetting = jest.fn((key: string) => {
+        if (key === 'contactSensors') return JSON.stringify(sensors);
+        if (key === 'openDelaySeconds') return 0;
+        if (key === 'closeDelaySeconds') return 0;
+        if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
+        return undefined;
+      });
+
+      mockHomeyApi.devices.getDevice = jest.fn().mockResolvedValue({
+        id: 'sensor1',
+        name: 'Door 1',
+        capabilitiesObj: {
+          alarm_contact: { value: false },
+        },
+        makeCapabilityInstance: jest.fn((capability: string, callback: (value: boolean) => void) => {
+          capabilityCallbacks.set('sensor1', callback);
+          return {};
+        }),
+      });
+
+      // Act
+      await device.onInit();
+
+      // Assert - should complete without timeout
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('initialization complete')
+      );
+      expect(device.setWarning).not.toHaveBeenCalled();
+    });
+  });
 });
