@@ -4,6 +4,8 @@ import {
   HomeyAPI,
   HomeyAPIDevice,
   ZoneSealState,
+  StateTransitionLogEntry,
+  StateTransitionTrigger,
 } from '../../lib/types';
 import { ContactSensorAggregator } from '../../lib/ContactSensorAggregator';
 import { ZoneSealEngine, StateTransition } from '../../lib/ZoneSealEngine';
@@ -32,6 +34,12 @@ interface StaleSensorInfo {
   lastUpdated: number;
   isStale: boolean;
 }
+
+/**
+ * Maximum number of state transition history entries to keep.
+ * Limits memory usage and keeps history focused on recent transitions.
+ */
+const MAX_HISTORY_ENTRIES = 100;
 
 /**
  * WIAB Zone Seal virtual device.
@@ -71,6 +79,7 @@ class WIABZoneSealDevice extends BaseWIABDevice {
   private staleSensorMap: Map<string, StaleSensorInfo> = new Map();
   private staleCheckInterval?: NodeJS.Timeout;
   private staleTimeoutMs: number = 30 * 60 * 1000; // Default 30 minutes
+  private transitionHistory: StateTransitionLogEntry[] = [];
 
   // Error handling utilities inherited from BaseWIABDevice:
   // - warningManager
@@ -134,6 +143,9 @@ class WIABZoneSealDevice extends BaseWIABDevice {
    * operational state.
    */
   private async initializeState(): Promise<void> {
+    // Load state transition history from device store
+    await this.loadTransitionHistory();
+
     // Register flow card handlers
     this.registerFlowCardHandlers();
 
@@ -436,6 +448,13 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       // Set initial capability values
       await this.setCapabilityValue('alarm_zone_leaky', !initiallySealed);
 
+      // Record initial state transition
+      await this.recordStateTransition(
+        ZoneSealState.SEALED,
+        initialState,
+        'initialization'
+      );
+
       // Register WebSocket listeners for all contact sensors
       for (const sensor of this.contactSensors) {
         const device = devices[sensor.deviceId];
@@ -565,7 +584,9 @@ class WIABZoneSealDevice extends BaseWIABDevice {
   /**
    * Checks fail-safe conditions for stale sensors.
    *
-   * Fail-safe priority order:
+   * If ignoreStaleSensors setting is enabled, skips fail-safe logic entirely.
+   *
+   * Fail-safe priority order (when enabled):
    * 1. If any stale sensor's last value was "open" → treat zone as leaky
    * 2. If all sensors are stale → treat zone as leaky
    *
@@ -574,6 +595,13 @@ class WIABZoneSealDevice extends BaseWIABDevice {
    */
   private async checkFailSafeConditions(): Promise<boolean> {
     if (!this.aggregator || !this.engine) {
+      return false;
+    }
+
+    // Check if stale sensor detection is disabled
+    const ignoreStaleSensors = this.getSetting('ignoreStaleSensors') as boolean;
+    if (ignoreStaleSensors) {
+      this.log('Stale sensor fail-safe disabled (ignoreStaleSensors=true), using actual sensor states only');
       return false;
     }
 
@@ -597,7 +625,11 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       );
 
       const transition = this.engine.handleAnySensorOpened();
-      await this.processStateTransition(transition);
+      const previousState = this.engine.getCurrentState();
+      await this.processStateTransition(transition, previousState, 'stale_detected', {
+        sensorName: sensorNames,
+        sensorStale: true,
+      });
       return true;
     }
 
@@ -610,7 +642,8 @@ class WIABZoneSealDevice extends BaseWIABDevice {
     if (nonStaleSensorCount === 0) {
       this.log('All sensors are stale, treating zone as leaky (fail-safe)');
       const transition = this.engine.handleAnySensorOpened();
-      await this.processStateTransition(transition);
+      const previousState = this.engine.getCurrentState();
+      await this.processStateTransition(transition, previousState, 'stale_detected');
       return true;
     }
 
@@ -649,13 +682,16 @@ class WIABZoneSealDevice extends BaseWIABDevice {
 
     // Evaluate state transition
     let transition: StateTransition;
+    let trigger: StateTransitionTrigger;
 
     if (allClosed) {
       // All non-stale sensors closed
       transition = this.engine.handleAllSensorsClosed();
+      trigger = 'sensor_closed';
     } else if (anyOpen) {
       // At least one non-stale sensor open
       transition = this.engine.handleAnySensorOpened();
+      trigger = 'sensor_opened';
     } else {
       // Should not happen (either all closed or any open)
       this.log('Warning: Unexpected sensor state (neither all closed nor any open)');
@@ -663,7 +699,7 @@ class WIABZoneSealDevice extends BaseWIABDevice {
     }
 
     // Process the transition with previous state for redundancy check
-    await this.processStateTransition(transition, previousState);
+    await this.processStateTransition(transition, previousState, trigger);
   }
 
   /**
@@ -731,14 +767,22 @@ class WIABZoneSealDevice extends BaseWIABDevice {
    * @private
    * @param transition - State transition result from engine
    * @param previousState - State before the transition (for redundancy check)
+   * @param trigger - What caused the transition
+   * @param context - Optional context about the transition
    * @returns {Promise<void>}
    */
   private async processStateTransition(
     transition: StateTransition,
-    previousState?: ZoneSealState
+    previousState?: ZoneSealState,
+    trigger: StateTransitionTrigger = 'sensor_opened',
+    context?: {
+      sensorId?: string;
+      sensorName?: string;
+      sensorStale?: boolean;
+    }
   ): Promise<void> {
     this.log(
-      `Processing transition: ${transition.newState} (immediate: ${transition.immediate})`
+      `Processing transition: ${previousState || 'unknown'} → ${transition.newState} [${trigger}] (immediate: ${transition.immediate})`
     );
 
     if (transition.immediate) {
@@ -749,10 +793,10 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       }
 
       // Immediate transition - update state now
-      await this.updateZoneSealState(transition.newState);
+      await this.updateZoneSealState(transition.newState, previousState, trigger, context);
     } else if (transition.delaySeconds !== undefined) {
       // Delayed transition - schedule timer
-      this.scheduleDelayTimer(transition.newState, transition.delaySeconds);
+      this.scheduleDelayTimer(transition.newState, transition.delaySeconds, previousState, trigger, context);
     }
   }
 
@@ -764,13 +808,26 @@ class WIABZoneSealDevice extends BaseWIABDevice {
    * @private
    * @param targetState - State to transition to after delay
    * @param delaySeconds - Delay duration in seconds
+   * @param previousState - State before the transition
+   * @param trigger - What caused the transition
+   * @param context - Optional context about the transition
    * @returns {void}
    */
-  private scheduleDelayTimer(targetState: ZoneSealState, delaySeconds: number): void {
+  private scheduleDelayTimer(
+    targetState: ZoneSealState,
+    delaySeconds: number,
+    previousState?: ZoneSealState,
+    trigger: StateTransitionTrigger = 'sensor_opened',
+    context?: {
+      sensorId?: string;
+      sensorName?: string;
+      sensorStale?: boolean;
+    }
+  ): void {
     // Cancel any existing timer
     this.cancelDelayTimer();
 
-    this.log(`Scheduling ${delaySeconds}s delay timer for transition to ${targetState}`);
+    this.log(`Scheduling ${delaySeconds}s delay timer for transition to ${targetState} [${trigger}]`);
 
     this.delayTimer = setTimeout(async () => {
       try {
@@ -781,7 +838,7 @@ class WIABZoneSealDevice extends BaseWIABDevice {
         }
 
         this.log(`Delay timer expired, transitioning to ${targetState}`);
-        await this.updateZoneSealState(targetState);
+        await this.updateZoneSealState(targetState, previousState, 'delay_expired', context);
       } catch (error) {
         // CRITICAL: Prevent unhandled rejection
         if (!this.errorReporter) {
@@ -823,11 +880,27 @@ class WIABZoneSealDevice extends BaseWIABDevice {
    *
    * @private
    * @param state - New zone seal state
+   * @param previousState - State before the transition
+   * @param trigger - What caused the transition
+   * @param context - Optional context about the transition
    * @returns {Promise<void>}
    */
-  private async updateZoneSealState(state: ZoneSealState): Promise<void> {
+  private async updateZoneSealState(
+    state: ZoneSealState,
+    previousState?: ZoneSealState,
+    trigger: StateTransitionTrigger = 'sensor_opened',
+    context?: {
+      sensorId?: string;
+      sensorName?: string;
+      sensorStale?: boolean;
+    }
+  ): Promise<void> {
     try {
-      this.log(`Updating zone seal state to: ${state}`);
+      const fromState = previousState || this.engine?.getCurrentState() || ZoneSealState.SEALED;
+      this.log(`Updating zone seal state: ${fromState} → ${state} [${trigger}]`);
+
+      // Record state transition to history
+      await this.recordStateTransition(fromState, state, trigger, context);
 
       // Update engine state (note: engine may have already updated internally)
       this.engine?.setCurrentState(state);
@@ -1112,6 +1185,102 @@ class WIABZoneSealDevice extends BaseWIABDevice {
    */
   public hasAnyStaleSensors(): boolean {
     return Array.from(this.staleSensorMap.values()).some((info) => info.isStale);
+  }
+
+  /**
+   * Loads state transition history from device store.
+   *
+   * Called during initialization to restore transition history across app restarts.
+   * If no history exists, starts with empty array.
+   *
+   * @private
+   * @returns {Promise<void>}
+   */
+  private async loadTransitionHistory(): Promise<void> {
+    try {
+      const storedHistory = await this.getStoreValue('transitionHistory');
+      if (Array.isArray(storedHistory)) {
+        this.transitionHistory = storedHistory;
+        this.log(`Loaded ${this.transitionHistory.length} transition history entries from store`);
+      } else {
+        this.transitionHistory = [];
+        this.log('No transition history found in store, starting fresh');
+      }
+    } catch (error) {
+      this.error('Failed to load transition history from store:', error);
+      this.transitionHistory = [];
+    }
+  }
+
+  /**
+   * Records a state transition to the history log and persists it.
+   *
+   * Maintains a maximum of MAX_HISTORY_ENTRIES by removing oldest entries.
+   * Automatically persists to device store for durability across restarts.
+   *
+   * @private
+   * @param {ZoneSealState} fromState - State before transition
+   * @param {ZoneSealState} toState - State after transition
+   * @param {StateTransitionTrigger} trigger - What caused the transition
+   * @param {object} [context] - Optional context about the transition
+   * @param {string} [context.sensorId] - Sensor device ID if applicable
+   * @param {string} [context.sensorName] - Sensor name if applicable
+   * @param {boolean} [context.sensorStale] - Whether sensor was stale
+   * @returns {Promise<void>}
+   */
+  private async recordStateTransition(
+    fromState: ZoneSealState,
+    toState: ZoneSealState,
+    trigger: StateTransitionTrigger,
+    context?: {
+      sensorId?: string;
+      sensorName?: string;
+      sensorStale?: boolean;
+    }
+  ): Promise<void> {
+    const nonStaleSensorCount = this.contactSensors.filter((sensor) => {
+      const info = this.staleSensorMap.get(sensor.deviceId);
+      return !info || !info.isStale;
+    }).length;
+
+    const entry: StateTransitionLogEntry = {
+      timestamp: Date.now(),
+      fromState,
+      toState,
+      trigger,
+      sensorId: context?.sensorId,
+      sensorName: context?.sensorName,
+      sensorStale: context?.sensorStale,
+      nonStaleSensorCount,
+      totalSensorCount: this.contactSensors.length,
+    };
+
+    this.transitionHistory.push(entry);
+
+    // Maintain max entries limit
+    if (this.transitionHistory.length > MAX_HISTORY_ENTRIES) {
+      this.transitionHistory = this.transitionHistory.slice(-MAX_HISTORY_ENTRIES);
+    }
+
+    // Persist to store
+    await this.persistTransitionHistory();
+  }
+
+  /**
+   * Persists transition history to device store.
+   *
+   * Writes the current transition history array to the device store for
+   * durability across app restarts and device reinitializations.
+   *
+   * @private
+   * @returns {Promise<void>}
+   */
+  private async persistTransitionHistory(): Promise<void> {
+    try {
+      await this.setStoreValue('transitionHistory', this.transitionHistory);
+    } catch (error) {
+      this.error('Failed to persist transition history to store:', error);
+    }
   }
 
   /**

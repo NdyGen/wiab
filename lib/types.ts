@@ -372,12 +372,58 @@ export interface ZoneSealCallbacks {
  * @property {number} openDelaySeconds - Seconds before zone marked as leaky (0-300)
  * @property {number} closeDelaySeconds - Seconds before zone marked as sealed (0-300)
  * @property {number} staleContactMinutes - Minutes before contact sensor considered stale (5-120)
+ * @property {boolean} ignoreStaleSensors - If true, ignore stale sensor detection entirely (use actual state only)
  */
 export interface ZoneSealSettings {
   contactSensors: string;
   openDelaySeconds: number;
   closeDelaySeconds: number;
   staleContactMinutes: number;
+  ignoreStaleSensors: boolean;
+}
+
+/**
+ * Trigger reason for a zone seal state transition.
+ *
+ * Indicates what caused the state change for debugging and state history tracking.
+ *
+ * @type StateTransitionTrigger
+ */
+export type StateTransitionTrigger =
+  | 'sensor_opened'
+  | 'sensor_closed'
+  | 'delay_expired'
+  | 'stale_detected'
+  | 'stale_ignored'
+  | 'initialization';
+
+/**
+ * Single entry in the state transition history log.
+ *
+ * Records all details of a state transition for debugging and user visibility.
+ * Used to track why and when the zone seal state changed.
+ *
+ * @interface StateTransitionLogEntry
+ * @property {number} timestamp - Timestamp in milliseconds when transition occurred
+ * @property {ZoneSealState} fromState - State before transition
+ * @property {ZoneSealState} toState - State after transition
+ * @property {StateTransitionTrigger} trigger - What caused the transition
+ * @property {string} [sensorId] - Device ID of sensor that triggered transition (if applicable)
+ * @property {string} [sensorName] - Name of sensor that triggered transition (if applicable)
+ * @property {boolean} [sensorStale] - Whether sensor was stale at time of transition (if applicable)
+ * @property {number} [nonStaleSensorCount] - Number of non-stale sensors at time of transition
+ * @property {number} [totalSensorCount] - Total number of configured sensors
+ */
+export interface StateTransitionLogEntry {
+  timestamp: number;
+  fromState: ZoneSealState;
+  toState: ZoneSealState;
+  trigger: StateTransitionTrigger;
+  sensorId?: string;
+  sensorName?: string;
+  sensorStale?: boolean;
+  nonStaleSensorCount?: number;
+  totalSensorCount?: number;
 }
 
 /**

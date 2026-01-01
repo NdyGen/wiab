@@ -93,6 +93,25 @@
         "min": 5,
         "max": 120,
         "step": 1
+      },
+      {
+        "id": "ignoreStaleSensors",
+        "type": "checkbox",
+        "label": {
+          "en": "Ignore stale sensor detection",
+          "nl": "Negeer detectie van verlopen sensoren",
+          "de": "Veraltete Sensorerkennung ignorieren",
+          "no": "Ignorer deteksjon av foreldede sensorer",
+          "sv": "Ignorera detektion av föråldrade sensorer"
+        },
+        "hint": {
+          "en": "Act only on actual reported sensor states. Use state history to identify problematic sensors. This bypasses fail-safe behavior.",
+          "nl": "Reageer alleen op werkelijke gemelde sensorstatussen. Gebruik statusgeschiedenis om problematische sensoren te identificeren. Dit omzeilt de veilig-faalmodus.",
+          "de": "Reagieren Sie nur auf tatsächlich gemeldete Sensorzustände. Verwenden Sie die Zustandshistorie, um problematische Sensoren zu identifizieren. Dies umgeht das Ausfallsicherheitsverhalten.",
+          "no": "Reager kun på faktiske rapporterte sensortilstander. Bruk tilstandshistorikk for å identifisere problematiske sensorer. Dette omgår feilsikker oppførsel.",
+          "sv": "Agera endast på faktiska rapporterade sensortillstånd. Använd tillståndshistorik för att identifiera problematiska sensorer. Detta kringgår felsäkert beteende."
+        },
+        "value": false
       }
     ]
   }
