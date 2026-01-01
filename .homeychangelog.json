@@ -64,5 +64,8 @@
   },
   "1.2.10": {
     "en": "dependency updates"
+  },
+  "1.2.11": {
+    "en": "optimized device initialization"
   }
 }
