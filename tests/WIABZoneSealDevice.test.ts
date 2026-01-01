@@ -919,6 +919,126 @@ describe('WIABZoneSealDevice - Integration', () => {
     });
   });
 
+  describe('null sensor state handling (fail-safe)', () => {
+    // Helper function to setup device with 2 sensors
+    async function setupDeviceWithTwoSensors() {
+      const sensors = [
+        { deviceId: 'sensor1', deviceName: 'Door 1', capability: 'alarm_contact' },
+        { deviceId: 'sensor2', deviceName: 'Window 1', capability: 'alarm_contact' },
+      ];
+
+      device.getSetting = jest.fn((key: string) => {
+        if (key === 'contactSensors') return JSON.stringify(sensors);
+        if (key === 'openDelaySeconds') return 0;
+        if (key === 'closeDelaySeconds') return 0;
+        if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
+        return undefined;
+      });
+
+      mockHomeyApi.devices.getDevices.mockResolvedValue({
+        sensor1: {
+          name: 'Door 1',
+          capabilitiesObj: {
+            alarm_contact: { value: false },
+          },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor1', callback);
+          }),
+        },
+        sensor2: {
+          name: 'Window 1',
+          capabilitiesObj: {
+            alarm_contact: { value: false },
+          },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor2', callback);
+          }),
+        },
+      });
+
+      await device.onInit();
+      await Promise.resolve();
+
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
+    }
+
+    it('should treat null sensor state as open (fail-safe)', async () => {
+      // Arrange - Setup device with sensors
+      await setupDeviceWithTwoSensors();
+
+      // Mock aggregator to return null for sensor1 (simulates sensor not in map)
+      (device as any).aggregator.getSensorState = jest.fn((id: string) =>
+        id === 'sensor1' ? null : false
+      );
+
+      jest.clearAllMocks();
+
+      // Act - Trigger sensor update
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should be LEAKY (fail-safe)
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Door 1 has unknown state (null), treating as open (fail-safe)')
+      );
+    });
+
+    it('should treat stale sensor with null last value as open (fail-safe)', async () => {
+      // Arrange - Setup device with sensors
+      await setupDeviceWithTwoSensors();
+
+      // Mark sensor1 as stale
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+
+      // Mock aggregator to return null for stale sensor1
+      (device as any).aggregator.getSensorState = jest.fn((id: string) =>
+        id === 'sensor1' ? null : false
+      );
+
+      jest.clearAllMocks();
+
+      // Act - Trigger sensor update
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Assert - Zone should be LEAKY (fail-safe triggered)
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('stale sensor(s) were open')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('treating zone as leaky')
+      );
+    });
+
+    it('should not treat null sensor state as open when all sensors have null state', async () => {
+      // Arrange - Setup device with sensors
+      await setupDeviceWithTwoSensors();
+
+      // Mock aggregator to return null for ALL sensors
+      (device as any).aggregator.getSensorState = jest.fn(() => null);
+
+      jest.clearAllMocks();
+
+      // Act - Trigger sensor update
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should be LEAKY (fail-safe - unknown state)
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('has unknown state (null), treating as open (fail-safe)')
+      );
+    });
+  });
+
   describe('ignoreStaleSensors setting', () => {
     // Helper function to setup device with 2 sensors for fail-safe testing
     async function setupDeviceWithTwoSensorsIgnoreSetting(
