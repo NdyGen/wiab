@@ -100,6 +100,11 @@ class WIABZoneSealDevice extends BaseWIABDevice {
    * 6. Initialize stale sensor tracking
    * 7. Register flow card handlers
    *
+   * Performance Optimizations:
+   * - Overall 30-second timeout prevents indefinite hanging
+   * - Parallel loading of transition history during sensor setup
+   * - Optimized HomeyAPI retry strategy (3 attempts, faster backoff)
+   *
    * Error Handling:
    * - Uses WarningManager to set device warning on initialization failure
    * - Uses ErrorReporter for structured error logging
@@ -113,15 +118,44 @@ class WIABZoneSealDevice extends BaseWIABDevice {
     // Orchestrate initialization steps
     this.initializeErrorHandling();
 
+    const INIT_TIMEOUT_MS = 30000; // 30 seconds
+
     try {
-      await this.loadSensorConfiguration();
-      await this.initializeState();
-      await this.setupMonitoring();
+      // Wrap initialization in timeout to prevent indefinite hanging
+      await Promise.race([
+        this.performInitialization(),
+        new Promise<void>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Initialization timeout after 30 seconds')),
+            INIT_TIMEOUT_MS
+          )
+        ),
+      ]);
 
       this.log('WIAB Zone Seal device initialization complete');
     } catch (error) {
       await this.handleInitializationError(error);
     }
+  }
+
+  /**
+   * Performs the actual initialization steps.
+   *
+   * Separated from onInit() to allow timeout wrapper.
+   * Optimized to load transition history in parallel with sensor configuration.
+   *
+   * @private
+   * @returns {Promise<void>}
+   */
+  private async performInitialization(): Promise<void> {
+    // Load sensor configuration and transition history in parallel
+    await Promise.all([
+      this.loadSensorConfiguration(),
+      this.loadTransitionHistory(),
+    ]);
+
+    await this.initializeState();
+    await this.setupMonitoring();
   }
 
   /**
@@ -140,12 +174,10 @@ class WIABZoneSealDevice extends BaseWIABDevice {
    * Initializes device state and registers flow card handlers.
    *
    * Called after sensor configuration is loaded to set up the device's
-   * operational state.
+   * operational state. Note: Transition history is now loaded in parallel
+   * during performInitialization().
    */
   private async initializeState(): Promise<void> {
-    // Load state transition history from device store
-    await this.loadTransitionHistory();
-
     // Register flow card handlers
     this.registerFlowCardHandlers();
 
@@ -355,6 +387,7 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       }
 
       // Retry getting HomeyAPI (may not be ready during device initialization)
+      // Optimized retry strategy: 3 attempts with faster backoff (worst case: 3.5s vs 17s)
       const homeyApiResult = await this.retryManager.retryWithBackoff(
         async () => {
           if (!app || !app.homeyApi) {
@@ -364,9 +397,9 @@ class WIABZoneSealDevice extends BaseWIABDevice {
         },
         'Wait for HomeyAPI availability',
         {
-          maxAttempts: 5,
-          initialDelayMs: 1000,
-          maxDelayMs: 5000,
+          maxAttempts: 3,          // Reduced from 5
+          initialDelayMs: 500,     // Reduced from 1000ms
+          maxDelayMs: 2000,        // Reduced from 5000ms
           backoffMultiplier: 2,
         }
       );
@@ -392,8 +425,19 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       // Initialize aggregator
       this.aggregator = new ContactSensorAggregator(this.contactSensors);
 
+      // Fetch all devices (required by HomeyAPI - no individual device fetch available)
+      // Note: Future optimization would be to add getDevice(id) to HomeyAPI
+      const allDevices = await homeyApi.devices.getDevices();
+
+      // Filter to only the devices we need
+      const devices: { [deviceId: string]: HomeyAPIDevice } = {};
+      for (const sensor of this.contactSensors) {
+        if (allDevices[sensor.deviceId]) {
+          devices[sensor.deviceId] = allDevices[sensor.deviceId];
+        }
+      }
+
       // Read current sensor values to initialize aggregator
-      const devices = await homeyApi.devices.getDevices();
       const currentValues = new Map<string, boolean>();
 
       for (const sensor of this.contactSensors) {
@@ -448,20 +492,22 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       // Set initial capability values
       await this.setCapabilityValue('alarm_zone_leaky', !initiallySealed);
 
-      // Record initial state transition
-      await this.recordStateTransition(
+      // Record initial state transition (fire-and-forget for performance)
+      void this.recordStateTransition(
         ZoneSealState.SEALED,
         initialState,
         'initialization'
       );
 
-      // Register WebSocket listeners for all contact sensors
-      for (const sensor of this.contactSensors) {
-        const device = devices[sensor.deviceId];
-        if (device) {
-          await this.registerDeviceListener(device, sensor);
-        }
-      }
+      // Register WebSocket listeners for all contact sensors IN PARALLEL
+      await Promise.all(
+        this.contactSensors.map(async (sensor) => {
+          const device = devices[sensor.deviceId];
+          if (device) {
+            await this.registerDeviceListener(device, sensor);
+          }
+        })
+      );
 
       // Start stale sensor monitoring
       this.startStaleMonitoring();
