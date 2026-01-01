@@ -95,6 +95,9 @@ class WIABDevice extends Homey.Device {
    * - Initialize all door states to CLOSED (or read actual values if available)
    * - Setup sensor monitoring
    * - Read current PIR sensor values to set initial occupancy state
+   *
+   * Performance Optimizations:
+   * - Overall 30-second timeout prevents indefinite hanging
    */
   async onInit(): Promise<void> {
     this.log('WIAB device initializing with quad-state occupancy model');
@@ -102,16 +105,52 @@ class WIABDevice extends Homey.Device {
     // Mark device as initializing to prevent listener loops
     this.isInitializing = true;
 
-    // Orchestrate initialization steps
+    const INIT_TIMEOUT_MS = 30000; // 30 seconds
+
+    try {
+      // Wrap initialization in timeout to prevent indefinite hanging
+      await Promise.race([
+        this.performInitialization(),
+        new Promise<void>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('Initialization timeout after 30 seconds')),
+            INIT_TIMEOUT_MS
+          )
+        ),
+      ]);
+
+      this.log('WIAB device initialization complete');
+    } catch (error) {
+      this.error(
+        `[${DeviceErrorId.DEVICE_INIT_FAILED}] Device initialization failed:`,
+        error
+      );
+
+      // Set device warning instead of crashing
+      try {
+        await this.setWarning('Device initialization failed. Check sensor configuration.');
+      } catch (warningError) {
+        this.error('Failed to set warning on device:', warningError);
+      }
+    } finally {
+      // Clear initialization flag even on failure
+      this.isInitializing = false;
+    }
+  }
+
+  /**
+   * Performs the actual initialization steps.
+   *
+   * Separated from onInit() to allow timeout wrapper.
+   *
+   * @private
+   * @returns {Promise<void>}
+   */
+  private async performInitialization(): Promise<void> {
     await this.migrateCapabilities();
     this.initializeState();
     await this.setupMonitoring();
     this.registerFlowCardHandlers();
-
-    // Clear initialization flag to allow listener to process user interactions
-    this.isInitializing = false;
-
-    this.log('WIAB device initialization complete');
   }
 
   /**

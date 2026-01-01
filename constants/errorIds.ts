@@ -67,6 +67,9 @@ export enum DeviceErrorId {
 
   /** T_CLEAR timer expiry handler failed */
   CLEAR_TIMER_EXPIRY_FAILED = 'DEVICE_007',
+
+  /** Failed to initialize device (onInit) */
+  DEVICE_INIT_FAILED = 'DEVICE_008',
 }
 
 /**
