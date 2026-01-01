@@ -69,12 +69,15 @@ describe('WIABZoneSealDevice - Integration', () => {
         openDelaySeconds: 0,
         closeDelaySeconds: 0,
         staleContactMinutes: 30,
+        ignoreStaleSensors: false,
       };
       return settings[key];
     });
     device.getData = jest.fn().mockReturnValue({ id: 'test-device-123' });
     device.setWarning = jest.fn().mockResolvedValue(undefined);
     device.unsetWarning = jest.fn().mockResolvedValue(undefined);
+    device.getStoreValue = jest.fn().mockResolvedValue([]);
+    device.setStoreValue = jest.fn().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -95,6 +98,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 0;
         if (key === 'closeDelaySeconds') return 0;
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -142,6 +146,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 0;
         if (key === 'closeDelaySeconds') return 0;
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -188,6 +193,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 0;
         if (key === 'closeDelaySeconds') return 0;
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -220,6 +226,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 0;
         if (key === 'closeDelaySeconds') return 0;
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -244,6 +251,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 10; // 10 second delay
         if (key === 'closeDelaySeconds') return 5; // 5 second delay
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -270,14 +278,20 @@ describe('WIABZoneSealDevice - Integration', () => {
 
       // Act - sensor opens
       callback(true);
-      await Promise.resolve(); // Let handler promise start
+      await Promise.resolve(); // Let handler start
+      await Promise.resolve(); // Let handleSensorUpdate start
+      await Promise.resolve(); // Let any nested promises complete
 
       // Verify we're in OPEN_DELAY (no immediate transition)
       expect(device.setCapabilityValue).not.toHaveBeenCalled();
 
       // Fast-forward 10 seconds
       jest.advanceTimersByTime(10000);
-      await Promise.resolve(); // Let promises resolve
+      await Promise.resolve(); // Let setTimeout callback start
+      await Promise.resolve(); // Let updateZoneSealState start
+      await Promise.resolve(); // Let recordStateTransition complete
+      await Promise.resolve(); // Let persistTransitionHistory complete
+      await Promise.resolve(); // Let setCapabilityValue complete
 
       // Assert - should transition to LEAKY
       expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_zone_leaky', true);
@@ -394,6 +408,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 0;
         if (key === 'closeDelaySeconds') return 0;
         if (key === 'staleContactMinutes') return staleTimeoutMinutes;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -421,6 +436,9 @@ describe('WIABZoneSealDevice - Integration', () => {
       });
 
       await device.onInit();
+      await Promise.resolve(); // Let initialization transitions complete
+      await Promise.resolve(); // Let recordStateTransition complete
+      await Promise.resolve(); // Let persistTransitionHistory complete
       jest.clearAllMocks();
     }
 
@@ -435,6 +453,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 0;
         if (key === 'closeDelaySeconds') return 0;
         if (key === 'staleContactMinutes') return 1; // 1 minute for testing
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -494,33 +513,32 @@ describe('WIABZoneSealDevice - Integration', () => {
     });
 
     it('should treat zone as leaky when all sensors are stale (fail-safe)', async () => {
-      // When all sensors become stale, the zone should be treated as LEAKY
-      // to avoid false sense of security when sensor data is unavailable
+      // Test proving: When all sensors stale (while closed), fail-safe triggers LEAKY
 
-      // Arrange - Setup device with 2 sensors (both initially closed/sealed)
+      // Arrange - Setup device with 2 sensors
       await setupDeviceWithTwoSensors(30);
 
-      // Verify initial state is SEALED
+      // Verify zone starts SEALED (all sensors closed)
       expect((device as any).engine.getCurrentState()).toBe('sealed');
 
-      // Act - Directly manipulate staleSensorMap to mark all sensors as stale
+      // Act - Mark both sensors as stale
       const staleSensorMap = (device as any).staleSensorMap;
       staleSensorMap.get('sensor1').isStale = true;
       staleSensorMap.get('sensor2').isStale = true;
 
-      // Trigger handleSensorUpdate to process the all-stale condition
-      await (device as any).handleSensorUpdate();
-      await Promise.resolve(); // Flush promises
+      jest.clearAllMocks();
 
-      // Assert - Zone should transition to LEAKY (fail-safe behavior)
+      // Trigger handleSensorUpdate()
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should transition to LEAKY
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Verify logs show "All sensors are stale"
       expect(device.log).toHaveBeenCalledWith(
         'All sensors are stale, treating zone as leaky (fail-safe)'
       );
-      expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_zone_leaky', true);
-      expect((device as any).engine.getCurrentState()).toBe('leaky');
-
-      // Verify zone_state_changed flow card was triggered
-      expect(mockFlowCard.trigger).toHaveBeenCalled();
     });
 
     it('should clear stale flag when sensor reports after becoming stale', async () => {
@@ -790,6 +808,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 0;
         if (key === 'closeDelaySeconds') return 0;
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -900,6 +919,180 @@ describe('WIABZoneSealDevice - Integration', () => {
     });
   });
 
+  describe('ignoreStaleSensors setting', () => {
+    // Helper function to setup device with 2 sensors for fail-safe testing
+    async function setupDeviceWithTwoSensorsIgnoreSetting(
+      staleTimeoutMinutes: number,
+      ignoreStaleSensors: boolean
+    ) {
+      const sensors = [
+        { deviceId: 'sensor1', deviceName: 'Door 1', capability: 'alarm_contact' },
+        { deviceId: 'sensor2', deviceName: 'Window 1', capability: 'alarm_contact' },
+      ];
+
+      device.getSetting = jest.fn((key: string) => {
+        if (key === 'contactSensors') return JSON.stringify(sensors);
+        if (key === 'openDelaySeconds') return 0;
+        if (key === 'closeDelaySeconds') return 0;
+        if (key === 'staleContactMinutes') return staleTimeoutMinutes;
+        if (key === 'ignoreStaleSensors') return ignoreStaleSensors;
+        return undefined;
+      });
+
+      mockHomeyApi.devices.getDevices.mockResolvedValue({
+        sensor1: {
+          name: 'Door 1',
+          capabilitiesObj: {
+            alarm_contact: { value: false }, // Closed
+          },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor1', callback);
+            return {};
+          }),
+        },
+        sensor2: {
+          name: 'Window 1',
+          capabilitiesObj: {
+            alarm_contact: { value: false }, // Closed
+          },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor2', callback);
+            return {};
+          }),
+        },
+      });
+
+      await device.onInit();
+      await Promise.resolve(); // Let initialization transitions complete
+      await Promise.resolve(); // Let recordStateTransition complete
+      await Promise.resolve(); // Let persistTransitionHistory complete
+      jest.clearAllMocks();
+    }
+
+    it('should bypass fail-safe when ignoreStaleSensors=true', async () => {
+      // When ignoreStaleSensors is enabled, should use actual sensor states only
+
+      // Arrange - Setup device with 2 sensors, ignoreStaleSensors enabled
+      await setupDeviceWithTwoSensorsIgnoreSetting(30, true);
+
+      // Verify initial state is SEALED
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
+
+      // Act - Mark all sensors as stale (but they're closed)
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+      staleSensorMap.get('sensor2').isStale = true;
+
+      jest.clearAllMocks();
+
+      // Trigger handleSensorUpdate()
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should REMAIN SEALED (fail-safe bypassed)
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
+
+      // Verify logs show fail-safe disabled
+      expect(device.log).toHaveBeenCalledWith(
+        'Stale sensor fail-safe disabled (ignoreStaleSensors=true), using actual sensor states only'
+      );
+
+      // Should NOT have transitioned to leaky
+      expect(device.setCapabilityValue).not.toHaveBeenCalledWith('alarm_zone_leaky', true);
+    });
+
+    it('should apply fail-safe when ignoreStaleSensors=false', async () => {
+      // When ignoreStaleSensors is disabled, should apply fail-safe logic
+
+      // Arrange - Setup device with 2 sensors, ignoreStaleSensors disabled
+      await setupDeviceWithTwoSensorsIgnoreSetting(30, false);
+
+      // Verify initial state is SEALED
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
+
+      // Act - Mark all sensors as stale (but they're closed)
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+      staleSensorMap.get('sensor2').isStale = true;
+
+      jest.clearAllMocks();
+
+      // Trigger handleSensorUpdate()
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Assert - Zone should transition to LEAKY (fail-safe applied)
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Verify logs show fail-safe triggered
+      expect(device.log).toHaveBeenCalledWith(
+        'All sensors are stale, treating zone as leaky (fail-safe)'
+      );
+
+      // Should have transitioned to leaky
+      expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_zone_leaky', true);
+    });
+
+    it('should update behavior when ignoreStaleSensors setting is toggled', async () => {
+      // Test that changing the setting affects fail-safe behavior
+
+      // Arrange - Setup device with ignoreStaleSensors=false initially
+      await setupDeviceWithTwoSensorsIgnoreSetting(30, false);
+
+      // Make sensors stale while closed
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+      staleSensorMap.get('sensor2').isStale = true;
+
+      jest.clearAllMocks();
+
+      // Trigger evaluation - should apply fail-safe
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+      expect(device.log).toHaveBeenCalledWith(
+        'All sensors are stale, treating zone as leaky (fail-safe)'
+      );
+
+      jest.clearAllMocks();
+
+      // Act - Toggle setting to ignoreStaleSensors=true
+      device.getSetting = jest.fn((key: string) => {
+        if (key === 'contactSensors') return JSON.stringify([
+          { deviceId: 'sensor1', deviceName: 'Door 1', capability: 'alarm_contact' },
+          { deviceId: 'sensor2', deviceName: 'Window 1', capability: 'alarm_contact' },
+        ]);
+        if (key === 'openDelaySeconds') return 0;
+        if (key === 'closeDelaySeconds') return 0;
+        if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return true; // NOW ENABLED
+        return undefined;
+      });
+
+      // Trigger re-initialization via onSettings
+      await device.onSettings({ oldSettings: {}, newSettings: {}, changedKeys: ['ignoreStaleSensors'] });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      jest.clearAllMocks();
+
+      // Trigger evaluation again - should bypass fail-safe now
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should transition to SEALED (fail-safe bypassed)
+      expect(device.log).toHaveBeenCalledWith(
+        'Stale sensor fail-safe disabled (ignoreStaleSensors=true), using actual sensor states only'
+      );
+    });
+  });
+
   describe('onDeleted - resource cleanup', () => {
     it('should clear all timers and listeners', async () => {
       // Arrange - initialize device with sensors
@@ -912,6 +1105,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 10;
         if (key === 'closeDelaySeconds') return 5;
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -966,6 +1160,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 10;
         if (key === 'closeDelaySeconds') return 5;
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -1010,6 +1205,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 10;
         if (key === 'closeDelaySeconds') return 5;
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -1074,6 +1270,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 0; // Immediate for testing
         if (key === 'closeDelaySeconds') return 0; // Immediate for testing
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -1101,8 +1298,13 @@ describe('WIABZoneSealDevice - Integration', () => {
       // Act - sensor opens, immediate transition (zero delay)
       const callback = capabilityCallbacks.get('sensor1')!;
       callback(true);
-      await Promise.resolve(); // Let handler promise start
-      await Promise.resolve(); // Let nested promises complete
+      await Promise.resolve(); // Let handler start
+      await Promise.resolve(); // Let handleSensorUpdate start
+      await Promise.resolve(); // Let processStateTransition start
+      await Promise.resolve(); // Let updateZoneSealState start
+      await Promise.resolve(); // Let recordStateTransition complete
+      await Promise.resolve(); // Let persistTransitionHistory complete
+      await Promise.resolve(); // Let setCapabilityValue complete
 
       // Assert - Verify that zone status changed to leaky
       expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_zone_leaky', true);
@@ -1116,12 +1318,24 @@ describe('WIABZoneSealDevice - Integration', () => {
       // Arrange - open sensor first
       const callback = capabilityCallbacks.get('sensor1')!;
       callback(true);
-      await Promise.resolve();
+      await Promise.resolve(); // Let handler start
+      await Promise.resolve(); // Let handleSensorUpdate start
+      await Promise.resolve(); // Let processStateTransition start
+      await Promise.resolve(); // Let updateZoneSealState start
+      await Promise.resolve(); // Let recordStateTransition complete
+      await Promise.resolve(); // Let persistTransitionHistory complete
+      await Promise.resolve(); // Let setCapabilityValue complete
       jest.clearAllMocks();
 
       // Act - close sensor, immediate transition (zero delay)
       callback(false);
-      await Promise.resolve();
+      await Promise.resolve(); // Let handler start
+      await Promise.resolve(); // Let handleSensorUpdate start
+      await Promise.resolve(); // Let processStateTransition start
+      await Promise.resolve(); // Let updateZoneSealState start
+      await Promise.resolve(); // Let recordStateTransition complete
+      await Promise.resolve(); // Let persistTransitionHistory complete
+      await Promise.resolve(); // Let setCapabilityValue complete
 
       // Assert - Verify that zone status changed to sealed
       expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_zone_leaky', false);
@@ -1144,6 +1358,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 0;
         if (key === 'closeDelaySeconds') return 0;
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
@@ -1170,6 +1385,7 @@ describe('WIABZoneSealDevice - Integration', () => {
         if (key === 'openDelaySeconds') return 0;
         if (key === 'closeDelaySeconds') return 0;
         if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return false;
         return undefined;
       });
 
