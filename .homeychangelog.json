@@ -58,5 +58,8 @@
   },
   "1.2.8": {
     "en": "minor zone seal edge case fix."
+  },
+  "1.2.9": {
+    "en": "zone seal diagnostig logging added"
   }
 }
