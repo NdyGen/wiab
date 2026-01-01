@@ -61,5 +61,8 @@
   },
   "1.2.9": {
     "en": "zone seal diagnostig logging added"
+  },
+  "1.2.10": {
+    "en": "dependency updates"
   }
 }
