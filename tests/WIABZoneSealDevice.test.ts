@@ -919,6 +919,180 @@ describe('WIABZoneSealDevice - Integration', () => {
     });
   });
 
+  describe('ignoreStaleSensors setting', () => {
+    // Helper function to setup device with 2 sensors for fail-safe testing
+    async function setupDeviceWithTwoSensorsIgnoreSetting(
+      staleTimeoutMinutes: number,
+      ignoreStaleSensors: boolean
+    ) {
+      const sensors = [
+        { deviceId: 'sensor1', deviceName: 'Door 1', capability: 'alarm_contact' },
+        { deviceId: 'sensor2', deviceName: 'Window 1', capability: 'alarm_contact' },
+      ];
+
+      device.getSetting = jest.fn((key: string) => {
+        if (key === 'contactSensors') return JSON.stringify(sensors);
+        if (key === 'openDelaySeconds') return 0;
+        if (key === 'closeDelaySeconds') return 0;
+        if (key === 'staleContactMinutes') return staleTimeoutMinutes;
+        if (key === 'ignoreStaleSensors') return ignoreStaleSensors;
+        return undefined;
+      });
+
+      mockHomeyApi.devices.getDevices.mockResolvedValue({
+        sensor1: {
+          name: 'Door 1',
+          capabilitiesObj: {
+            alarm_contact: { value: false }, // Closed
+          },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor1', callback);
+            return {};
+          }),
+        },
+        sensor2: {
+          name: 'Window 1',
+          capabilitiesObj: {
+            alarm_contact: { value: false }, // Closed
+          },
+          makeCapabilityInstance: jest.fn((cap, callback) => {
+            capabilityCallbacks.set('sensor2', callback);
+            return {};
+          }),
+        },
+      });
+
+      await device.onInit();
+      await Promise.resolve(); // Let initialization transitions complete
+      await Promise.resolve(); // Let recordStateTransition complete
+      await Promise.resolve(); // Let persistTransitionHistory complete
+      jest.clearAllMocks();
+    }
+
+    it('should bypass fail-safe when ignoreStaleSensors=true', async () => {
+      // When ignoreStaleSensors is enabled, should use actual sensor states only
+
+      // Arrange - Setup device with 2 sensors, ignoreStaleSensors enabled
+      await setupDeviceWithTwoSensorsIgnoreSetting(30, true);
+
+      // Verify initial state is SEALED
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
+
+      // Act - Mark all sensors as stale (but they're closed)
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+      staleSensorMap.get('sensor2').isStale = true;
+
+      jest.clearAllMocks();
+
+      // Trigger handleSensorUpdate()
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should REMAIN SEALED (fail-safe bypassed)
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
+
+      // Verify logs show fail-safe disabled
+      expect(device.log).toHaveBeenCalledWith(
+        'Stale sensor fail-safe disabled (ignoreStaleSensors=true), using actual sensor states only'
+      );
+
+      // Should NOT have transitioned to leaky
+      expect(device.setCapabilityValue).not.toHaveBeenCalledWith('alarm_zone_leaky', true);
+    });
+
+    it('should apply fail-safe when ignoreStaleSensors=false', async () => {
+      // When ignoreStaleSensors is disabled, should apply fail-safe logic
+
+      // Arrange - Setup device with 2 sensors, ignoreStaleSensors disabled
+      await setupDeviceWithTwoSensorsIgnoreSetting(30, false);
+
+      // Verify initial state is SEALED
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
+
+      // Act - Mark all sensors as stale (but they're closed)
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+      staleSensorMap.get('sensor2').isStale = true;
+
+      jest.clearAllMocks();
+
+      // Trigger handleSensorUpdate()
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Assert - Zone should transition to LEAKY (fail-safe applied)
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Verify logs show fail-safe triggered
+      expect(device.log).toHaveBeenCalledWith(
+        'All sensors are stale, treating zone as leaky (fail-safe)'
+      );
+
+      // Should have transitioned to leaky
+      expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_zone_leaky', true);
+    });
+
+    it('should update behavior when ignoreStaleSensors setting is toggled', async () => {
+      // Test that changing the setting affects fail-safe behavior
+
+      // Arrange - Setup device with ignoreStaleSensors=false initially
+      await setupDeviceWithTwoSensorsIgnoreSetting(30, false);
+
+      // Make sensors stale while closed
+      const staleSensorMap = (device as any).staleSensorMap;
+      staleSensorMap.get('sensor1').isStale = true;
+      staleSensorMap.get('sensor2').isStale = true;
+
+      jest.clearAllMocks();
+
+      // Trigger evaluation - should apply fail-safe
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+      expect(device.log).toHaveBeenCalledWith(
+        'All sensors are stale, treating zone as leaky (fail-safe)'
+      );
+
+      jest.clearAllMocks();
+
+      // Act - Toggle setting to ignoreStaleSensors=true
+      device.getSetting = jest.fn((key: string) => {
+        if (key === 'contactSensors') return JSON.stringify([
+          { deviceId: 'sensor1', deviceName: 'Door 1', capability: 'alarm_contact' },
+          { deviceId: 'sensor2', deviceName: 'Window 1', capability: 'alarm_contact' },
+        ]);
+        if (key === 'openDelaySeconds') return 0;
+        if (key === 'closeDelaySeconds') return 0;
+        if (key === 'staleContactMinutes') return 30;
+        if (key === 'ignoreStaleSensors') return true; // NOW ENABLED
+        return undefined;
+      });
+
+      // Trigger re-initialization via onSettings
+      await device.onSettings({ oldSettings: {}, newSettings: {}, changedKeys: ['ignoreStaleSensors'] });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      jest.clearAllMocks();
+
+      // Trigger evaluation again - should bypass fail-safe now
+      await (device as any).handleSensorUpdate();
+      await Promise.resolve();
+
+      // Assert - Zone should transition to SEALED (fail-safe bypassed)
+      expect(device.log).toHaveBeenCalledWith(
+        'Stale sensor fail-safe disabled (ignoreStaleSensors=true), using actual sensor states only'
+      );
+    });
+  });
+
   describe('onDeleted - resource cleanup', () => {
     it('should clear all timers and listeners', async () => {
       // Arrange - initialize device with sensors

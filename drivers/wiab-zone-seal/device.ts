@@ -624,8 +624,8 @@ class WIABZoneSealDevice extends BaseWIABDevice {
         `Fail-safe: ${staleSensorsOpen.length} stale sensor(s) were open (${sensorNames}), treating zone as leaky`
       );
 
-      const transition = this.engine.handleAnySensorOpened();
       const previousState = this.engine.getCurrentState();
+      const transition = this.engine.handleAnySensorOpened();
       await this.processStateTransition(transition, previousState, 'stale_detected', {
         sensorName: sensorNames,
         sensorStale: true,
@@ -641,8 +641,8 @@ class WIABZoneSealDevice extends BaseWIABDevice {
 
     if (nonStaleSensorCount === 0) {
       this.log('All sensors are stale, treating zone as leaky (fail-safe)');
-      const transition = this.engine.handleAnySensorOpened();
       const previousState = this.engine.getCurrentState();
+      const transition = this.engine.handleAnySensorOpened();
       await this.processStateTransition(transition, previousState, 'stale_detected');
       return true;
     }
