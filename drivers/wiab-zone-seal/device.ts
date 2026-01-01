@@ -605,7 +605,7 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       return false;
     }
 
-    // PRIORITY 1: Check if ANY stale sensor's last value was "open"
+    // PRIORITY 1: Check if ANY stale sensor's last value was "open" or unknown
     const staleSensorsOpen = this.contactSensors.filter((sensor) => {
       const info = this.staleSensorMap.get(sensor.deviceId);
       if (!info || !info.isStale) {
@@ -613,7 +613,8 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       }
 
       const lastValue = this.aggregator?.getSensorState(sensor.deviceId);
-      return lastValue === true;
+      // CRITICAL FIX: Treat unknown state (null) as potentially open
+      return lastValue === true || lastValue === null;
     });
 
     if (staleSensorsOpen.length > 0) {
@@ -725,6 +726,11 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       if (state === true) {
         return false; // Found an open sensor
       }
+      // CRITICAL FIX: Treat unknown state (null) as unsafe (open)
+      if (state === null) {
+        this.log(`Sensor ${sensor.deviceName || sensor.deviceId} has unknown state (null), treating as open (fail-safe)`);
+        return false; // Unknown = unsafe
+      }
     }
 
     return true; // All non-stale sensors are closed
@@ -752,6 +758,11 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       const state = this.aggregator.getSensorState(sensor.deviceId);
       if (state === true) {
         return true; // Found an open sensor
+      }
+      // CRITICAL FIX: Treat unknown state (null) as unsafe (open)
+      if (state === null) {
+        this.log(`Sensor ${sensor.deviceName || sensor.deviceId} has unknown state (null), treating as open (fail-safe)`);
+        return true; // Unknown = unsafe
       }
     }
 
