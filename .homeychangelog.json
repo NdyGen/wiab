@@ -67,5 +67,8 @@
   },
   "1.2.11": {
     "en": "optimized device initialization"
+  },
+  "1.2.12": {
+    "en": "zone seal fail safe added for stale sensors"
   }
 }
