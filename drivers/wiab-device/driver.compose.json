@@ -10,7 +10,8 @@
   "capabilities": [
     "alarm_occupancy",
     "occupancy_state",
-    "alarm_paused"
+    "alarm_paused",
+    "alarm_data_stale"
   ],
   "platforms": [
     "local"

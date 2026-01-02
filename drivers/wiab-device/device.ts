@@ -34,6 +34,15 @@ interface WIABApp extends Homey.App {
 }
 
 /**
+ * Sensor stale tracking information
+ */
+interface SensorStaleInfo {
+  lastUpdated: number;  // Timestamp of last sensor update
+  isStale: boolean;     // Whether sensor is currently stale
+  timeoutMs: number;    // Stale timeout for this sensor
+}
+
+/**
  * WIAB (Wasp in a Box) virtual occupancy sensor device.
  *
  * This device implements a quad-state occupancy model (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED)
@@ -85,6 +94,10 @@ class WIABDevice extends Homey.Device {
   private isPaused: boolean = false;
   private pausedWithState: StableOccupancyState = StableOccupancyState.UNOCCUPIED;
   private isInitializing: boolean = false;
+
+  // Stale sensor detection
+  private staleSensorMap: Map<string, SensorStaleInfo> = new Map();
+  private staleCheckInterval?: NodeJS.Timeout;
 
   /**
    * Initializes the WIAB device.
@@ -173,6 +186,16 @@ class WIABDevice extends Homey.Device {
       // Immediately set to true (inverted: true = active/highlighted) after adding
       await this.setCapabilityValue('alarm_paused', true).catch((err) => {
         this.error('Failed to initialize alarm_paused capability during migration:', err);
+      });
+    }
+
+    // Ensure alarm_data_stale capability exists (for migration of existing devices)
+    if (!this.hasCapability('alarm_data_stale')) {
+      this.log('Adding alarm_data_stale capability to existing device');
+      await this.addCapability('alarm_data_stale');
+      // Initialize to false (no stale sensors at startup)
+      await this.setCapabilityValue('alarm_data_stale', false).catch((err) => {
+        this.error('Failed to initialize alarm_data_stale capability during migration:', err);
       });
     }
   }
@@ -413,6 +436,29 @@ class WIABDevice extends Homey.Device {
 
       await this.sensorMonitor.start();
 
+      // Initialize stale sensor tracking for all sensors
+      this.staleSensorMap.clear();
+      const now = Date.now();
+
+      for (const sensor of triggerSensors) {
+        this.staleSensorMap.set(sensor.deviceId, {
+          lastUpdated: now,
+          isStale: false,
+          timeoutMs: stalePirTimeoutMs,
+        });
+      }
+
+      for (const sensor of resetSensors) {
+        this.staleSensorMap.set(sensor.deviceId, {
+          lastUpdated: now,
+          isStale: false,
+          timeoutMs: staleDoorTimeoutMs,
+        });
+      }
+
+      // Start stale sensor monitoring
+      this.startStaleMonitoring();
+
       this.log('Sensor monitoring initialized successfully');
     } catch (error) {
       this.error(
@@ -429,12 +475,16 @@ class WIABDevice extends Homey.Device {
   private teardownSensorMonitoring(): void {
     this.stopEnterTimer();
     this.stopClearTimer();
+    this.stopStaleMonitoring();
 
     if (this.sensorMonitor) {
       this.log('Tearing down sensor monitoring');
       this.sensorMonitor.stop();
       this.sensorMonitor = undefined;
     }
+
+    // Clear stale sensor map
+    this.staleSensorMap.clear();
   }
 
   /**
@@ -458,6 +508,9 @@ class WIABDevice extends Homey.Device {
     }
 
     try {
+      // Update stale sensor tracking
+      this.updateStaleSensorTracking(doorId);
+
       this.updateDoorState(doorId, doorValue);
       this.occupancyState = OccupancyState.UNKNOWN;
 
@@ -550,6 +603,9 @@ class WIABDevice extends Homey.Device {
     }
 
     try {
+      // Update stale sensor tracking
+      this.updateStaleSensorTracking(pirId);
+
       this.log(`PIR motion detected: ${pirId}`);
       this.updatePirTracking();
       this.stopEnterTimer();
@@ -625,6 +681,9 @@ class WIABDevice extends Homey.Device {
     }
 
     try {
+      // Update stale sensor tracking
+      this.updateStaleSensorTracking(pirId);
+
       this.log(`PIR motion cleared: ${pirId}`);
 
       // Only meaningful if we're waiting for falling edge after a door event
@@ -1187,6 +1246,141 @@ class WIABDevice extends Homey.Device {
     } catch (error) {
       this.error('Failed to parse sensor settings JSON:', error);
       return [];
+    }
+  }
+
+  /**
+   * Updates stale sensor tracking when a sensor reports an update.
+   *
+   * Called from sensor event handlers (handlePirMotion, handleDoorEvent, handlePirCleared)
+   * to track the last time each sensor reported data.
+   *
+   * @private
+   * @param sensorId - The device ID of the sensor that updated
+   * @returns {void}
+   */
+  private updateStaleSensorTracking(sensorId: string): void {
+    const info = this.staleSensorMap.get(sensorId);
+    if (!info) {
+      return;
+    }
+
+    const now = Date.now();
+    const wasStale = info.isStale;
+
+    // Update last update timestamp
+    info.lastUpdated = now;
+
+    // If sensor was stale, mark it fresh and trigger re-evaluation
+    if (wasStale) {
+      info.isStale = false;
+      this.log(`Sensor became fresh: ${sensorId} (was stale, now reporting again)`);
+
+      // Check if all sensors are now fresh
+      this.checkAndUpdateDataStaleCapability();
+    }
+  }
+
+  /**
+   * Starts stale sensor monitoring.
+   *
+   * Checks every minute if any sensors have become stale.
+   *
+   * @private
+   * @returns {void}
+   */
+  private startStaleMonitoring(): void {
+    // Check every minute
+    const checkIntervalMs = 60 * 1000;
+
+    this.staleCheckInterval = setInterval(() => {
+      this.checkForStaleSensors();
+    }, checkIntervalMs);
+
+    this.log('Stale sensor monitoring started');
+  }
+
+  /**
+   * Stops stale sensor monitoring.
+   *
+   * @private
+   * @returns {void}
+   */
+  private stopStaleMonitoring(): void {
+    if (this.staleCheckInterval) {
+      clearInterval(this.staleCheckInterval);
+      this.staleCheckInterval = undefined;
+      this.log('Stale sensor monitoring stopped');
+    }
+  }
+
+  /**
+   * Checks all sensors for staleness and updates alarm_data_stale capability.
+   *
+   * Called periodically (every minute) by staleCheckInterval.
+   * When sensors become stale, sets alarm_data_stale to true.
+   * When all sensors are fresh, sets alarm_data_stale to false.
+   *
+   * @private
+   * @returns {void}
+   */
+  private checkForStaleSensors(): void {
+    const now = Date.now();
+    let hasChanges = false;
+
+    for (const [sensorId, info] of this.staleSensorMap.entries()) {
+      const timeSinceUpdate = now - info.lastUpdated;
+      const shouldBeStale = timeSinceUpdate > info.timeoutMs;
+
+      // Check if stale state changed
+      if (shouldBeStale && !info.isStale) {
+        // Sensor became stale
+        info.isStale = true;
+        hasChanges = true;
+
+        // Production debugging log with timeout type
+        const timeoutMinutes = Math.round(info.timeoutMs / 60000);
+        const staleDuration = Math.round(timeSinceUpdate / 60000);
+        this.log(
+          `Sensor became stale: ${sensorId} (timeout: ${timeoutMinutes}min, stale for: ${staleDuration}min)`
+        );
+      }
+    }
+
+    if (hasChanges) {
+      this.checkAndUpdateDataStaleCapability();
+    }
+  }
+
+  /**
+   * Checks stale sensor state and updates alarm_data_stale capability.
+   *
+   * Sets alarm_data_stale to true if ANY sensor is stale.
+   * Sets alarm_data_stale to false if ALL sensors are fresh.
+   *
+   * @private
+   * @returns {void}
+   */
+  private checkAndUpdateDataStaleCapability(): void {
+    const hasAnyStaleSensors = Array.from(this.staleSensorMap.values()).some(
+      (info) => info.isStale
+    );
+
+    // Update capability if needed
+    const currentValue = this.getCapabilityValue('alarm_data_stale');
+    if (currentValue !== hasAnyStaleSensors) {
+      this.setCapabilityValue('alarm_data_stale', hasAnyStaleSensors).catch((err) => {
+        this.error('Failed to update alarm_data_stale capability:', err);
+      });
+
+      if (hasAnyStaleSensors) {
+        const staleCount = Array.from(this.staleSensorMap.values()).filter(
+          (info) => info.isStale
+        ).length;
+        this.log(`Data quality warning: ${staleCount} sensor(s) are stale`);
+      } else {
+        this.log('All sensors are now fresh - data quality normal');
+      }
     }
   }
 }

@@ -572,9 +572,15 @@ class RoomStateDevice extends BaseWIABDevice {
     }
 
     this.wiabCapabilityListener = () => {
+      // Monitor occupancy changes
       deviceObj.makeCapabilityInstance?.('alarm_occupancy', (value: boolean) => {
         this.log(`WIAB occupancy changed: ${value ? 'OCCUPIED' : 'UNOCCUPIED'}`);
         this.handleOccupancyChange(value);
+      });
+
+      // Monitor data quality (stale sensors)
+      deviceObj.makeCapabilityInstance?.('alarm_data_stale', (isStale: boolean) => {
+        this.handleDataStaleChange(isStale);
       });
     };
 
@@ -610,6 +616,50 @@ class RoomStateDevice extends BaseWIABDevice {
 
     // Evaluate state transition
     this.evaluateAndScheduleTransition();
+  }
+
+  /**
+   * Handles WIAB device data quality changes.
+   *
+   * Fail-safe behavior: When WIAB data becomes stale (unreliable),
+   * treat the room as unoccupied to save energy and heating.
+   * This ensures the room transitions to extended_idle over time
+   * rather than maintaining potentially incorrect occupied states.
+   *
+   * @param isStale - Whether WIAB sensor data is stale (true) or fresh (false)
+   */
+  private handleDataStaleChange(isStale: boolean): void {
+    // Ignore if manual override is active
+    if (this.manualOverride) {
+      this.log('Manual override active - ignoring WIAB data quality change');
+      return;
+    }
+
+    if (isStale) {
+      // Fail-safe: treat as unoccupied when data is stale
+      this.log('WIAB data became stale - applying fail-safe (treating as unoccupied for energy savings)');
+      this.isWiabOccupied = false;
+
+      // Clear activity timestamp to start idle timer
+      this.lastActivityTimestamp = null;
+
+      // Clear any existing timer before evaluating new transition
+      if (this.stateTimer) {
+        clearTimeout(this.stateTimer);
+        this.stateTimer = undefined;
+      }
+
+      // Evaluate state transition (will move toward idle states)
+      this.evaluateAndScheduleTransition();
+    } else {
+      // Data became fresh - resume normal operation
+      this.log('WIAB data became fresh - resuming normal operation');
+
+      // Get current occupancy from WIAB device
+      // Note: We don't have direct access here, but the occupancy listener
+      // will fire and provide the current state. For now, just log.
+      // The next occupancy change event will sync us up.
+    }
   }
 
   /**

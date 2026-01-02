@@ -1,0 +1,58 @@
+{
+  "type": "boolean",
+  "title": {
+    "en": "Data Quality Warning",
+    "nl": "Datakwaliteit waarschuwing",
+    "de": "Datenqualitätswarnung",
+    "no": "Datakvalitetsadvarsel",
+    "sv": "Datakvalitetsvarning"
+  },
+  "desc": {
+    "en": "Indicates when sensor data is stale or unreliable",
+    "nl": "Geeft aan wanneer sensorgegevens verouderd of onbetrouwbaar zijn",
+    "de": "Zeigt an, wenn Sensordaten veraltet oder unzuverlässig sind",
+    "no": "Indikerer når sensordata er foreldet eller upålitelig",
+    "sv": "Indikerar när sensordata är föråldrad eller opålitlig"
+  },
+  "getable": true,
+  "setable": false,
+  "uiComponent": "sensor",
+  "icon": "/assets/capability_icons/alarm_data_stale.svg",
+  "$flow": {
+    "triggers": [
+      {
+        "id": "alarm_data_stale_true",
+        "highlight": true,
+        "title": {
+          "en": "Data became stale",
+          "nl": "Data werd verouderd",
+          "de": "Daten veraltet",
+          "no": "Data ble foreldet",
+          "sv": "Data blev föråldrad"
+        }
+      },
+      {
+        "id": "alarm_data_stale_false",
+        "title": {
+          "en": "Data became fresh",
+          "nl": "Data werd vers",
+          "de": "Daten aktualisiert",
+          "no": "Data ble fersk",
+          "sv": "Data blev färsk"
+        }
+      }
+    ],
+    "conditions": [
+      {
+        "id": "alarm_data_stale",
+        "title": {
+          "en": "Data !{{is|isn't}} stale",
+          "nl": "Data !{{is|is niet}} verouderd",
+          "de": "Daten !{{sind|sind nicht}} veraltet",
+          "no": "Data !{{er|er ikke}} foreldet",
+          "sv": "Data !{{är|är inte}} föråldrad"
+        }
+      }
+    ]
+  }
+}
