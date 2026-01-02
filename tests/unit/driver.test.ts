@@ -26,13 +26,13 @@ class MockPairSession {
     this.handlers.set(event, handler);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   getHandler(event: string): (...args: any[]) => Promise<any> {
     const handler = this.handlers.get(event);
     if (!handler) {
       throw new Error(`Handler '${event}' not registered in pairing session`);
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     return handler as (...args: any[]) => Promise<any>;
   }
 
