@@ -11,7 +11,7 @@ import WIABZoneSealDevice from '../drivers/wiab-zone-seal/device';
  * - WebSocket listener management
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 
 describe('WIABZoneSealDevice - Integration', () => {
   let device: WIABZoneSealDevice;

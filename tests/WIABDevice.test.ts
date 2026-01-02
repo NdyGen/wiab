@@ -1,0 +1,395 @@
+/**
+ * Tests for WIABDevice alarm_data_stale functionality
+ * Ensures stale sensor detection and data quality monitoring work correctly
+ */
+
+import WIABDevice from '../drivers/wiab-device/device';
+import { createMockHomey } from './setup';
+
+describe('WIABDevice - Data Quality Monitoring', () => {
+  let device: WIABDevice;
+  let mockHomey: ReturnType<typeof createMockHomey>;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.clearAllMocks();
+
+    mockHomey = createMockHomey();
+
+    device = new WIABDevice();
+    Object.assign(device, {
+      homey: mockHomey,
+      driver: {
+        homey: mockHomey,
+      },
+      getData: jest.fn().mockReturnValue({ id: 'wiab-123' }),
+      getName: jest.fn().mockReturnValue('Test WIAB Device'),
+      log: jest.fn(),
+      error: jest.fn(),
+      setCapabilityValue: jest.fn().mockResolvedValue(undefined),
+      getCapabilityValue: jest.fn().mockReturnValue(false),
+      hasCapability: jest.fn().mockReturnValue(true),
+      addCapability: jest.fn().mockResolvedValue(undefined),
+    });
+
+    // Initialize staleSensorMap for testing
+    (device as any).staleSensorMap = new Map();
+  });
+
+  afterEach(() => {
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
+  describe('Stale Sensor Tracking', () => {
+    it('should track sensor update timestamps', () => {
+      // Arrange
+      const sensor1Info = {
+        lastUpdated: Date.now() - 10000,
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      };
+      (device as any).staleSensorMap.set('pir-1', sensor1Info);
+
+      const initialTimestamp = sensor1Info.lastUpdated;
+
+      // Advance time
+      jest.advanceTimersByTime(5000);
+
+      // Act
+      (device as any).updateStaleSensorTracking('pir-1');
+
+      // Assert
+      const updatedTimestamp = (device as any).staleSensorMap.get('pir-1').lastUpdated;
+      expect(updatedTimestamp).toBeGreaterThan(initialTimestamp);
+      expect((device as any).staleSensorMap.get('pir-1').isStale).toBe(false);
+    });
+
+    it('should mark sensor fresh when it reports after being stale', () => {
+      // Arrange - Sensor is stale
+      const sensor1Info = {
+        lastUpdated: Date.now() - 40 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      };
+      (device as any).staleSensorMap.set('pir-1', sensor1Info);
+
+      // Act - Sensor reports new data
+      (device as any).updateStaleSensorTracking('pir-1');
+
+      // Assert
+      expect((device as any).staleSensorMap.get('pir-1').isStale).toBe(false);
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Sensor became fresh: pir-1')
+      );
+    });
+
+    it('should not log when fresh sensor updates', () => {
+      // Arrange - Sensor is already fresh
+      const sensor1Info = {
+        lastUpdated: Date.now() - 10 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      };
+      (device as any).staleSensorMap.set('pir-1', sensor1Info);
+
+      jest.clearAllMocks();
+
+      // Act - Sensor updates again
+      (device as any).updateStaleSensorTracking('pir-1');
+
+      // Assert - Should not log "became fresh"
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Sensor became fresh')
+      );
+    });
+
+    it('should handle non-existent sensor gracefully', () => {
+      // Act - Try to update sensor that doesn't exist
+      (device as any).updateStaleSensorTracking('nonexistent-sensor');
+
+      // Assert - Should not crash
+      expect(device.log).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Stale Detection Logic', () => {
+    it('should detect sensor as stale after timeout', () => {
+      // Arrange - Sensor last updated 31 minutes ago, timeout is 30 minutes
+      const now = Date.now();
+      const sensor1Info = {
+        lastUpdated: now - 31 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      };
+      (device as any).staleSensorMap.set('pir-1', sensor1Info);
+
+      // Set system time to simulate time passing
+      jest.setSystemTime(now);
+
+      // Act
+      (device as any).checkForStaleSensors();
+
+      // Assert
+      expect((device as any).staleSensorMap.get('pir-1').isStale).toBe(true);
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Sensor became stale: pir-1')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('timeout: 30min')
+      );
+    });
+
+    it('should not mark sensor stale if within timeout period', () => {
+      // Arrange - Sensor last updated 25 minutes ago, timeout is 30 minutes
+      const now = Date.now();
+      const sensor1Info = {
+        lastUpdated: now - 25 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      };
+      (device as any).staleSensorMap.set('pir-1', sensor1Info);
+
+      jest.setSystemTime(now);
+
+      // Act
+      (device as any).checkForStaleSensors();
+
+      // Assert
+      expect((device as any).staleSensorMap.get('pir-1').isStale).toBe(false);
+    });
+
+    it('should handle multiple sensors with different timeouts', () => {
+      // Arrange
+      const now = Date.now();
+
+      // PIR sensor: 31 min old, 30 min timeout - should be stale
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: now - 31 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      });
+
+      // Door sensor: 45 min old, 60 min timeout - should NOT be stale
+      (device as any).staleSensorMap.set('door-1', {
+        lastUpdated: now - 45 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 60 * 60 * 1000,
+      });
+
+      jest.setSystemTime(now);
+
+      // Act
+      (device as any).checkForStaleSensors();
+
+      // Assert
+      expect((device as any).staleSensorMap.get('pir-1').isStale).toBe(true);
+      expect((device as any).staleSensorMap.get('door-1').isStale).toBe(false);
+    });
+
+    it('should not log if stale state did not change', () => {
+      // Arrange - Sensor is already stale
+      const now = Date.now();
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: now - 40 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      });
+
+      jest.setSystemTime(now);
+      jest.clearAllMocks();
+
+      // Act - Check again
+      (device as any).checkForStaleSensors();
+
+      // Assert - Should not log "became stale" again
+      expect(device.log).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('alarm_data_stale Capability Management', () => {
+    it('should set alarm_data_stale to true when ANY sensor is stale', () => {
+      // Arrange
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now(),
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      });
+      (device as any).staleSensorMap.set('door-1', {
+        lastUpdated: Date.now(),
+        isStale: false,
+        timeoutMs: 60 * 60 * 1000,
+      });
+
+      (device.getCapabilityValue as jest.Mock).mockReturnValue(false);
+
+      // Act
+      (device as any).checkAndUpdateDataStaleCapability();
+
+      // Assert
+      expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_data_stale', true);
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Data quality warning: 1 sensor(s) are stale')
+      );
+    });
+
+    it('should set alarm_data_stale to false when all sensors are fresh', () => {
+      // Arrange - All sensors fresh
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now(),
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      });
+      (device as any).staleSensorMap.set('door-1', {
+        lastUpdated: Date.now(),
+        isStale: false,
+        timeoutMs: 60 * 60 * 1000,
+      });
+
+      (device.getCapabilityValue as jest.Mock).mockReturnValue(true);
+
+      // Act
+      (device as any).checkAndUpdateDataStaleCapability();
+
+      // Assert
+      expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_data_stale', false);
+      expect(device.log).toHaveBeenCalledWith(
+        'All sensors are now fresh - data quality normal'
+      );
+    });
+
+    it('should not update capability if value has not changed', () => {
+      // Arrange - Capability already false, all sensors fresh
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now(),
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      });
+
+      (device.getCapabilityValue as jest.Mock).mockReturnValue(false);
+
+      jest.clearAllMocks();
+
+      // Act
+      (device as any).checkAndUpdateDataStaleCapability();
+
+      // Assert - Should not call setCapabilityValue
+      expect(device.setCapabilityValue).not.toHaveBeenCalled();
+    });
+
+    it('should count multiple stale sensors correctly', () => {
+      // Arrange - 2 out of 3 sensors stale
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now(),
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      });
+      (device as any).staleSensorMap.set('pir-2', {
+        lastUpdated: Date.now(),
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      });
+      (device as any).staleSensorMap.set('door-1', {
+        lastUpdated: Date.now(),
+        isStale: false,
+        timeoutMs: 60 * 60 * 1000,
+      });
+
+      (device.getCapabilityValue as jest.Mock).mockReturnValue(false);
+
+      // Act
+      (device as any).checkAndUpdateDataStaleCapability();
+
+      // Assert
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Data quality warning: 2 sensor(s) are stale')
+      );
+    });
+
+    it('should handle capability setValue errors gracefully', () => {
+      // Arrange
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now(),
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      });
+
+      (device.getCapabilityValue as jest.Mock).mockReturnValue(false);
+      (device.setCapabilityValue as jest.Mock).mockRejectedValue(new Error('Capability error'));
+
+      // Act - Should not throw
+      (device as any).checkAndUpdateDataStaleCapability();
+
+      // Assert
+      expect(device.setCapabilityValue).toHaveBeenCalled();
+    });
+  });
+
+  describe('Stale Monitoring Lifecycle', () => {
+    it('should start monitoring interval', () => {
+      // Arrange
+      const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+      // Act
+      (device as any).startStaleMonitoring();
+
+      // Assert
+      expect(setIntervalSpy).toHaveBeenCalledWith(
+        expect.any(Function),
+        60 * 1000 // 60 seconds
+      );
+      expect(device.log).toHaveBeenCalledWith('Stale sensor monitoring started');
+      expect((device as any).staleCheckInterval).toBeDefined();
+    });
+
+    it('should stop monitoring interval', () => {
+      // Arrange
+      (device as any).startStaleMonitoring();
+      const interval = (device as any).staleCheckInterval;
+      expect(interval).toBeDefined();
+
+      const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+
+      // Act
+      (device as any).stopStaleMonitoring();
+
+      // Assert
+      expect(clearIntervalSpy).toHaveBeenCalledWith(interval);
+      expect(device.log).toHaveBeenCalledWith('Stale sensor monitoring stopped');
+      expect((device as any).staleCheckInterval).toBeUndefined();
+    });
+
+    it('should handle stop when not started', () => {
+      // Arrange - No interval running
+      (device as any).staleCheckInterval = undefined;
+
+      // Act - Should not throw
+      (device as any).stopStaleMonitoring();
+
+      // Assert
+      expect(device.log).not.toHaveBeenCalledWith('Stale sensor monitoring stopped');
+    });
+
+    it('should check for stale sensors on interval', () => {
+      // Arrange
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now() - 40 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      });
+
+      (device as any).startStaleMonitoring();
+
+      jest.clearAllMocks();
+
+      // Act - Advance time by 60 seconds (interval period)
+      jest.advanceTimersByTime(60 * 1000);
+
+      // Assert - Check was triggered
+      expect((device as any).staleSensorMap.get('pir-1').isStale).toBe(true);
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Sensor became stale: pir-1')
+      );
+    });
+  });
+});
