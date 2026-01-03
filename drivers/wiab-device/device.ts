@@ -1349,6 +1349,10 @@ class WIABDevice extends Homey.Device {
 
     if (hasChanges) {
       this.checkAndUpdateDataStaleCapability();
+
+      // CRITICAL: Trigger immediate fail-safe evaluation
+      // Don't wait for next sensor event to apply fail-safe
+      void this.evaluateStaleFailSafe();
     }
   }
 
@@ -1381,6 +1385,56 @@ class WIABDevice extends Homey.Device {
       } else {
         this.log('All sensors are now fresh - data quality normal');
       }
+    }
+  }
+
+  /**
+   * Evaluates fail-safe conditions when sensors become stale.
+   *
+   * Implements fail-safe behavior per CLAUDE.md guidelines:
+   * - If ALL sensors are stale → set occupancy to UNCERTAIN
+   * - Unknown state = unsafe state (fail-safe principle)
+   *
+   * This method is called when sensors become stale to immediately apply
+   * fail-safe logic without waiting for the next sensor event.
+   *
+   * @private
+   * @returns {Promise<void>}
+   */
+  private async evaluateStaleFailSafe(): Promise<void> {
+    try {
+      // Ignore if device is paused
+      if (this.isPaused) {
+        return;
+      }
+
+      // Check if ALL sensors are stale
+      const allStale = Array.from(this.staleSensorMap.values()).every(
+        (info) => info.isStale
+      );
+
+      if (allStale) {
+        this.log('Fail-safe: All sensors are stale, setting occupancy to UNCERTAIN');
+
+        // Set tri-state to UNKNOWN
+        this.occupancyState = OccupancyState.UNKNOWN;
+
+        // Note: Do NOT change lastStableOccupancy
+        // This preserves the last known stable state for the boolean output
+        // as per spec: during UNKNOWN periods, boolean retains last stable value
+
+        // Stop timers - sensors are unreliable
+        this.stopEnterTimer();
+        this.stopClearTimer();
+
+        // Update output capabilities
+        await this.updateOccupancyOutput();
+
+        this.log(`Fail-safe applied: tri-state=${this.occupancyState}, stable=${this.lastStableOccupancy} (preserved)`);
+      }
+    } catch (error) {
+      this.error('Failed to evaluate stale fail-safe:', error);
+      // Don't throw - fail-safe evaluation is non-critical background operation
     }
   }
 }
