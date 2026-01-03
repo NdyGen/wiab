@@ -202,6 +202,32 @@ Be thorough, specific, and practical. Consider the Homey app ecosystem constrain
 }
 
 /**
+ * Extracts the recommendation decision from the evaluation
+ */
+function extractRecommendation(evaluation) {
+  // Match format: **Decision:** [✅ APPROVE / ⚠️ APPROVE WITH CONDITIONS / ❌ REJECT / 🤔 NEEDS MORE INFO]
+  const decisionMatch = evaluation.match(/\*\*Decision:\*\*\s*\[?[✅⚠️❌🤔]?\s*([^\]\/\n]+)/i);
+  if (!decisionMatch) {
+    return null;
+  }
+
+  const decision = decisionMatch[1].trim().toUpperCase();
+
+  // Map decision to label
+  if (decision.includes('APPROVE WITH CONDITION')) {
+    return 'approve-with-conditions';
+  } else if (decision === 'APPROVE' || decision.includes('✅ APPROVE')) {
+    return 'approved';
+  } else if (decision.includes('REJECT')) {
+    return 'rejected';
+  } else if (decision.includes('NEEDS MORE INFO') || decision.includes('NEED MORE INFO')) {
+    return 'needs-info';
+  }
+
+  return null;
+}
+
+/**
  * Extracts suggested labels from the evaluation
  */
 function extractLabels(evaluation) {
@@ -237,12 +263,22 @@ async function main() {
     await postComment(evaluation);
     console.log('Comment posted successfully');
 
-    // Extract and add suggested labels
+    // Extract recommendation and suggested labels
+    const recommendationLabel = extractRecommendation(evaluation);
     const suggestedLabels = extractLabels(evaluation);
-    if (suggestedLabels.length > 0) {
-      console.log('Adding labels:', suggestedLabels);
+
+    // Combine recommendation label with suggested labels (avoiding duplicates)
+    const allLabels = recommendationLabel
+      ? [recommendationLabel, ...suggestedLabels.filter(l => l !== recommendationLabel)]
+      : suggestedLabels;
+
+    if (allLabels.length > 0) {
+      console.log('Adding labels:', allLabels);
+      if (recommendationLabel) {
+        console.log(`Recommendation label: ${recommendationLabel}`);
+      }
       try {
-        await addLabels(suggestedLabels);
+        await addLabels(allLabels);
         console.log('Labels added successfully');
       } catch (labelError) {
         console.warn('Could not add labels (they may not exist):', labelError.message);
