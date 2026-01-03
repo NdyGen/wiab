@@ -70,5 +70,8 @@
   },
   "1.2.12": {
     "en": "zone seal fail safe added for stale sensors"
+  },
+  "1.2.13": {
+    "en": "improved wiab stale sensor handling"
   }
 }
