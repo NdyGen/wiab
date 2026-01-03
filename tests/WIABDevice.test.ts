@@ -392,4 +392,213 @@ describe('WIABDevice - Data Quality Monitoring', () => {
       );
     });
   });
+
+  describe('Stale Sensor Fail-Safe Logic', () => {
+    beforeEach(() => {
+      // Mock occupancy state and timer methods
+      (device as any).occupancyState = 'OCCUPIED';
+      (device as any).lastStableOccupancy = 'OCCUPIED';
+      (device as any).isPaused = false;
+      (device as any).stopEnterTimer = jest.fn();
+      (device as any).stopClearTimer = jest.fn();
+      (device as any).updateOccupancyOutput = jest.fn().mockResolvedValue(undefined);
+    });
+
+    it('should set occupancy to UNCERTAIN when all sensors are stale', async () => {
+      // Arrange - All sensors stale
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now() - 40 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      });
+      (device as any).staleSensorMap.set('door-1', {
+        lastUpdated: Date.now() - 70 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 60 * 60 * 1000,
+      });
+
+      // Act
+      await (device as any).evaluateStaleFailSafe();
+
+      // Assert
+      expect((device as any).occupancyState).toBe('UNKNOWN');
+      expect((device as any).lastStableOccupancy).toBe('OCCUPIED'); // Preserved
+      expect((device as any).stopEnterTimer).toHaveBeenCalled();
+      expect((device as any).stopClearTimer).toHaveBeenCalled();
+      expect((device as any).updateOccupancyOutput).toHaveBeenCalled();
+      expect(device.log).toHaveBeenCalledWith(
+        'Fail-safe: All sensors are stale, setting occupancy to UNCERTAIN'
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Fail-safe applied: tri-state=UNKNOWN, stable=OCCUPIED (preserved)')
+      );
+    });
+
+    it('should not change state when some sensors are still fresh', async () => {
+      // Arrange - Only one sensor stale
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now() - 40 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      });
+      (device as any).staleSensorMap.set('door-1', {
+        lastUpdated: Date.now() - 10 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 60 * 60 * 1000,
+      });
+
+      const initialState = (device as any).occupancyState;
+
+      // Act
+      await (device as any).evaluateStaleFailSafe();
+
+      // Assert - State should not change
+      expect((device as any).occupancyState).toBe(initialState);
+      expect((device as any).stopEnterTimer).not.toHaveBeenCalled();
+      expect((device as any).updateOccupancyOutput).not.toHaveBeenCalled();
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Fail-safe')
+      );
+    });
+
+    it('should not apply fail-safe when device is paused', async () => {
+      // Arrange - All sensors stale but device is paused
+      (device as any).isPaused = true;
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now() - 40 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      });
+
+      const initialState = (device as any).occupancyState;
+
+      // Act
+      await (device as any).evaluateStaleFailSafe();
+
+      // Assert - State should not change
+      expect((device as any).occupancyState).toBe(initialState);
+      expect((device as any).updateOccupancyOutput).not.toHaveBeenCalled();
+    });
+
+    it('should preserve stable state from UNOCCUPIED', async () => {
+      // Arrange - Device was UNOCCUPIED, all sensors stale
+      (device as any).occupancyState = 'UNOCCUPIED';
+      (device as any).lastStableOccupancy = 'UNOCCUPIED';
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now() - 40 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      });
+
+      // Act
+      await (device as any).evaluateStaleFailSafe();
+
+      // Assert - Tri-state changes, stable state preserved
+      expect((device as any).occupancyState).toBe('UNKNOWN');
+      expect((device as any).lastStableOccupancy).toBe('UNOCCUPIED');
+    });
+
+    it('should handle fail-safe evaluation errors gracefully', async () => {
+      // Arrange - All sensors stale, but updateOccupancyOutput fails
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: Date.now() - 40 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      });
+      (device as any).updateOccupancyOutput = jest.fn().mockRejectedValue(
+        new Error('Update failed')
+      );
+
+      // Act - Should not throw
+      await (device as any).evaluateStaleFailSafe();
+
+      // Assert
+      expect(device.error).toHaveBeenCalledWith(
+        'Failed to evaluate stale fail-safe:',
+        expect.any(Error)
+      );
+    });
+  });
+
+  describe('Integration: Stale Detection with Fail-Safe', () => {
+    beforeEach(() => {
+      // Setup full device state for integration test
+      (device as any).occupancyState = 'OCCUPIED';
+      (device as any).lastStableOccupancy = 'OCCUPIED';
+      (device as any).isPaused = false;
+      (device as any).stopEnterTimer = jest.fn();
+      (device as any).stopClearTimer = jest.fn();
+      (device as any).updateOccupancyOutput = jest.fn().mockResolvedValue(undefined);
+      (device as any).checkAndUpdateDataStaleCapability = jest.fn();
+    });
+
+    it('should trigger fail-safe when sensors become stale via checkForStaleSensors', async () => {
+      // Arrange - Sensors recently updated
+      const now = Date.now();
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: now - 31 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      });
+      (device as any).staleSensorMap.set('door-1', {
+        lastUpdated: now - 61 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 60 * 60 * 1000,
+      });
+
+      jest.setSystemTime(now);
+
+      // Act - Check for stale sensors
+      (device as any).checkForStaleSensors();
+
+      // Wait for async evaluateStaleFailSafe to complete
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Assert - Both sensors became stale
+      expect((device as any).staleSensorMap.get('pir-1').isStale).toBe(true);
+      expect((device as any).staleSensorMap.get('door-1').isStale).toBe(true);
+
+      // Fail-safe was triggered
+      expect((device as any).occupancyState).toBe('UNKNOWN');
+      expect((device as any).updateOccupancyOutput).toHaveBeenCalled();
+      expect(device.log).toHaveBeenCalledWith(
+        'Fail-safe: All sensors are stale, setting occupancy to UNCERTAIN'
+      );
+    });
+
+    it('should not trigger fail-safe when only some sensors become stale', async () => {
+      // Arrange - Only PIR sensor exceeds timeout
+      const now = Date.now();
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: now - 31 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      });
+      (device as any).staleSensorMap.set('door-1', {
+        lastUpdated: now - 45 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 60 * 60 * 1000,
+      });
+
+      jest.setSystemTime(now);
+
+      const initialState = (device as any).occupancyState;
+
+      // Act
+      (device as any).checkForStaleSensors();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Assert - PIR stale, door fresh
+      expect((device as any).staleSensorMap.get('pir-1').isStale).toBe(true);
+      expect((device as any).staleSensorMap.get('door-1').isStale).toBe(false);
+
+      // Fail-safe NOT triggered (door still fresh)
+      expect((device as any).occupancyState).toBe(initialState);
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Fail-safe')
+      );
+    });
+  });
 });
