@@ -454,7 +454,7 @@ for (const sensor of this.sensors) {
 **CRITICAL:** When sensors become stale, treat as unsafe state:
 
 - **Zone Seal:** Stale sensors with last value "open" → zone is LEAKY (not sealed)
-- **WIAB:** All stale sensors → occupancy UNCERTAIN
+- **WIAB:** All stale sensors → tri-state UNKNOWN, boolean UNOCCUPIED (fail-safe)
 - **Circuit Breaker:** Stale devices → warning triggered
 
 **Rationale:** Unknown state should trigger alerts rather than false sense of security.
