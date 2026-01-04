@@ -1414,14 +1414,16 @@ class WIABDevice extends Homey.Device {
       );
 
       if (allStale) {
-        this.log('Fail-safe: All sensors are stale, setting occupancy to UNCERTAIN');
+        this.log('Fail-safe: All sensors are stale, setting tri-state=UNKNOWN, boolean=UNOCCUPIED');
 
-        // Set tri-state to UNKNOWN
+        // Set tri-state to UNKNOWN (sensors unreliable)
         this.occupancyState = OccupancyState.UNKNOWN;
 
-        // Note: Do NOT change lastStableOccupancy
-        // This preserves the last known stable state for the boolean output
-        // as per spec: during UNKNOWN periods, boolean retains last stable value
+        // Set stable state to UNOCCUPIED (fail-safe)
+        // Rationale: When sensors are stale/unreliable, we cannot confirm occupancy.
+        // Fail-safe principle: unknown state defaults to safer state (UNOCCUPIED).
+        // This prevents indefinite OCCUPIED state when sensors stop reporting.
+        this.lastStableOccupancy = StableOccupancyState.UNOCCUPIED;
 
         // Stop timers - sensors are unreliable
         this.stopEnterTimer();
@@ -1430,7 +1432,7 @@ class WIABDevice extends Homey.Device {
         // Update output capabilities
         await this.updateOccupancyOutput();
 
-        this.log(`Fail-safe applied: tri-state=${this.occupancyState}, stable=${this.lastStableOccupancy} (preserved)`);
+        this.log(`Fail-safe applied: tri-state=${this.occupancyState}, boolean=${this.lastStableOccupancy}`);
       }
     } catch (error) {
       this.error('Failed to evaluate stale fail-safe:', error);

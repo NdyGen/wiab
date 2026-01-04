@@ -422,15 +422,15 @@ describe('WIABDevice - Data Quality Monitoring', () => {
 
       // Assert
       expect((device as any).occupancyState).toBe('UNKNOWN');
-      expect((device as any).lastStableOccupancy).toBe('OCCUPIED'); // Preserved
+      expect((device as any).lastStableOccupancy).toBe('UNOCCUPIED'); // Fail-safe: default to UNOCCUPIED
       expect((device as any).stopEnterTimer).toHaveBeenCalled();
       expect((device as any).stopClearTimer).toHaveBeenCalled();
       expect((device as any).updateOccupancyOutput).toHaveBeenCalled();
       expect(device.log).toHaveBeenCalledWith(
-        'Fail-safe: All sensors are stale, setting occupancy to UNCERTAIN'
+        'Fail-safe: All sensors are stale, setting tri-state=UNKNOWN, boolean=UNOCCUPIED'
       );
       expect(device.log).toHaveBeenCalledWith(
-        expect.stringContaining('Fail-safe applied: tri-state=UNKNOWN, stable=OCCUPIED (preserved)')
+        expect.stringContaining('Fail-safe applied: tri-state=UNKNOWN, boolean=UNOCCUPIED')
       );
     });
 
@@ -561,9 +561,10 @@ describe('WIABDevice - Data Quality Monitoring', () => {
 
       // Fail-safe was triggered
       expect((device as any).occupancyState).toBe('UNKNOWN');
+      expect((device as any).lastStableOccupancy).toBe('UNOCCUPIED');
       expect((device as any).updateOccupancyOutput).toHaveBeenCalled();
       expect(device.log).toHaveBeenCalledWith(
-        'Fail-safe: All sensors are stale, setting occupancy to UNCERTAIN'
+        'Fail-safe: All sensors are stale, setting tri-state=UNKNOWN, boolean=UNOCCUPIED'
       );
     });
 
@@ -598,6 +599,49 @@ describe('WIABDevice - Data Quality Monitoring', () => {
       expect((device as any).occupancyState).toBe(initialState);
       expect(device.log).not.toHaveBeenCalledWith(
         expect.stringContaining('Fail-safe')
+      );
+    });
+
+    it('should set boolean output to UNOCCUPIED when all sensors become stale from OCCUPIED state', async () => {
+      // Arrange - Device is OCCUPIED before sensors become stale
+      (device as any).occupancyState = 'OCCUPIED';
+      (device as any).lastStableOccupancy = 'OCCUPIED';
+
+      // Sensors recently updated, but both exceeded timeout
+      const now = Date.now();
+      (device as any).staleSensorMap.set('pir-1', {
+        lastUpdated: now - 31 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      });
+      (device as any).staleSensorMap.set('door-1', {
+        lastUpdated: now - 61 * 60 * 1000,
+        isStale: false,
+        timeoutMs: 60 * 60 * 1000,
+      });
+
+      jest.setSystemTime(now);
+
+      // Act - Sensors become stale via checkForStaleSensors
+      (device as any).checkForStaleSensors();
+
+      // Wait for async evaluateStaleFailSafe to complete
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // Assert - Fail-safe triggered
+      expect((device as any).occupancyState).toBe('UNKNOWN');
+      expect((device as any).lastStableOccupancy).toBe('UNOCCUPIED');
+
+      // Verify updateOccupancyOutput was called (which sets alarm_occupancy based on lastStableOccupancy)
+      expect((device as any).updateOccupancyOutput).toHaveBeenCalled();
+
+      // Verify logs show fail-safe behavior
+      expect(device.log).toHaveBeenCalledWith(
+        'Fail-safe: All sensors are stale, setting tri-state=UNKNOWN, boolean=UNOCCUPIED'
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Fail-safe applied: tri-state=UNKNOWN, boolean=UNOCCUPIED')
       );
     });
   });
