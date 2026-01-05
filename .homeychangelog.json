@@ -76,5 +76,8 @@
   },
   "1.2.14": {
     "en": "Fixed WIAB occupancy fail-safe: when all sensors become stale, device now correctly sets occupancy to UNOCCUPIED instead of preserving the previous OCCUPIED state. This prevents                +lights/HVAC running indefinitely when sensors stop reporting."
+  },
+  "1.2.15": {
+    "en": "zone seal fail safe improvements"
   }
 }
