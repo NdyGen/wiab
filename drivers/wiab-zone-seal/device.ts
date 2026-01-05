@@ -640,9 +640,9 @@ class WIABZoneSealDevice extends BaseWIABDevice {
    *
    * If ignoreStaleSensors setting is enabled, skips fail-safe logic entirely.
    *
-   * Fail-safe priority order (when enabled):
-   * 1. If any stale sensor's last value was "open" → treat zone as leaky
-   * 2. If all sensors are stale → treat zone as leaky
+   * Fail-safe logic (when enabled):
+   * - If any stale sensor's last value was "open" → treat zone as leaky
+   * - Stale sensors with last value "closed" are trusted (contact sensors maintain state)
    *
    * @private
    * @returns {Promise<boolean>} True if fail-safe was triggered
@@ -688,20 +688,8 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       return true;
     }
 
-    // PRIORITY 2: Check if all sensors are stale
-    const nonStaleSensorCount = this.contactSensors.filter((sensor) => {
-      const info = this.staleSensorMap.get(sensor.deviceId);
-      return !info || !info.isStale;
-    }).length;
-
-    if (nonStaleSensorCount === 0) {
-      this.log('All sensors are stale, treating zone as leaky (fail-safe)');
-      const previousState = this.engine.getCurrentState();
-      const transition = this.engine.handleAnySensorOpened();
-      await this.processStateTransition(transition, previousState, 'stale_detected');
-      return true;
-    }
-
+    // No fail-safe triggered - proceed with normal evaluation
+    // Stale sensors with last value "closed" are trusted
     return false;
   }
 

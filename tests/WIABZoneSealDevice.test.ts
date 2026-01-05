@@ -512,16 +512,16 @@ describe('WIABZoneSealDevice - Integration', () => {
       expect(hasStale).toBe(false);
     });
 
-    it('should treat zone as leaky when all sensors are stale (fail-safe)', async () => {
-      // Test proving: When all sensors stale (while closed), fail-safe triggers LEAKY
+    it('should trust stale sensors with last value closed (differentiated fail-safe)', async () => {
+      // Issue #147: Contact sensors maintain state - static "closed" sensors should be trusted
 
-      // Arrange - Setup device with 2 sensors
+      // Arrange - Setup device with 2 sensors (both closed)
       await setupDeviceWithTwoSensors(30);
 
       // Verify zone starts SEALED (all sensors closed)
       expect((device as any).engine.getCurrentState()).toBe('sealed');
 
-      // Act - Mark both sensors as stale
+      // Act - Mark both sensors as stale (last value: closed)
       const staleSensorMap = (device as any).staleSensorMap;
       staleSensorMap.get('sensor1').isStale = true;
       staleSensorMap.get('sensor2').isStale = true;
@@ -532,12 +532,12 @@ describe('WIABZoneSealDevice - Integration', () => {
       await (device as any).handleSensorUpdate();
       await Promise.resolve();
 
-      // Assert - Zone should transition to LEAKY
-      expect((device as any).engine.getCurrentState()).toBe('leaky');
+      // Assert - Zone should remain SEALED (trust closed state)
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
 
-      // Verify logs show "All sensors are stale"
-      expect(device.log).toHaveBeenCalledWith(
-        'All sensors are stale, treating zone as leaky (fail-safe)'
+      // Verify no fail-safe triggered for stale "closed" sensors
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('treating zone as leaky')
       );
     });
 
@@ -1121,8 +1121,8 @@ describe('WIABZoneSealDevice - Integration', () => {
       expect(device.setCapabilityValue).not.toHaveBeenCalledWith('alarm_zone_leaky', true);
     });
 
-    it('should apply fail-safe when ignoreStaleSensors=false', async () => {
-      // When ignoreStaleSensors is disabled, should apply fail-safe logic
+    it('should trust stale closed sensors when ignoreStaleSensors=false (differentiated)', async () => {
+      // Issue #147: Differentiated fail-safe logic trusts stale "closed" sensors
 
       // Arrange - Setup device with 2 sensors, ignoreStaleSensors disabled
       await setupDeviceWithTwoSensorsIgnoreSetting(30, false);
@@ -1130,7 +1130,7 @@ describe('WIABZoneSealDevice - Integration', () => {
       // Verify initial state is SEALED
       expect((device as any).engine.getCurrentState()).toBe('sealed');
 
-      // Act - Mark all sensors as stale (but they're closed)
+      // Act - Mark all sensors as stale (last value: closed)
       const staleSensorMap = (device as any).staleSensorMap;
       staleSensorMap.get('sensor1').isStale = true;
       staleSensorMap.get('sensor2').isStale = true;
@@ -1140,43 +1140,45 @@ describe('WIABZoneSealDevice - Integration', () => {
       // Trigger handleSensorUpdate()
       await (device as any).handleSensorUpdate();
       await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
 
-      // Assert - Zone should transition to LEAKY (fail-safe applied)
-      expect((device as any).engine.getCurrentState()).toBe('leaky');
+      // Assert - Zone should remain SEALED (trust closed state)
+      expect((device as any).engine.getCurrentState()).toBe('sealed');
 
-      // Verify logs show fail-safe triggered
-      expect(device.log).toHaveBeenCalledWith(
-        'All sensors are stale, treating zone as leaky (fail-safe)'
+      // Verify no fail-safe triggered for stale "closed" sensors
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('treating zone as leaky')
       );
 
-      // Should have transitioned to leaky
-      expect(device.setCapabilityValue).toHaveBeenCalledWith('alarm_zone_leaky', true);
+      // Should NOT have transitioned to leaky
+      expect(device.setCapabilityValue).not.toHaveBeenCalledWith('alarm_zone_leaky', true);
     });
 
     it('should update behavior when ignoreStaleSensors setting is toggled', async () => {
-      // Test that changing the setting affects fail-safe behavior
+      // Issue #147: Test that changing the setting affects differentiated fail-safe behavior
 
       // Arrange - Setup device with ignoreStaleSensors=false initially
       await setupDeviceWithTwoSensorsIgnoreSetting(30, false);
 
-      // Make sensors stale while closed
+      // Open sensor1, then make it stale (last value: open)
+      const callback = capabilityCallbacks.get('sensor1')!;
+      callback(true);  // Open
+      await Promise.resolve();
+
+      expect((device as any).engine.getCurrentState()).toBe('leaky');
+
+      // Make sensor1 stale with last value "open"
       const staleSensorMap = (device as any).staleSensorMap;
       staleSensorMap.get('sensor1').isStale = true;
-      staleSensorMap.get('sensor2').isStale = true;
 
       jest.clearAllMocks();
 
-      // Trigger evaluation - should apply fail-safe
+      // Trigger evaluation - should apply differentiated fail-safe (stale open sensor)
       await (device as any).handleSensorUpdate();
       await Promise.resolve();
 
       expect((device as any).engine.getCurrentState()).toBe('leaky');
       expect(device.log).toHaveBeenCalledWith(
-        'All sensors are stale, treating zone as leaky (fail-safe)'
+        expect.stringContaining('stale sensor(s) were open')
       );
 
       jest.clearAllMocks();

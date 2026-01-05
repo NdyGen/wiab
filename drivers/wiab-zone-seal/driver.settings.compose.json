@@ -83,11 +83,11 @@
           "sv": "Föråldrad kontakt timeout (minuter)"
         },
         "hint": {
-          "en": "Mark contact sensors as stale if they report the same state for longer than this. Stale sensors are excluded from seal calculations.",
-          "nl": "Markeer contactsensoren als verlopen als ze langer dan dit dezelfde status rapporteren. Verlopen sensoren worden uitgesloten van afdichtingsberekeningen.",
-          "de": "Markieren Sie Kontaktsensoren als veraltet, wenn sie länger als dies denselben Zustand melden. Veraltete Sensoren werden von Versiegelungsberechnungen ausgeschlossen.",
-          "no": "Merk kontaktsensorer som foreldede hvis de rapporterer samme tilstand lenger enn dette. Foreldede sensorer er ekskludert fra forseglingskalkuleringer.",
-          "sv": "Markera kontaktsensorer som föråldrade om de rapporterar samma tillstånd längre än detta. Föråldrade sensorer är uteslutna från förseglingskalkuleringer."
+          "en": "Mark contact sensors as stale if they don't report for this long. Fail-safe: stale sensors with last value 'open' keep zone leaky; stale sensors with last value 'closed' are trusted.",
+          "nl": "Markeer contactsensoren als verlopen als ze niet rapporteren gedurende deze tijd. Veilig-faal: verlopen sensoren met laatste waarde 'open' houden zone lek; verlopen sensoren met laatste waarde 'gesloten' worden vertrouwd.",
+          "de": "Markieren Sie Kontaktsensoren als veraltet, wenn sie für diese Zeit nicht melden. Ausfallsicher: veraltete Sensoren mit letztem Wert 'offen' halten Zone undicht; veraltete Sensoren mit letztem Wert 'geschlossen' sind vertrauenswürdig.",
+          "no": "Merk kontaktsensorer som foreldede hvis de ikke rapporterer i denne tiden. Feilsikker: foreldede sensorer med siste verdi 'åpen' holder sonen lekkende; foreldede sensorer med siste verdi 'lukket' er pålitelige.",
+          "sv": "Markera kontaktsensorer som föråldrade om de inte rapporterar under denna tid. Felsäker: föråldrade sensorer med sista värdet 'öppen' håller zonen läckande; föråldrade sensorer med sista värdet 'stängd' är pålitliga."
         },
         "value": 30,
         "min": 5,
