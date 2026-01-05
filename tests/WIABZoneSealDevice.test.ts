@@ -1353,6 +1353,22 @@ describe('WIABZoneSealDevice - Integration', () => {
       expect(device.log).toHaveBeenCalledWith('Delay settings changed, updating engine configuration');
       expect(device.log).toHaveBeenCalledWith(expect.stringContaining('Updated delays'));
     });
+
+    it('should trigger state re-evaluation when ignoreStaleSensors setting changes', async () => {
+      // Arrange - spy on handleSensorUpdate
+      const handleSensorUpdateSpy = jest.spyOn(device as any, 'handleSensorUpdate');
+
+      // Act
+      await device.onSettings({
+        oldSettings: { ignoreStaleSensors: false },
+        newSettings: { ignoreStaleSensors: true },
+        changedKeys: ['ignoreStaleSensors'],
+      });
+
+      // Assert
+      expect(device.log).toHaveBeenCalledWith('Stale sensor ignore setting changed, re-evaluating zone state');
+      expect(handleSensorUpdateSpy).toHaveBeenCalled();
+    });
   });
 
   describe('flow card handlers', () => {
