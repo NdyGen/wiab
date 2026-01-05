@@ -260,6 +260,9 @@ class WIABZoneSealDevice extends BaseWIABDevice {
       // Check if stale timeout changed
       const staleTimeoutChanged = event.changedKeys.includes('staleContactMinutes');
 
+      // Check if stale sensor ignore setting changed
+      const ignoreStaleChanged = event.changedKeys.includes('ignoreStaleSensors');
+
       if (sensorSettingsChanged || staleTimeoutChanged) {
         this.log('Sensor configuration or stale timeout changed, reinitializing monitoring');
 
@@ -300,6 +303,11 @@ class WIABZoneSealDevice extends BaseWIABDevice {
 
         this.engine.updateConfig({ openDelaySeconds, closeDelaySeconds });
         this.log(`Updated delays: open=${openDelaySeconds}s, close=${closeDelaySeconds}s`);
+      } else if (ignoreStaleChanged) {
+        this.log('Stale sensor ignore setting changed, re-evaluating zone state');
+
+        // Trigger immediate state re-evaluation with new fail-safe rules
+        await this.handleSensorUpdate();
       }
     } catch (error) {
       this.errorReporter!.reportError({
