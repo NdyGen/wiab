@@ -1,7 +1,5 @@
 # Wasp in a Box (WIAB)
 
-A Homey app that provides intelligent room occupancy and state management through four specialized device types. The app combines physical sensors to create smart virtual devices that understand room usage patterns, prevent false triggers, and enable sophisticated home automation scenarios.
-
 ## Device Types
 
 WIAB offers four device types, each solving different automation challenges:
