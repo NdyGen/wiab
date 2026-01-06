@@ -79,5 +79,8 @@
   },
   "1.2.15": {
     "en": "zone seal fail safe improvements"
+  },
+  "1.2.16": {
+    "en": "certification requirement fix"
   }
 }
