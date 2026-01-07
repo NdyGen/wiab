@@ -510,14 +510,8 @@ class WIABDevice extends Homey.Device {
     try {
       // CRITICAL: Check if sensor is stale BEFORE processing event
       // Fail-safe: Ignore events from stale sensors to prevent false state changes
-      const sensorInfo = this.staleSensorMap.get(doorId);
-      if (sensorInfo && sensorInfo.isStale) {
-        const staleDuration = Math.round((Date.now() - sensorInfo.lastUpdated) / 60000);
-        const doorState = doorValue ? 'open' : 'closed';
-        this.log(`Ignoring event from stale door sensor: ${doorId} reporting ${doorState} (stale for ${staleDuration}min)`);
-
-        // Update tracking but don't process the door event
-        this.updateStaleSensorTracking(doorId);
+      const doorState = doorValue ? 'open' : 'closed';
+      if (this.shouldIgnoreStaleSensor(doorId, `reporting ${doorState}`)) {
         return;
       }
 
@@ -618,13 +612,7 @@ class WIABDevice extends Homey.Device {
     try {
       // CRITICAL: Check if sensor is stale BEFORE processing event
       // Fail-safe: Ignore motion from stale sensors to prevent false activations
-      const sensorInfo = this.staleSensorMap.get(pirId);
-      if (sensorInfo && sensorInfo.isStale) {
-        const staleDuration = Math.round((Date.now() - sensorInfo.lastUpdated) / 60000);
-        this.log(`Ignoring motion from stale PIR sensor: ${pirId} (stale for ${staleDuration}min)`);
-
-        // Update tracking but don't process the motion event
-        this.updateStaleSensorTracking(pirId);
+      if (this.shouldIgnoreStaleSensor(pirId, 'reporting motion')) {
         return;
       }
 
@@ -708,13 +696,7 @@ class WIABDevice extends Homey.Device {
     try {
       // CRITICAL: Check if sensor is stale BEFORE processing event
       // Fail-safe: Ignore events from stale sensors
-      const sensorInfo = this.staleSensorMap.get(pirId);
-      if (sensorInfo && sensorInfo.isStale) {
-        const staleDuration = Math.round((Date.now() - sensorInfo.lastUpdated) / 60000);
-        this.log(`Ignoring cleared event from stale PIR sensor: ${pirId} (stale for ${staleDuration}min)`);
-
-        // Update tracking but don't process the cleared event
-        this.updateStaleSensorTracking(pirId);
+      if (this.shouldIgnoreStaleSensor(pirId, 'reporting motion cleared')) {
         return;
       }
 
@@ -1284,6 +1266,31 @@ class WIABDevice extends Homey.Device {
       this.error('Failed to parse sensor settings JSON:', error);
       return [];
     }
+  }
+
+  /**
+   * Checks if a sensor is stale and should have its events ignored.
+   *
+   * Implements fail-safe behavior: events from stale sensors are logged and ignored
+   * to prevent false state changes. The sensor tracking is still updated (marks sensor
+   * as fresh) so future events will be processed normally once staleness clears.
+   *
+   * @private
+   * @param sensorId - The device ID of the sensor
+   * @param eventDescription - Human-readable event description for logging
+   * @returns {boolean} True if the sensor is stale and event should be ignored
+   */
+  private shouldIgnoreStaleSensor(sensorId: string, eventDescription: string): boolean {
+    const sensorInfo = this.staleSensorMap.get(sensorId);
+    if (sensorInfo && sensorInfo.isStale) {
+      const staleDuration = Math.round((Date.now() - sensorInfo.lastUpdated) / 60000);
+      this.log(`Ignoring event from stale sensor: ${sensorId} ${eventDescription} (stale for ${staleDuration}min)`);
+
+      // Update tracking (marks sensor fresh) but return true to signal event should be ignored
+      this.updateStaleSensorTracking(sensorId);
+      return true;
+    }
+    return false;
   }
 
   /**

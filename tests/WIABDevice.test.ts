@@ -674,7 +674,7 @@ describe('WIABDevice - Data Quality Monitoring', () => {
 
       // Verify log shows motion was ignored
       expect(device.log).toHaveBeenCalledWith(
-        expect.stringContaining('Ignoring motion from stale PIR sensor: pir-1')
+        expect.stringContaining('Ignoring event from stale sensor: pir-1 reporting motion')
       );
       expect(device.log).toHaveBeenCalledWith(
         expect.stringContaining('stale for 31min')
@@ -714,7 +714,7 @@ describe('WIABDevice - Data Quality Monitoring', () => {
 
       // Verify log shows event was ignored
       expect(device.log).toHaveBeenCalledWith(
-        expect.stringContaining('Ignoring event from stale door sensor: door-1 reporting open')
+        expect.stringContaining('Ignoring event from stale sensor: door-1 reporting open')
       );
       expect(device.log).toHaveBeenCalledWith(
         expect.stringContaining('stale for 61min')
@@ -747,7 +747,7 @@ describe('WIABDevice - Data Quality Monitoring', () => {
 
       // Verify log shows event was ignored
       expect(device.log).toHaveBeenCalledWith(
-        expect.stringContaining('Ignoring cleared event from stale PIR sensor: pir-1')
+        expect.stringContaining('Ignoring event from stale sensor: pir-1 reporting motion cleared')
       );
     });
 
