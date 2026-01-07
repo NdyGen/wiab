@@ -508,6 +508,19 @@ class WIABDevice extends Homey.Device {
     }
 
     try {
+      // CRITICAL: Check if sensor is stale BEFORE processing event
+      // Fail-safe: Ignore events from stale sensors to prevent false state changes
+      const sensorInfo = this.staleSensorMap.get(doorId);
+      if (sensorInfo && sensorInfo.isStale) {
+        const staleDuration = Math.round((Date.now() - sensorInfo.lastUpdated) / 60000);
+        const doorState = doorValue ? 'open' : 'closed';
+        this.log(`Ignoring event from stale door sensor: ${doorId} reporting ${doorState} (stale for ${staleDuration}min)`);
+
+        // Update tracking but don't process the door event
+        this.updateStaleSensorTracking(doorId);
+        return;
+      }
+
       // Update stale sensor tracking
       this.updateStaleSensorTracking(doorId);
 
@@ -603,6 +616,18 @@ class WIABDevice extends Homey.Device {
     }
 
     try {
+      // CRITICAL: Check if sensor is stale BEFORE processing event
+      // Fail-safe: Ignore motion from stale sensors to prevent false activations
+      const sensorInfo = this.staleSensorMap.get(pirId);
+      if (sensorInfo && sensorInfo.isStale) {
+        const staleDuration = Math.round((Date.now() - sensorInfo.lastUpdated) / 60000);
+        this.log(`Ignoring motion from stale PIR sensor: ${pirId} (stale for ${staleDuration}min)`);
+
+        // Update tracking but don't process the motion event
+        this.updateStaleSensorTracking(pirId);
+        return;
+      }
+
       // Update stale sensor tracking
       this.updateStaleSensorTracking(pirId);
 
@@ -681,6 +706,18 @@ class WIABDevice extends Homey.Device {
     }
 
     try {
+      // CRITICAL: Check if sensor is stale BEFORE processing event
+      // Fail-safe: Ignore events from stale sensors
+      const sensorInfo = this.staleSensorMap.get(pirId);
+      if (sensorInfo && sensorInfo.isStale) {
+        const staleDuration = Math.round((Date.now() - sensorInfo.lastUpdated) / 60000);
+        this.log(`Ignoring cleared event from stale PIR sensor: ${pirId} (stale for ${staleDuration}min)`);
+
+        // Update tracking but don't process the cleared event
+        this.updateStaleSensorTracking(pirId);
+        return;
+      }
+
       // Update stale sensor tracking
       this.updateStaleSensorTracking(pirId);
 

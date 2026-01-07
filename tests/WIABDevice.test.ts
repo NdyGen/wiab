@@ -645,4 +645,185 @@ describe('WIABDevice - Data Quality Monitoring', () => {
       );
     });
   });
+
+  describe('Stale Sensor Event Handling', () => {
+    it('should ignore motion from stale PIR sensor', async () => {
+      // Arrange - Setup device with stale PIR sensor
+      (device as any).isPaused = false;
+      (device as any).occupancyState = 'UNOCCUPIED';
+      (device as any).lastStableOccupancy = 'UNOCCUPIED';
+      (device as any).updateOccupancyOutput = jest.fn().mockResolvedValue(undefined);
+
+      // PIR sensor is stale (stuck reporting motion for 31 minutes)
+      const stalePirInfo = {
+        lastUpdated: Date.now() - 31 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      };
+      (device as any).staleSensorMap.set('pir-1', stalePirInfo);
+
+      jest.clearAllMocks();
+
+      // Act - Stale PIR reports motion
+      await (device as any).handlePirMotion('pir-1');
+
+      // Assert - Motion is ignored, occupancy remains UNOCCUPIED
+      expect((device as any).occupancyState).toBe('UNOCCUPIED');
+      expect((device as any).lastStableOccupancy).toBe('UNOCCUPIED');
+      expect((device as any).updateOccupancyOutput).not.toHaveBeenCalled();
+
+      // Verify log shows motion was ignored
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Ignoring motion from stale PIR sensor: pir-1')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('stale for 31min')
+      );
+
+      // Verify sensor tracking was updated (marked fresh now that it reported)
+      expect(device.log).toHaveBeenCalledWith(
+        'Sensor became fresh: pir-1 (was stale, now reporting again)'
+      );
+    });
+
+    it('should ignore door event from stale door sensor', async () => {
+      // Arrange - Setup device with stale door sensor
+      (device as any).isPaused = false;
+      (device as any).occupancyState = 'OCCUPIED';
+      (device as any).lastStableOccupancy = 'OCCUPIED';
+      (device as any).doorStates = new Map();
+      (device as any).updateOccupancyOutput = jest.fn().mockResolvedValue(undefined);
+
+      // Door sensor is stale
+      const staleDoorInfo = {
+        lastUpdated: Date.now() - 61 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 60 * 60 * 1000,
+      };
+      (device as any).staleSensorMap.set('door-1', staleDoorInfo);
+
+      jest.clearAllMocks();
+
+      // Act - Stale door reports "open"
+      await (device as any).handleDoorEvent('door-1', true);
+
+      // Assert - Door event is ignored, state remains OCCUPIED
+      expect((device as any).occupancyState).toBe('OCCUPIED');
+      expect((device as any).lastStableOccupancy).toBe('OCCUPIED');
+      expect((device as any).updateOccupancyOutput).not.toHaveBeenCalled();
+
+      // Verify log shows event was ignored
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Ignoring event from stale door sensor: door-1 reporting open')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('stale for 61min')
+      );
+    });
+
+    it('should ignore PIR cleared event from stale sensor', async () => {
+      // Arrange - Setup device waiting for PIR falling edge
+      (device as any).isPaused = false;
+      (device as any).waitingForPirFallingEdge = true;
+      (device as any).lastDoorEventTimestamp = Date.now();
+      (device as any).startEnterTimer = jest.fn();
+
+      // PIR sensor is stale
+      const stalePirInfo = {
+        lastUpdated: Date.now() - 31 * 60 * 1000,
+        isStale: true,
+        timeoutMs: 30 * 60 * 1000,
+      };
+      (device as any).staleSensorMap.set('pir-1', stalePirInfo);
+
+      jest.clearAllMocks();
+
+      // Act - Stale PIR reports "cleared"
+      await (device as any).handlePirCleared('pir-1');
+
+      // Assert - Cleared event is ignored, flag remains set
+      expect((device as any).waitingForPirFallingEdge).toBe(true);
+      expect((device as any).startEnterTimer).not.toHaveBeenCalled();
+
+      // Verify log shows event was ignored
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Ignoring cleared event from stale PIR sensor: pir-1')
+      );
+    });
+
+    it('should process motion from fresh PIR sensor after it becomes fresh again', async () => {
+      // Arrange - PIR was stale, became fresh, now reports motion
+      (device as any).isPaused = false;
+      (device as any).occupancyState = 'UNOCCUPIED';
+      (device as any).lastStableOccupancy = 'UNOCCUPIED';
+      (device as any).doorStates = new Map([['door-1', 'CLOSED']]);
+      (device as any).updateOccupancyOutput = jest.fn().mockResolvedValue(undefined);
+      (device as any).updatePirTracking = jest.fn();
+      (device as any).stopEnterTimer = jest.fn();
+      (device as any).applyPirOccupancyLogic = jest.fn();
+
+      // PIR is now fresh (was stale, but recently reported)
+      const freshPirInfo = {
+        lastUpdated: Date.now() - 1000,
+        isStale: false,
+        timeoutMs: 30 * 60 * 1000,
+      };
+      (device as any).staleSensorMap.set('pir-1', freshPirInfo);
+
+      jest.clearAllMocks();
+
+      // Act - Fresh PIR reports motion
+      await (device as any).handlePirMotion('pir-1');
+
+      // Assert - Motion is processed normally
+      expect((device as any).updatePirTracking).toHaveBeenCalled();
+      expect((device as any).stopEnterTimer).toHaveBeenCalled();
+      expect((device as any).applyPirOccupancyLogic).toHaveBeenCalled();
+      expect((device as any).updateOccupancyOutput).toHaveBeenCalled();
+
+      // Verify normal PIR motion log (not ignored)
+      expect(device.log).toHaveBeenCalledWith('PIR motion detected: pir-1');
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Ignoring motion from stale PIR sensor')
+      );
+    });
+
+    it('should process door event from fresh door sensor', async () => {
+      // Arrange - Door is fresh
+      (device as any).isPaused = false;
+      (device as any).occupancyState = 'OCCUPIED';
+      (device as any).lastStableOccupancy = 'OCCUPIED';
+      (device as any).doorStates = new Map();
+      (device as any).updateOccupancyOutput = jest.fn().mockResolvedValue(undefined);
+      (device as any).updateDoorState = jest.fn();
+      (device as any).configureEnterTimer = jest.fn().mockResolvedValue(undefined);
+      (device as any).configureClearTimer = jest.fn();
+      (device as any).logDoorEventState = jest.fn();
+
+      // Door is fresh
+      const freshDoorInfo = {
+        lastUpdated: Date.now() - 1000,
+        isStale: false,
+        timeoutMs: 60 * 60 * 1000,
+      };
+      (device as any).staleSensorMap.set('door-1', freshDoorInfo);
+
+      jest.clearAllMocks();
+
+      // Act - Fresh door reports "open"
+      await (device as any).handleDoorEvent('door-1', true);
+
+      // Assert - Door event is processed normally
+      expect((device as any).updateDoorState).toHaveBeenCalledWith('door-1', true);
+      expect((device as any).occupancyState).toBe('UNKNOWN');
+      expect((device as any).configureEnterTimer).toHaveBeenCalled();
+      expect((device as any).configureClearTimer).toHaveBeenCalled();
+      expect((device as any).updateOccupancyOutput).toHaveBeenCalled();
+
+      // Verify normal door event processing (not ignored)
+      expect(device.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Ignoring event from stale door sensor')
+      );
+    });
+  });
 });
