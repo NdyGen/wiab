@@ -1,5 +1,3 @@
-Smart room occupancy that stays active even when you sit still.
-
 THE PROBLEM
 
 Lights turn off while you're reading. Heating shuts down while you work. Motion
