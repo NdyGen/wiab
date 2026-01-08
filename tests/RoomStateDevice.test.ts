@@ -582,4 +582,177 @@ describe('RoomStateDevice', () => {
       );
     });
   });
+
+  describe('Race Condition Fix (Issue #160)', () => {
+    it('should catch occupancy change during setup window (no change)', async () => {
+      // Arrange - WIAB device is unoccupied and stays unoccupied
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      // Act
+      await device.onInit();
+
+      // Assert - Should initialize successfully, no duplicate transitions
+      expect(device.log).toHaveBeenCalledWith(expect.stringContaining('Room State device initialized successfully'));
+      expect(device.log).toHaveBeenCalledWith(expect.stringContaining('WIAB device is currently UNOCCUPIED'));
+
+      // Should not log occupancy change during setup (no change detected)
+      const logCalls = (device.log as jest.Mock).mock.calls;
+      const hasSetupChangeLog = logCalls.some((call: unknown[]) =>
+        String(call[0]).includes('Detected occupancy change during setup')
+      );
+      expect(hasSetupChangeLog).toBe(false);
+    });
+
+    it('should catch occupancy change during setup window (unoccupied → occupied)', async () => {
+      // Arrange - WIAB device starts unoccupied
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      // Track when device is accessed to simulate occupancy change during setup
+      // getDevices() is called 3 times during init:
+      // 1. Initial getWiabDevice() (line 349)
+      // 2. setupWiabMonitoring() (line 527)
+      // 3. Re-read getWiabDevice() (line 376) <- we simulate change here
+      let deviceAccessCount = 0;
+      const originalGetDevices = mockHomeyApi.devices.getDevices;
+      mockHomeyApi.devices.getDevices = jest.fn().mockImplementation(async () => {
+        deviceAccessCount++;
+
+        // On third access (during re-read), change occupancy
+        if (deviceAccessCount === 3) {
+          mockWiabDevice.capabilitiesObj!['alarm_occupancy'].value = true;
+        }
+
+        return originalGetDevices.call(mockHomeyApi.devices);
+      });
+
+      // Act
+      await device.onInit();
+
+      // Assert - Should detect and log occupancy change during setup
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Detected occupancy change during setup: UNOCCUPIED → OCCUPIED')
+      );
+
+      // Should update internal state to occupied
+      expect((device as any).isWiabOccupied).toBe(true);
+      expect((device as any).lastActivityTimestamp).not.toBeNull();
+    });
+
+    it('should catch occupancy change during setup window (occupied → unoccupied)', async () => {
+      // Arrange - WIAB device starts occupied
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: true },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      // Track when device is accessed to simulate occupancy change during setup
+      // getDevices() is called 3 times during init:
+      // 1. Initial getWiabDevice() (line 349)
+      // 2. setupWiabMonitoring() (line 527)
+      // 3. Re-read getWiabDevice() (line 376) <- we simulate change here
+      let deviceAccessCount = 0;
+      const originalGetDevices = mockHomeyApi.devices.getDevices;
+      mockHomeyApi.devices.getDevices = jest.fn().mockImplementation(async () => {
+        deviceAccessCount++;
+
+        // On third access (during re-read), change occupancy
+        if (deviceAccessCount === 3) {
+          mockWiabDevice.capabilitiesObj!['alarm_occupancy'].value = false;
+        }
+
+        return originalGetDevices.call(mockHomeyApi.devices);
+      });
+
+      // Act
+      await device.onInit();
+
+      // Assert - Should detect and log occupancy change during setup
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Detected occupancy change during setup: OCCUPIED → UNOCCUPIED')
+      );
+
+      // Should update internal state to unoccupied
+      expect((device as any).isWiabOccupied).toBe(false);
+    });
+
+    it('should handle re-read failure gracefully', async () => {
+      // Arrange - WIAB device exists initially
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      // Track device access to simulate failure during re-read
+      // getDevices() is called 3 times:
+      // 1. Initial getWiabDevice() (line 349)
+      // 2. setupWiabMonitoring() (line 527)
+      // 3. Re-read getWiabDevice() (line 376) <- we want to fail here
+      let deviceAccessCount = 0;
+      const originalGetDevices = mockHomeyApi.devices.getDevices;
+      mockHomeyApi.devices.getDevices = jest.fn().mockImplementation(async () => {
+        deviceAccessCount++;
+
+        // On third access (re-read), throw error to simulate device API failure
+        if (deviceAccessCount === 3) {
+          throw new Error('Device API unavailable');
+        }
+
+        return originalGetDevices.call(mockHomeyApi.devices);
+      });
+
+      // Act
+      await device.onInit();
+
+      // Assert - Should continue with initial state despite re-read failure
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to re-read WIAB occupancy after setup, continuing with initial state')
+      );
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Room State device initialized successfully')
+      );
+
+      // Should maintain initial state
+      expect((device as any).isWiabOccupied).toBe(false);
+    });
+
+    it('should not trigger duplicate state transitions when no change detected', async () => {
+      // Arrange - WIAB device is occupied and stays occupied
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: true },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      // Spy on evaluation method to count calls
+      const evalSpy = jest.spyOn(RoomStateDevice.prototype as any, 'evaluateAndScheduleTransition');
+
+      // Act
+      await device.onInit();
+
+      // Assert - evaluateAndScheduleTransition should be called exactly once (from initial setup)
+      // Re-read detects no change, so handleOccupancyChange is NOT called
+      // This prevents duplicate state evaluations
+      expect(evalSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

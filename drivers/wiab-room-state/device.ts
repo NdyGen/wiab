@@ -335,7 +335,8 @@ class RoomStateDevice extends BaseWIABDevice {
    * 3. Get WIAB device and check current occupancy
    * 4. Create RoomStateEngine with correct initial state
    * 5. Setup WIAB device monitoring
-   * 6. Initialize capabilities
+   * 6. Re-read WIAB occupancy to catch changes during setup (fixes race condition)
+   * 7. Initialize capabilities
    */
   private async setupRoomStateManagement(): Promise<void> {
     try {
@@ -368,6 +369,26 @@ class RoomStateDevice extends BaseWIABDevice {
 
       // Setup WIAB device monitoring
       await this.setupWiabMonitoring(wiabDevice.id);
+
+      // CRITICAL: Re-read WIAB occupancy to catch changes during setup
+      // Fixes race condition where WIAB updates between initial read and listener registration
+      try {
+        const currentWiabDevice = await this.getWiabDevice();
+        if (currentWiabDevice.occupancy !== this.isWiabOccupied) {
+          this.log(`Detected occupancy change during setup: ${this.isWiabOccupied ? 'OCCUPIED' : 'UNOCCUPIED'} → ${currentWiabDevice.occupancy ? 'OCCUPIED' : 'UNOCCUPIED'} (applying update)`);
+          this.handleOccupancyChange(currentWiabDevice.occupancy);
+        }
+      } catch (rereadError) {
+        const err = rereadError instanceof Error ? rereadError : new Error(String(rereadError));
+        this.errorReporter?.reportError({
+          errorId: RoomStateErrorId.WIAB_DEVICE_LOOKUP_FAILED,
+          severity: ErrorSeverity.MEDIUM,
+          userMessage: 'Failed to verify WIAB state after setup',
+          technicalMessage: `Re-read of WIAB occupancy failed: ${err.message}\n${err.stack || 'No stack trace available'}`,
+          context: { deviceId: this.getData().id },
+        });
+        this.log('Failed to re-read WIAB occupancy after setup, continuing with initial state');
+      }
 
       // Initialize capabilities
       await this.initializeCapabilities();
