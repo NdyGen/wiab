@@ -41,6 +41,12 @@ class RoomStateDevice extends BaseWIABDevice {
   private isWiabOccupied: boolean = false;
   private manualOverride: boolean = false;
 
+  // Polling fallback for listener health
+  private lastListenerFireTime: number = 0;
+  private pollingFallbackTimer?: NodeJS.Timeout;
+  private pollingIntervalMs: number = 60000; // 60 seconds default
+  private listenerHealthThresholdMs: number = 120000; // 2 minutes
+
   // Debug logging control
   private static readonly ENABLE_DEBUG_LOGGING = false;
 
@@ -345,6 +351,11 @@ class RoomStateDevice extends BaseWIABDevice {
       const idleTimeout = settings.idleTimeout;
       const occupiedTimeout = settings.occupiedTimeout;
 
+      // Load polling fallback interval (default 60s)
+      const pollIntervalSeconds = (settings as RoomStateSettings & { pollingIntervalSeconds?: number }).pollingIntervalSeconds || 60;
+      this.pollingIntervalMs = pollIntervalSeconds * 1000;
+      this.log(`Polling fallback interval: ${pollIntervalSeconds}s`);
+
       // Get WIAB device and check current occupancy
       const wiabDevice = await this.getWiabDevice();
 
@@ -369,6 +380,9 @@ class RoomStateDevice extends BaseWIABDevice {
 
       // Setup WIAB device monitoring
       await this.setupWiabMonitoring(wiabDevice.id);
+
+      // Start polling fallback for listener health monitoring
+      this.startPollingFallback();
 
       // CRITICAL: Re-read WIAB occupancy to catch changes during setup
       // Fixes race condition where WIAB updates between initial read and listener registration
@@ -441,11 +455,19 @@ class RoomStateDevice extends BaseWIABDevice {
         this.stateTimer = undefined;
       }
 
+      // Clear polling fallback timer
+      if (this.pollingFallbackTimer) {
+        clearInterval(this.pollingFallbackTimer);
+        this.pollingFallbackTimer = undefined;
+        this.log('Polling fallback timer cleared');
+      }
+
       // Reset state variables to prevent stale state
       this.stateEngine = undefined;
       this.isWiabOccupied = false;
       this.lastActivityTimestamp = null;
       this.manualOverride = false;
+      this.lastListenerFireTime = 0;
 
       this.log('Room state management torn down');
     } catch (error) {
@@ -595,12 +617,18 @@ class RoomStateDevice extends BaseWIABDevice {
     this.wiabCapabilityListener = () => {
       // Monitor occupancy changes
       deviceObj.makeCapabilityInstance?.('alarm_occupancy', (value: boolean) => {
-        this.log(`WIAB occupancy changed: ${value ? 'OCCUPIED' : 'UNOCCUPIED'}`);
+        // Track listener health - record when listener fires
+        this.lastListenerFireTime = Date.now();
+
+        this.log(`WIAB occupancy changed: ${value ? 'OCCUPIED' : 'UNOCCUPIED'} (listener healthy)`);
         this.handleOccupancyChange(value);
       });
 
       // Monitor data quality (stale sensors)
       deviceObj.makeCapabilityInstance?.('alarm_data_stale', (isStale: boolean) => {
+        // Track listener health - record when listener fires
+        this.lastListenerFireTime = Date.now();
+
         this.handleDataStaleChange(isStale);
       });
     };
@@ -608,6 +636,134 @@ class RoomStateDevice extends BaseWIABDevice {
     this.wiabCapabilityListener();
 
     this.log(`WIAB device monitoring setup complete`);
+  }
+
+  /**
+   * Starts polling fallback for listener health monitoring.
+   *
+   * Periodically checks if the capability listener is still firing.
+   * If listener hasn't fired for 2+ minutes, polls WIAB state manually
+   * to detect and recover from listener staleness.
+   *
+   * Benefits:
+   * - Listener remains primary mechanism (efficient, real-time)
+   * - Polling detects desync within configurable interval
+   * - Auto-refreshes stale listeners when detected
+   * - Minimal performance impact (only polls when listener is silent)
+   *
+   * @private
+   */
+  private startPollingFallback(): void {
+    // Clear any existing timer first
+    if (this.pollingFallbackTimer) {
+      clearInterval(this.pollingFallbackTimer);
+    }
+
+    // Initialize listener fire time to current time (listener is healthy at start)
+    this.lastListenerFireTime = Date.now();
+
+    this.log(`Starting polling fallback (interval: ${this.pollingIntervalMs / 1000}s, health threshold: ${this.listenerHealthThresholdMs / 1000}s)`);
+
+    // Start periodic health check
+    this.pollingFallbackTimer = setInterval(() => {
+      try {
+        const now = Date.now();
+        const timeSinceListenerFired = now - this.lastListenerFireTime;
+
+        // Only poll if listener hasn't fired recently
+        if (timeSinceListenerFired > this.listenerHealthThresholdMs) {
+          const minutesSinceFire = Math.round(timeSinceListenerFired / 60000);
+          this.log(`Listener health check: no events for ${minutesSinceFire} minutes (threshold: ${this.listenerHealthThresholdMs / 60000} minutes), polling WIAB state`);
+
+          // Fire-and-forget polling (has its own error handling)
+          void this.pollWiabState();
+        }
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        this.errorReporter?.reportError({
+          errorId: RoomStateErrorId.STATE_TRANSITION_FAILED,
+          severity: ErrorSeverity.MEDIUM,
+          userMessage: 'Listener health check encountered an error',
+          technicalMessage: `Polling fallback health check failed: ${err.message}\n${err.stack || 'No stack trace'}`,
+          context: { deviceId: this.getData().id },
+        });
+        this.error('Polling fallback health check error:', error);
+      }
+    }, this.pollingIntervalMs);
+  }
+
+  /**
+   * Polls WIAB device state manually to detect desynchronization.
+   *
+   * Called by polling fallback when listener appears stale.
+   * Compares current WIAB occupancy with cached state and updates if desync detected.
+   * Re-registers listener to fix staleness if needed.
+   *
+   * @private
+   */
+  private async pollWiabState(): Promise<void> {
+    try {
+      // Validate device is still initialized
+      if (!this.stateEngine || !this.errorReporter) {
+        this.log('Polling cancelled: device deinitialized');
+        return;
+      }
+
+      this.log('Polling WIAB state manually (listener health check)');
+
+      const wiabDevice = await this.getWiabDevice();
+      const currentOccupancy = wiabDevice.occupancy;
+
+      // Check for desync
+      if (currentOccupancy !== this.isWiabOccupied) {
+        this.log(`Polling detected desync: WIAB=${currentOccupancy ? 'OCCUPIED' : 'UNOCCUPIED'}, cached=${this.isWiabOccupied ? 'OCCUPIED' : 'UNOCCUPIED'} - applying correction`);
+
+        // Report desync as warning
+        this.errorReporter.reportError({
+          errorId: RoomStateErrorId.WIAB_DEVICE_LOOKUP_FAILED,
+          severity: ErrorSeverity.MEDIUM,
+          userMessage: 'WIAB occupancy state was out of sync',
+          technicalMessage: `Polling detected desync: WIAB=${currentOccupancy}, cached=${this.isWiabOccupied}. Listener may have become stale. Refreshing listener.`,
+          context: {
+            deviceId: this.getData().id,
+            wiabOccupancy: currentOccupancy,
+            cachedOccupancy: this.isWiabOccupied,
+          },
+        });
+
+        // Apply the correct state
+        this.handleOccupancyChange(currentOccupancy);
+
+        // Attempt to refresh listener to fix staleness
+        try {
+          this.log('Attempting to refresh stale listener by re-registering');
+          await this.setupWiabMonitoring(wiabDevice.id);
+          this.log('Listener refreshed successfully');
+        } catch (refreshError) {
+          const err = refreshError instanceof Error ? refreshError : new Error(String(refreshError));
+          this.errorReporter.reportError({
+            errorId: RoomStateErrorId.WIAB_DEVICE_LOOKUP_FAILED,
+            severity: ErrorSeverity.HIGH,
+            userMessage: 'Failed to refresh WIAB listener',
+            technicalMessage: `Listener refresh failed after desync detection: ${err.message}\n${err.stack || 'No stack trace'}`,
+            context: { deviceId: this.getData().id },
+          });
+          this.error('Failed to refresh listener:', refreshError);
+        }
+      } else {
+        this.log(`Polling confirmed state is correct: ${currentOccupancy ? 'OCCUPIED' : 'UNOCCUPIED'} (no desync detected)`);
+      }
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.errorReporter?.reportError({
+        errorId: RoomStateErrorId.WIAB_DEVICE_LOOKUP_FAILED,
+        severity: ErrorSeverity.MEDIUM,
+        userMessage: 'Failed to poll WIAB state',
+        technicalMessage: `WIAB state polling failed: ${err.message}\n${err.stack || 'No stack trace'}`,
+        context: { deviceId: this.getData().id },
+      });
+      this.error('WIAB state polling error:', error);
+    }
   }
 
   /**

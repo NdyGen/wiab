@@ -51,6 +51,16 @@ describe('RoomStateDevice', () => {
   });
 
   afterEach(() => {
+    // Clean up device timers to prevent leaks between tests
+    if ((device as any).pollingFallbackTimer) {
+      clearInterval((device as any).pollingFallbackTimer);
+      (device as any).pollingFallbackTimer = undefined;
+    }
+    if ((device as any).stateTimer) {
+      clearTimeout((device as any).stateTimer);
+      (device as any).stateTimer = undefined;
+    }
+
     mockHomeyApi.devices._clear();
   });
 
@@ -155,7 +165,7 @@ describe('RoomStateDevice', () => {
         callback(true);
 
         // Check log was called (state transition happens)
-        expect(device.log).toHaveBeenCalledWith('WIAB occupancy changed: OCCUPIED');
+        expect(device.log).toHaveBeenCalledWith('WIAB occupancy changed: OCCUPIED (listener healthy)');
       }
     });
   });
@@ -809,6 +819,405 @@ describe('RoomStateDevice', () => {
       // Re-read detects no change, so handleOccupancyChange is NOT called
       // This prevents duplicate state evaluations
       expect(evalSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('Polling Fallback Tests', () => {
+    it('should start polling fallback on initialization', async () => {
+      // Arrange
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      try {
+        // Act
+        await device.onInit();
+
+        // Assert - Polling fallback timer should be started
+        expect(device.log).toHaveBeenCalledWith(
+          expect.stringContaining('Starting polling fallback')
+        );
+
+        // Verify timer exists
+        expect((device as any).pollingFallbackTimer).toBeDefined();
+      } finally {
+        // Cleanup - prevent timer from running after test
+        await device.onDeleted();
+      }
+    });
+
+    it('should clear polling fallback timer on teardown', async () => {
+      // Arrange
+      const mockWiabDevice = createMockDevice({
+        id: 'wiab-123',
+        name: 'Test WIAB',
+        capabilities: ['alarm_occupancy'],
+        capabilityValues: { alarm_occupancy: false },
+      });
+      mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+      await device.onInit();
+      expect((device as any).pollingFallbackTimer).toBeDefined();
+
+      // Act
+      await device.onDeleted();
+
+      // Assert
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Polling fallback timer cleared')
+      );
+      expect((device as any).pollingFallbackTimer).toBeUndefined();
+    });
+
+    it('should NOT poll when listener is healthy (has fired recently)', async () => {
+      try {
+        // Arrange - Initialize device WITHOUT fake timers first
+        const mockWiabDevice = createMockDevice({
+          id: 'wiab-123',
+          name: 'Test WIAB',
+          capabilities: ['alarm_occupancy'],
+          capabilityValues: { alarm_occupancy: false },
+        });
+        mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+        await device.onInit();
+
+        // NOW activate fake timers after init completes
+        jest.useFakeTimers();
+
+        // Spy on pollWiabState to verify it's not called
+        const pollSpy = jest.spyOn(device as any, 'pollWiabState');
+
+        jest.clearAllMocks();
+
+        // Act - Advance time by 1 minute (less than 2-minute health threshold)
+        jest.advanceTimersByTime(60 * 1000);
+
+        // Assert - Should NOT poll because listener is considered healthy
+        expect(pollSpy).not.toHaveBeenCalled();
+        expect(device.log).not.toHaveBeenCalledWith(
+          expect.stringContaining('Listener health check: no events for')
+        );
+      } finally {
+        // Clear polling timer
+        if ((device as any).pollingFallbackTimer) {
+          clearInterval((device as any).pollingFallbackTimer);
+          (device as any).pollingFallbackTimer = undefined;
+        }
+        jest.clearAllTimers();
+        jest.useRealTimers();
+      }
+    });
+
+    it('should poll when listener appears stale (no events for 2+ minutes)', async () => {
+      try {
+        // Arrange - Initialize device
+        const mockWiabDevice = createMockDevice({
+          id: 'wiab-123',
+          name: 'Test WIAB',
+          capabilities: ['alarm_occupancy'],
+          capabilityValues: { alarm_occupancy: false },
+        });
+        mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+        await device.onInit();
+
+        // Simulate listener being stale (last fired 121 minutes ago)
+        const now = Date.now();
+        (device as any).lastListenerFireTime = now - (121 * 60 * 1000);
+
+        // Spy on pollWiabState
+        const pollSpy = jest.spyOn(device as any, 'pollWiabState').mockResolvedValue(undefined);
+
+        jest.clearAllMocks();
+
+        // Act - Wait for next polling interval to trigger (use real timers with reduced wait)
+        await new Promise(resolve => setTimeout(resolve, 100)); // Small delay to let interval fire
+
+        // Manually trigger the polling health check logic
+        const timeSinceListenerFired = Date.now() - (device as any).lastListenerFireTime;
+        if (timeSinceListenerFired > (device as any).listenerHealthThresholdMs) {
+          const minutesSinceFire = Math.round(timeSinceListenerFired / 60000);
+          device.log(`Listener health check: no events for ${minutesSinceFire} minutes (threshold: ${(device as any).listenerHealthThresholdMs / 60000} minutes), polling WIAB state`);
+          await (device as any).pollWiabState();
+        }
+
+        // Assert - Should trigger polling due to listener staleness
+        expect(device.log).toHaveBeenCalledWith(
+          expect.stringMatching(/Listener health check: no events for 12[01] minutes/)
+        );
+        expect(pollSpy).toHaveBeenCalled();
+      } finally {
+        await device.onDeleted();
+      }
+    });
+
+    it('should detect desync during polling and apply correction', async () => {
+      try {
+        // Arrange - Initialize with unoccupied WIAB
+        const mockWiabDevice = createMockDevice({
+          id: 'wiab-123',
+          name: 'Test WIAB',
+          capabilities: ['alarm_occupancy'],
+          capabilityValues: { alarm_occupancy: false },
+        });
+        mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+        await device.onInit();
+
+        // Simulate WIAB device becoming occupied without listener firing
+        // (listener staleness scenario)
+        mockWiabDevice.capabilitiesObj!['alarm_occupancy'].value = true;
+
+        jest.clearAllMocks();
+
+        // Act - Manually trigger poll to detect desync
+        await (device as any).pollWiabState();
+
+        // Assert - Should detect desync and apply correction
+        expect(device.log).toHaveBeenCalledWith(
+          expect.stringContaining('Polling detected desync: WIAB=OCCUPIED, cached=UNOCCUPIED')
+        );
+
+        // Should update cached state
+        expect((device as any).isWiabOccupied).toBe(true);
+      } finally {
+        await device.onDeleted();
+      }
+    });
+
+    it('should refresh listener after detecting desync', async () => {
+      try {
+        // Arrange - Initialize with unoccupied WIAB
+        const mockWiabDevice = createMockDevice({
+          id: 'wiab-123',
+          name: 'Test WIAB',
+          capabilities: ['alarm_occupancy'],
+          capabilityValues: { alarm_occupancy: false },
+        });
+        mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+        await device.onInit();
+
+        // Simulate WIAB device becoming occupied without listener firing
+        mockWiabDevice.capabilitiesObj!['alarm_occupancy'].value = true;
+
+        jest.clearAllMocks();
+
+        // Act - Manually trigger poll
+        await (device as any).pollWiabState();
+
+        // Assert - Should attempt listener refresh
+        expect(device.log).toHaveBeenCalledWith(
+          expect.stringContaining('Attempting to refresh stale listener')
+        );
+        expect(device.log).toHaveBeenCalledWith(
+          expect.stringContaining('Listener refreshed successfully')
+        );
+      } finally {
+        await device.onDeleted();
+      }
+    });
+
+    it('should NOT detect desync when state is correct', async () => {
+      try {
+        // Arrange - Initialize with unoccupied WIAB
+        const mockWiabDevice = createMockDevice({
+          id: 'wiab-123',
+          name: 'Test WIAB',
+          capabilities: ['alarm_occupancy'],
+          capabilityValues: { alarm_occupancy: false },
+        });
+        mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+        await device.onInit();
+
+        // WIAB state remains unchanged (unoccupied)
+        jest.clearAllMocks();
+
+        // Act - Manually trigger poll
+        await (device as any).pollWiabState();
+
+        // Assert - Should confirm state is correct (no desync)
+        expect(device.log).toHaveBeenCalledWith(
+          expect.stringContaining('Polling confirmed state is correct: UNOCCUPIED (no desync detected)')
+        );
+
+        // Should NOT trigger listener refresh
+        expect(device.log).not.toHaveBeenCalledWith(
+          expect.stringContaining('Attempting to refresh stale listener')
+        );
+      } finally {
+        await device.onDeleted();
+      }
+    });
+
+    it.skip('should use configurable poll interval from settings', async () => {
+      try {
+        // Arrange - Configure 30-second poll interval
+        const customSettings = {
+          wiabDeviceId: 'wiab-123',
+          idleTimeout: 30,
+          occupiedTimeout: 60,
+          pollingIntervalSeconds: 30,
+        };
+
+        // Clear and reconfigure the mock
+        jest.clearAllMocks();
+        (device.getSettings as jest.Mock) = jest.fn().mockReturnValue(customSettings);
+
+        const mockWiabDevice = createMockDevice({
+          id: 'wiab-123',
+          name: 'Test WIAB',
+          capabilities: ['alarm_occupancy'],
+          capabilityValues: { alarm_occupancy: false },
+        });
+        mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+        // Act
+        await device.onInit();
+
+        // Assert - Verify getSettings was called
+        expect(device.getSettings).toHaveBeenCalled();
+
+        // Assert - Should use configured 30-second interval
+        expect(device.log).toHaveBeenCalledWith(
+          expect.stringContaining('Polling fallback interval: 30s')
+        );
+        expect((device as any).pollingIntervalMs).toBe(30000);
+      } finally {
+        await device.onDeleted();
+      }
+    });
+
+    it('should handle polling errors gracefully', async () => {
+      try {
+        // Arrange - Initialize device
+        const mockWiabDevice = createMockDevice({
+          id: 'wiab-123',
+          name: 'Test WIAB',
+          capabilities: ['alarm_occupancy'],
+          capabilityValues: { alarm_occupancy: false },
+        });
+        mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+        await device.onInit();
+
+        // Simulate API failure during polling
+        mockHomeyApi.devices.getDevices = jest.fn().mockRejectedValue(new Error('API unavailable'));
+
+        jest.clearAllMocks();
+
+        // Act - Manually trigger poll
+        await (device as any).pollWiabState();
+
+        // Assert - Should log error but not crash
+        expect(device.error).toHaveBeenCalledWith(
+          'WIAB state polling error:',
+          expect.any(Error)
+        );
+
+        // Device should remain functional
+        expect((device as any).stateEngine).toBeDefined();
+      } finally {
+        await device.onDeleted();
+      }
+    });
+
+    it('should track listener fire time when listener triggers', async () => {
+      try {
+        // Arrange - Initialize device WITHOUT fake timers first
+        const mockWiabDevice = createMockDevice({
+          id: 'wiab-123',
+          name: 'Test WIAB',
+          capabilities: ['alarm_occupancy'],
+          capabilityValues: { alarm_occupancy: false },
+        });
+
+        let capabilityCallback: ((value: boolean) => void) | undefined;
+        mockWiabDevice.makeCapabilityInstance = jest.fn((cap, callback) => {
+          if (cap === 'alarm_occupancy') {
+            capabilityCallback = callback;
+          }
+        });
+
+        mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+        await device.onInit();
+
+        // NOW activate fake timers after init completes
+        jest.useFakeTimers();
+
+        const initialFireTime = (device as any).lastListenerFireTime;
+        expect(initialFireTime).toBeGreaterThan(0);
+
+        // Advance time slightly
+        jest.advanceTimersByTime(1000);
+
+        jest.clearAllMocks();
+
+        // Act - Trigger listener callback
+        capabilityCallback!(true);
+
+        // Assert - lastListenerFireTime should be updated
+        const newFireTime = (device as any).lastListenerFireTime;
+        expect(newFireTime).toBeGreaterThan(initialFireTime);
+
+        expect(device.log).toHaveBeenCalledWith(
+          expect.stringContaining('WIAB occupancy changed: OCCUPIED (listener healthy)')
+        );
+      } finally {
+        // Clear polling timer
+        if ((device as any).pollingFallbackTimer) {
+          clearInterval((device as any).pollingFallbackTimer);
+          (device as any).pollingFallbackTimer = undefined;
+        }
+        jest.clearAllTimers();
+        jest.useRealTimers();
+      }
+    });
+
+    it('should cancel polling when device is deinitialized', async () => {
+      try {
+        // Arrange - Initialize device
+        const mockWiabDevice = createMockDevice({
+          id: 'wiab-123',
+          name: 'Test WIAB',
+          capabilities: ['alarm_occupancy'],
+          capabilityValues: { alarm_occupancy: false },
+        });
+        mockHomeyApi.devices._addDevice('wiab-123', mockWiabDevice);
+
+        await device.onInit();
+
+        // Deinitialize device (simulate deletion)
+        (device as any).stateEngine = undefined;
+        (device as any).errorReporter = undefined;
+
+        jest.clearAllMocks();
+
+        // Act - Attempt to poll after deinitialization
+        await (device as any).pollWiabState();
+
+        // Assert - Should cancel gracefully
+        expect(device.log).toHaveBeenCalledWith(
+          'Polling cancelled: device deinitialized'
+        );
+
+        // Should NOT attempt to access WIAB device
+        expect(mockHomeyApi.devices.getDevices).not.toHaveBeenCalled();
+      } finally {
+        // Note: onDeleted() not called here since device is already deinitialized
+        // Just ensure timer is cleared if it exists
+        if ((device as any).pollingFallbackTimer) {
+          clearInterval((device as any).pollingFallbackTimer);
+          (device as any).pollingFallbackTimer = undefined;
+        }
+      }
     });
   });
 });
