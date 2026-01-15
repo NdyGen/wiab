@@ -82,5 +82,8 @@
   },
   "1.2.16": {
     "en": "certification requirement fix"
+  },
+  "1.2.17": {
+    "en": "support for devices with only alarm_occupancy"
   }
 }
