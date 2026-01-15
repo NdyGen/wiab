@@ -61,6 +61,7 @@ const DOOR_CAPABILITIES = [
  */
 const PIR_CAPABILITIES = [
   'alarm_motion',
+  'alarm_occupancy',
   'alarm_presence',
   'motion_alarm',
   'presence_alarm',

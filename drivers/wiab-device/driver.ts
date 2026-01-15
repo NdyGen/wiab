@@ -196,6 +196,54 @@ class WIABDriver extends Homey.Driver {
   }
 
   /**
+   * Fetches all motion/occupancy devices for pairing.
+   *
+   * Returns devices with alarm_motion or alarm_occupancy capability.
+   * If a device has both capabilities, alarm_motion is preferred.
+   *
+   * @private
+   * @returns {Promise<PairingDeviceConfig[]>} Array of motion/occupancy devices
+   */
+  private async getMotionDevices(): Promise<PairingDeviceConfig[]> {
+    try {
+      // Fetch devices with alarm_motion capability
+      const motionDevices = await this.getDevicesWithCapability('alarm_motion');
+      const motionDeviceIds = new Set(motionDevices.map(d => d.deviceId));
+
+      // Fetch devices with alarm_occupancy capability
+      const occupancyDevices = await this.getDevicesWithCapability('alarm_occupancy');
+
+      // Add occupancy devices that don't already have alarm_motion
+      const additionalDevices = occupancyDevices.filter(d => !motionDeviceIds.has(d.deviceId));
+
+      const allDevices = [...motionDevices, ...additionalDevices];
+      this.log(`Found ${allDevices.length} total motion/occupancy devices (${motionDevices.length} alarm_motion, ${additionalDevices.length} alarm_occupancy only)`);
+
+      return allDevices;
+    } catch (error) {
+      if (error instanceof Error) {
+        if (error.message === 'Homey API not available') {
+          this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] HomeyAPI not available`, error);
+          throw new Error('The app is still initializing. Please wait a moment and try again.');
+        }
+
+        if (error.message.includes('timeout')) {
+          this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] Request timeout`, error);
+          throw new Error('Request timed out. Please check your network connection and try again.');
+        }
+
+        if (error.message.includes('permission')) {
+          this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] Permission denied`, error);
+          throw new Error('Permission denied. Please check app permissions in Homey settings.');
+        }
+      }
+
+      this.error(`[${PairingErrorId.MOTION_DEVICES_FETCH_FAILED}] Unexpected error fetching motion devices:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Handles the device pairing process.
    *
    * This method is called when a user initiates pairing of a new WIAB device.
@@ -273,14 +321,11 @@ class WIABDriver extends Homey.Driver {
 
     /**
      * Handler for fetching motion devices.
-     * Returns all devices with alarm_motion capability.
+     * Returns all devices with alarm_motion or alarm_occupancy capability.
+     * Devices with both capabilities are returned once, preferring alarm_motion.
      */
     session.setHandler('get_motion_devices', async () => {
-      return this.handleDeviceFetch(
-        'alarm_motion',
-        PairingErrorId.MOTION_DEVICES_FETCH_FAILED,
-        'motion devices'
-      );
+      return this.getMotionDevices();
     });
 
     /**
