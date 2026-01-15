@@ -283,6 +283,80 @@ describe('WIABDriver - Pairing Session', () => {
       expect(devices).toHaveLength(1);
       expect(devices[0].zone).toBe('Living Room');
     });
+
+    it('should also fetch devices with alarm_occupancy capability', async () => {
+      const occupancyDevice = createMockDevice({
+        id: 'occupancy-1',
+        name: 'Hue Motion Sensor',
+        capabilities: ['alarm_occupancy'],
+      });
+
+      mockHomeyApi.devices._addDevice('occupancy-1', occupancyDevice);
+
+      await driver.onPair(mockSession as unknown as Homey.Driver.PairSession);
+
+      const handler = mockSession.getHandler('get_motion_devices');
+      const devices = await handler();
+
+      expect(devices).toHaveLength(1);
+      expect(devices[0]).toMatchObject({
+        deviceId: 'occupancy-1',
+        name: 'Hue Motion Sensor',
+        capability: 'alarm_occupancy',
+      });
+    });
+
+    it('should return both alarm_motion and alarm_occupancy devices', async () => {
+      const motionDevice = createMockDevice({
+        id: 'motion-1',
+        name: 'Standard Motion',
+        capabilities: ['alarm_motion'],
+      });
+      const occupancyDevice = createMockDevice({
+        id: 'occupancy-1',
+        name: 'Hue Occupancy',
+        capabilities: ['alarm_occupancy'],
+      });
+
+      mockHomeyApi.devices._addDevice('motion-1', motionDevice);
+      mockHomeyApi.devices._addDevice('occupancy-1', occupancyDevice);
+
+      await driver.onPair(mockSession as unknown as Homey.Driver.PairSession);
+
+      const handler = mockSession.getHandler('get_motion_devices');
+      const devices = await handler();
+
+      expect(devices).toHaveLength(2);
+      expect(devices.find((d: { deviceId: string }) => d.deviceId === 'motion-1')).toMatchObject({
+        capability: 'alarm_motion',
+      });
+      expect(devices.find((d: { deviceId: string }) => d.deviceId === 'occupancy-1')).toMatchObject({
+        capability: 'alarm_occupancy',
+      });
+    });
+
+    it('should prefer alarm_motion when device has both capabilities', async () => {
+      const dualCapDevice = createMockDevice({
+        id: 'dual-1',
+        name: 'Dual Capability Sensor',
+        capabilities: ['alarm_motion', 'alarm_occupancy'],
+      });
+
+      mockHomeyApi.devices._addDevice('dual-1', dualCapDevice);
+
+      await driver.onPair(mockSession as unknown as Homey.Driver.PairSession);
+
+      const handler = mockSession.getHandler('get_motion_devices');
+      const devices = await handler();
+
+      // Should only appear once with alarm_motion capability
+      expect(devices).toHaveLength(1);
+      expect(devices[0]).toMatchObject({
+        deviceId: 'dual-1',
+        name: 'Dual Capability Sensor',
+        capability: 'alarm_motion',
+      });
+    });
   });
 
   describe('get_contact_devices handler', () => {
