@@ -8,18 +8,24 @@
  */
 
 /**
- * Internal quad-state occupancy states.
+ * Internal occupancy states with support for extended room states.
  *
  * @enum {string}
  * @property {string} UNKNOWN - Transitional state after door events, resolved by timers or PIR
  * @property {string} OCCUPIED - Room is occupied (motion detected)
+ * @property {string} EXTENDED_OCCUPIED - Room has been occupied for extended period
  * @property {string} UNOCCUPIED - Room is empty (no motion, or timeout expired)
+ * @property {string} IDLE - Room is idle (alias for unoccupied in room state context)
+ * @property {string} EXTENDED_IDLE - Room has been idle for extended period
  * @property {string} PAUSED - Device is paused and not monitoring sensors
  */
 export enum OccupancyState {
   UNKNOWN = 'UNKNOWN',
   OCCUPIED = 'OCCUPIED',
+  EXTENDED_OCCUPIED = 'EXTENDED_OCCUPIED',
   UNOCCUPIED = 'UNOCCUPIED',
+  IDLE = 'IDLE',
+  EXTENDED_IDLE = 'EXTENDED_IDLE',
   PAUSED = 'PAUSED',
 }
 
@@ -171,4 +177,32 @@ export function isAnyDoorOpen(doorStates: Map<string, DoorState>): boolean {
   }
 
   return false;
+}
+
+/**
+ * Checks if a state is in the occupied family.
+ *
+ * Returns true for OCCUPIED and EXTENDED_OCCUPIED.
+ *
+ * @param state - The occupancy state to check
+ * @returns {boolean} True if state is occupied or extended_occupied
+ */
+export function isOccupiedState(state: OccupancyState): boolean {
+  return state === OccupancyState.OCCUPIED || state === OccupancyState.EXTENDED_OCCUPIED;
+}
+
+/**
+ * Checks if a state is in the idle/unoccupied family.
+ *
+ * Returns true for UNOCCUPIED, IDLE, and EXTENDED_IDLE.
+ *
+ * @param state - The occupancy state to check
+ * @returns {boolean} True if state is unoccupied, idle, or extended_idle
+ */
+export function isIdleState(state: OccupancyState): boolean {
+  return (
+    state === OccupancyState.UNOCCUPIED ||
+    state === OccupancyState.IDLE ||
+    state === OccupancyState.EXTENDED_IDLE
+  );
 }

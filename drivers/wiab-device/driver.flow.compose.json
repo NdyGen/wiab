@@ -1,4 +1,86 @@
 {
+  "triggers": [
+    {
+      "id": "room_state_changed",
+      "title": {
+        "en": "Room state changed",
+        "nl": "Kamerstatus gewijzigd",
+        "de": "Raumzustand geändert",
+        "no": "Romtilstand endret",
+        "sv": "Rumstillstånd ändrat"
+      },
+      "tokens": [
+        {
+          "name": "state",
+          "type": "string",
+          "title": {
+            "en": "Current state",
+            "nl": "Huidige status",
+            "de": "Aktueller Zustand",
+            "no": "Nåværende tilstand",
+            "sv": "Nuvarande tillstånd"
+          },
+          "example": {
+            "en": "occupied"
+          }
+        },
+        {
+          "name": "previous_state",
+          "type": "string",
+          "title": {
+            "en": "Previous state",
+            "nl": "Vorige status",
+            "de": "Vorheriger Zustand",
+            "no": "Forrige tilstand",
+            "sv": "Föregående tillstånd"
+          },
+          "example": {
+            "en": "idle"
+          }
+        }
+      ]
+    },
+    {
+      "id": "room_state_became_occupied",
+      "title": {
+        "en": "Room became occupied",
+        "nl": "Kamer werd bezet",
+        "de": "Raum wurde besetzt",
+        "no": "Rom ble opptatt",
+        "sv": "Rummet blev upptaget"
+      }
+    },
+    {
+      "id": "room_state_became_extended_occupied",
+      "title": {
+        "en": "Room became extended occupied",
+        "nl": "Kamer werd verlengd bezet",
+        "de": "Raum wurde erweitert besetzt",
+        "no": "Rom ble utvidet opptatt",
+        "sv": "Rummet blev utökat upptaget"
+      }
+    },
+    {
+      "id": "room_state_became_idle",
+      "title": {
+        "en": "Room became idle",
+        "nl": "Kamer werd vrij",
+        "de": "Raum wurde inaktiv",
+        "no": "Rom ble ledig",
+        "sv": "Rummet blev ledigt"
+      }
+    },
+    {
+      "id": "room_state_became_extended_idle",
+      "title": {
+        "en": "Room became extended idle",
+        "nl": "Kamer werd verlengd vrij",
+        "de": "Raum wurde erweitert inaktiv",
+        "no": "Rom ble utvidet ledig",
+        "sv": "Rummet blev utökat ledigt"
+      }
+    }
+  ],
   "actions": [
     {
       "id": "set_state",
@@ -68,6 +150,88 @@
         "no": "Gjenopptar normal sensorovervåking og reinitialiserer tilstedeværelsesstatus",
         "sv": "Återupptar normal sensorövervakning och återinitierar närvarostatus"
       }
+    },
+    {
+      "id": "set_room_state",
+      "title": {
+        "en": "Set room state (manual override)",
+        "nl": "Stel kamerstatus in (handmatige overschrijving)",
+        "de": "Raumzustand einstellen (manuell)",
+        "no": "Sett romtilstand (manuell overstyring)",
+        "sv": "Ställ in rumstillstånd (manuell)"
+      },
+      "titleFormatted": {
+        "en": "Set room state to [[state]]",
+        "nl": "Stel kamerstatus in op [[state]]",
+        "de": "Raumzustand auf [[state]] einstellen",
+        "no": "Sett romtilstand til [[state]]",
+        "sv": "Ställ in rumstillstånd till [[state]]"
+      },
+      "args": [
+        {
+          "name": "state",
+          "type": "dropdown",
+          "values": [
+            {
+              "id": "idle",
+              "title": {
+                "en": "Idle",
+                "nl": "Vrij",
+                "de": "Inaktiv",
+                "no": "Ledig",
+                "sv": "Ledig"
+              }
+            },
+            {
+              "id": "extended_idle",
+              "title": {
+                "en": "Extended Idle",
+                "nl": "Verlengd vrij",
+                "de": "Erweitert inaktiv",
+                "no": "Utvidet ledig",
+                "sv": "Utökat ledig"
+              }
+            },
+            {
+              "id": "occupied",
+              "title": {
+                "en": "Occupied",
+                "nl": "Bezet",
+                "de": "Belegt",
+                "no": "Opptatt",
+                "sv": "Upptagen"
+              }
+            },
+            {
+              "id": "extended_occupied",
+              "title": {
+                "en": "Extended Occupied",
+                "nl": "Verlengd bezet",
+                "de": "Erweitert belegt",
+                "no": "Utvidet opptatt",
+                "sv": "Utökat upptagen"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "return_to_automatic",
+      "title": {
+        "en": "Return to automatic mode",
+        "nl": "Terug naar automatische modus",
+        "de": "Zurück zum automatischen Modus",
+        "no": "Gå tilbake til automatisk modus",
+        "sv": "Återgå till automatiskt läge"
+      },
+      "description": {
+        "en": "Clears manual override and returns to automatic state management based on sensors",
+        "nl": "Wist handmatige overschrijving en keert terug naar automatisch statusbeheer gebaseerd op sensoren",
+        "de": "Löscht die manuelle Überschreibung und kehrt zur automatischen Zustandsverwaltung basierend auf Sensoren zurück",
+        "no": "Fjerner manuell overstyring og går tilbake til automatisk tilstandsstyring basert på sensorer",
+        "sv": "Rensar manuell åsidosättning och återgår till automatisk tillståndshantering baserad på sensorer"
+      }
     }
   ],
   "conditions": [
@@ -86,6 +250,146 @@
         "de": "Überprüft, ob das Gerät sich derzeit im Pausenmodus befindet",
         "no": "Sjekker om enheten for øyeblikket er i pausemodus",
         "sv": "Kontrollerar om enheten för närvarande är i pausläge"
+      }
+    },
+    {
+      "id": "is_in_room_state",
+      "title": {
+        "en": "Is in room state !{{or child of state}}",
+        "nl": "Is in kamerstatus !{{of kind van status}}",
+        "de": "Ist im Raumzustand !{{oder Kind des Zustands}}",
+        "no": "Er i romtilstand !{{eller underordnet tilstand}}",
+        "sv": "Är i rumstillstånd !{{eller underordnat tillstånd}}"
+      },
+      "titleFormatted": {
+        "en": "Is in room state [[state]] !{{or child of it}}",
+        "nl": "Is kamerstatus [[state]] !{{of afgeleide ervan}}",
+        "de": "Ist im Raumzustand [[state]] !{{oder Kind davon}}",
+        "no": "Er i romtilstand [[state]] !{{eller avledet fra den}}",
+        "sv": "Är i rumstillstånd [[state]] !{{eller härlett från det}}"
+      },
+      "args": [
+        {
+          "name": "state",
+          "type": "dropdown",
+          "values": [
+            {
+              "id": "idle",
+              "title": {
+                "en": "Idle",
+                "nl": "Vrij",
+                "de": "Inaktiv",
+                "no": "Ledig",
+                "sv": "Ledig"
+              }
+            },
+            {
+              "id": "extended_idle",
+              "title": {
+                "en": "Extended Idle",
+                "nl": "Verlengd vrij",
+                "de": "Erweitert inaktiv",
+                "no": "Utvidet ledig",
+                "sv": "Utökat ledig"
+              }
+            },
+            {
+              "id": "occupied",
+              "title": {
+                "en": "Occupied",
+                "nl": "Bezet",
+                "de": "Belegt",
+                "no": "Opptatt",
+                "sv": "Upptagen"
+              }
+            },
+            {
+              "id": "extended_occupied",
+              "title": {
+                "en": "Extended Occupied",
+                "nl": "Verlengd bezet",
+                "de": "Erweitert belegt",
+                "no": "Utvidet opptatt",
+                "sv": "Utökat upptagen"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "is_exactly_room_state",
+      "title": {
+        "en": "Is exactly in room state !{{(not parent)}}",
+        "nl": "Is exact in kamerstatus !{{(niet ouder)}}",
+        "de": "Ist genau im Raumzustand !{{(nicht Elternteil)}}",
+        "no": "Er nøyaktig i romtilstand !{{(ikke overordnet)}}",
+        "sv": "Är exakt i rumstillstånd !{{(inte överordnat)}}"
+      },
+      "titleFormatted": {
+        "en": "Is exactly [[state]]",
+        "nl": "Is exact [[state]]",
+        "de": "Ist genau [[state]]",
+        "no": "Er nøyaktig [[state]]",
+        "sv": "Är exakt [[state]]"
+      },
+      "args": [
+        {
+          "name": "state",
+          "type": "dropdown",
+          "values": [
+            {
+              "id": "idle",
+              "title": {
+                "en": "Idle",
+                "nl": "Vrij",
+                "de": "Inaktiv",
+                "no": "Ledig",
+                "sv": "Ledig"
+              }
+            },
+            {
+              "id": "extended_idle",
+              "title": {
+                "en": "Extended Idle",
+                "nl": "Verlengd vrij",
+                "de": "Erweitert inaktiv",
+                "no": "Utvidet ledig",
+                "sv": "Utökat ledig"
+              }
+            },
+            {
+              "id": "occupied",
+              "title": {
+                "en": "Occupied",
+                "nl": "Bezet",
+                "de": "Belegt",
+                "no": "Opptatt",
+                "sv": "Upptagen"
+              }
+            },
+            {
+              "id": "extended_occupied",
+              "title": {
+                "en": "Extended Occupied",
+                "nl": "Verlengd bezet",
+                "de": "Erweitert belegt",
+                "no": "Utvidet opptatt",
+                "sv": "Utökat upptagen"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "is_manual_override",
+      "title": {
+        "en": "Manual override is !{{active|inactive}}",
+        "nl": "Handmatige overschrijving is !{{actief|inactief}}",
+        "de": "Manuelle Überschreibung ist !{{aktiv|inaktiv}}",
+        "no": "Manuell overstyring er !{{aktiv|inaktiv}}",
+        "sv": "Manuell åsidosättning är !{{aktiv|inaktiv}}"
       }
     }
   ]

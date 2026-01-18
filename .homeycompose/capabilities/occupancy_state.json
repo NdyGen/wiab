@@ -5,8 +5,8 @@
     "nl": "Aanwezigheidsstatus"
   },
   "desc": {
-    "en": "Internal quad-state occupancy value (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED)",
-    "nl": "Interne quad-state aanwezigheidswaarde (UNKNOWN, OCCUPIED, UNOCCUPIED, PAUSED)"
+    "en": "Internal occupancy state with room state support (UNKNOWN, OCCUPIED, EXTENDED_OCCUPIED, UNOCCUPIED, IDLE, EXTENDED_IDLE, PAUSED)",
+    "nl": "Interne aanwezigheidsstatus met kamerstatus ondersteuning (UNKNOWN, OCCUPIED, EXTENDED_OCCUPIED, UNOCCUPIED, IDLE, EXTENDED_IDLE, PAUSED)"
   },
   "values": [
     {
@@ -24,10 +24,31 @@
       }
     },
     {
+      "id": "EXTENDED_OCCUPIED",
+      "title": {
+        "en": "Extended Occupied",
+        "nl": "Verlengd bezet"
+      }
+    },
+    {
       "id": "UNOCCUPIED",
       "title": {
         "en": "Unoccupied",
         "nl": "Leeg"
+      }
+    },
+    {
+      "id": "IDLE",
+      "title": {
+        "en": "Idle",
+        "nl": "Vrij"
+      }
+    },
+    {
+      "id": "EXTENDED_IDLE",
+      "title": {
+        "en": "Extended Idle",
+        "nl": "Verlengd vrij"
       }
     },
     {
