@@ -70,6 +70,9 @@ export enum DeviceErrorId {
 
   /** Failed to initialize device (onInit) */
   DEVICE_INIT_FAILED = 'DEVICE_008',
+
+  /** Room state timer expiry handler failed */
+  ROOM_STATE_TIMER_FAILED = 'DEVICE_009',
 }
 
 /**

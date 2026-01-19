@@ -134,5 +134,61 @@
         "step": 1
       }
     ]
+  },
+  {
+    "type": "group",
+    "label": {
+      "en": "Room State Timers",
+      "nl": "Kamerstatus Timers",
+      "de": "Raumzustand-Timer",
+      "no": "Romtilstand-timere",
+      "sv": "Rumstillstånd-timers"
+    },
+    "children": [
+      {
+        "id": "idleTimeoutMinutes",
+        "type": "number",
+        "label": {
+          "en": "Idle timeout (minutes)",
+          "nl": "Vrij timeout (minuten)",
+          "de": "Inaktiv-Timeout (Minuten)",
+          "no": "Ledig timeout (minutter)",
+          "sv": "Ledig timeout (minuter)"
+        },
+        "hint": {
+          "en": "After this many minutes in idle state, transition to extended idle. Set to 0 to disable extended idle state. Useful for triggering 'room empty for a while' automations.",
+          "nl": "Na zoveel minuten in vrije status, overgang naar verlengd vrij. Stel in op 0 om verlengd vrije status uit te schakelen. Handig voor 'kamer al een tijdje leeg' automatiseringen.",
+          "de": "Nach so vielen Minuten im Inaktiv-Zustand, Übergang zu erweitert inaktiv. Auf 0 setzen um den erweitert inaktiv Zustand zu deaktivieren. Nützlich für 'Raum seit längerem leer' Automatisierungen.",
+          "no": "Etter så mange minutter i ledig tilstand, gå over til utvidet ledig. Sett til 0 for å deaktivere utvidet ledig tilstand. Nyttig for 'rom tomt en stund' automatiseringer.",
+          "sv": "Efter så många minuter i ledigt tillstånd, övergå till utökat ledigt. Ställ in på 0 för att inaktivera utökat ledigt tillstånd. Användbart för 'rum tomt ett tag' automatiseringar."
+        },
+        "value": 30,
+        "min": 0,
+        "max": 480,
+        "step": 1
+      },
+      {
+        "id": "occupiedTimeoutMinutes",
+        "type": "number",
+        "label": {
+          "en": "Occupied timeout (minutes)",
+          "nl": "Bezet timeout (minuten)",
+          "de": "Belegt-Timeout (Minuten)",
+          "no": "Opptatt timeout (minutter)",
+          "sv": "Upptagen timeout (minuter)"
+        },
+        "hint": {
+          "en": "After this many minutes in occupied state, transition to extended occupied. Set to 0 to disable extended occupied state. Useful for triggering 'someone is working' automations.",
+          "nl": "Na zoveel minuten in bezette status, overgang naar verlengd bezet. Stel in op 0 om verlengd bezette status uit te schakelen. Handig voor 'iemand is aan het werken' automatiseringen.",
+          "de": "Nach so vielen Minuten im Belegt-Zustand, Übergang zu erweitert belegt. Auf 0 setzen um den erweitert belegt Zustand zu deaktivieren. Nützlich für 'jemand arbeitet' Automatisierungen.",
+          "no": "Etter så mange minutter i opptatt tilstand, gå over til utvidet opptatt. Sett til 0 for å deaktivere utvidet opptatt tilstand. Nyttig for 'noen jobber' automatiseringer.",
+          "sv": "Efter så många minuter i upptaget tillstånd, övergå till utökat upptaget. Ställ in på 0 för att inaktivera utökat upptaget tillstånd. Användbart för 'någon arbetar' automatiseringar."
+        },
+        "value": 60,
+        "min": 0,
+        "max": 480,
+        "step": 1
+      }
+    ]
   }
 ]

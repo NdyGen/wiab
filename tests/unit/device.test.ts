@@ -19,6 +19,27 @@ import { createMockHomey, createMockHomeyApi } from '../setup';
 // Mock SensorMonitor to control its behavior in tests
 jest.mock('../../lib/SensorMonitor');
 
+/**
+ * Helper to create a getSetting mock that returns values by setting name.
+ * This is required because the device now reads multiple settings during initialization.
+ */
+function createGetSettingMock(overrides: Record<string, unknown> = {}): jest.Mock {
+  const defaults: Record<string, unknown> = {
+    triggerSensors: '[]',
+    resetSensors: '[]',
+    stalePirMinutes: 30,
+    staleDoorMinutes: 30,
+    idleTimeoutMinutes: 30,
+    occupiedTimeoutMinutes: 60,
+    t_enter: 20,
+    t_clear: 600,
+  };
+
+  const values = { ...defaults, ...overrides };
+
+  return jest.fn((setting: string) => values[setting]);
+}
+
 describe('WIABDevice', () => {
   let device: InstanceType<typeof WIABDevice>;
   let mockHomey: ReturnType<typeof createMockHomey>;
@@ -56,11 +77,17 @@ describe('WIABDevice', () => {
     // Mock device methods
     device.log = jest.fn();
     device.error = jest.fn();
-    device.getSetting = jest.fn();
+    // Default mock for getSetting - returns appropriate values based on setting name
+    device.getSetting = createGetSettingMock();
     device.setCapabilityValue = jest.fn().mockResolvedValue(undefined);
+    device.getCapabilityValue = jest.fn().mockReturnValue(false);
     device.hasCapability = jest.fn(() => true);
     device.addCapability = jest.fn().mockResolvedValue(undefined);
     device.registerCapabilityListener = jest.fn();
+    device.setWarning = jest.fn().mockResolvedValue(undefined);
+    device.getData = jest.fn().mockReturnValue({ id: 'test-device-id' });
+    device.getStoreValue = jest.fn().mockReturnValue(null);
+    device.setStoreValue = jest.fn().mockResolvedValue(undefined);
   });
 
   describe('onInit', () => {
@@ -75,9 +102,7 @@ describe('WIABDevice', () => {
         { deviceId: 'contact-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -107,9 +132,7 @@ describe('WIABDevice', () => {
      * Test that onInit handles empty sensor configuration
      */
     it('should handle empty sensor configuration', async () => {
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('')
-        .mockReturnValueOnce('');
+      device.getSetting = createGetSettingMock({ triggerSensors: '', resetSensors: '' });
 
       await device.onInit();
 
@@ -136,9 +159,7 @@ describe('WIABDevice', () => {
      * Test that onInit handles invalid JSON gracefully
      */
     it('should handle invalid JSON in sensor settings', async () => {
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('invalid json')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors: 'invalid json', resetSensors: '[]' });
 
       await device.onInit();
 
@@ -156,9 +177,7 @@ describe('WIABDevice', () => {
      * Test that onInit continues even if sensor setup fails
      */
     it('should handle sensor monitoring setup failure gracefully', async () => {
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       mockSensorMonitor.start.mockImplementation(() => {
         throw new Error('Failed to start monitoring');
@@ -187,9 +206,7 @@ describe('WIABDevice', () => {
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors: '[]' });
 
       await device.onInit();
 
@@ -201,9 +218,7 @@ describe('WIABDevice', () => {
         { deviceId: 'motion-2', capability: 'alarm_motion' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(newTriggerSensors)
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors: newTriggerSensors, resetSensors: '[]' });
 
       await device.onSettings({
         oldSettings: { triggerSensors },
@@ -227,9 +242,7 @@ describe('WIABDevice', () => {
      */
     it('should recreate sensor monitor when resetSensors change', async () => {
       // Setup initial monitor
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -241,9 +254,7 @@ describe('WIABDevice', () => {
         { deviceId: 'contact-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce(newResetSensors);
+      device.getSetting = createGetSettingMock({ resetSensors: newResetSensors });
 
       await device.onSettings({
         oldSettings: { resetSensors: '[]' },
@@ -262,9 +273,7 @@ describe('WIABDevice', () => {
      */
     it('should not recreate monitor for non-sensor setting changes', async () => {
       // Setup initial monitor
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -293,9 +302,7 @@ describe('WIABDevice', () => {
      */
     it('should recreate monitor when sensor settings are among changed keys', async () => {
       // Setup initial monitor
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -303,9 +310,7 @@ describe('WIABDevice', () => {
       jest.clearAllMocks();
 
       // Update multiple settings including sensors
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onSettings({
         oldSettings: { timeout: 30, triggerSensors: '[]' },
@@ -323,9 +328,7 @@ describe('WIABDevice', () => {
      */
     it('should cleanup sensor monitoring on delete', async () => {
       // Setup device
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -362,9 +365,7 @@ describe('WIABDevice', () => {
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors: '[]' });
 
       await device.onInit();
 
@@ -394,9 +395,7 @@ describe('WIABDevice', () => {
         { deviceId: 'contact-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ resetSensors });
 
       await device.onInit();
 
@@ -417,9 +416,7 @@ describe('WIABDevice', () => {
      */
     it('should handle capability value error in handleTriggered', async () => {
       // Setup device with empty sensor config (to avoid API calls)
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -455,9 +452,7 @@ describe('WIABDevice', () => {
      */
     it('should handle capability value error in handleReset', async () => {
       // Setup device with empty sensor config (to avoid API calls)
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -499,9 +494,7 @@ describe('WIABDevice', () => {
         { deviceId: 'device-2', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(validJson)
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors: validJson, resetSensors: '[]' });
 
       await device.onInit();
 
@@ -517,9 +510,7 @@ describe('WIABDevice', () => {
      * Test handling null or empty string
      */
     it('should handle null and empty string gracefully', async () => {
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(null)
-        .mockReturnValueOnce('');
+      device.getSetting = createGetSettingMock({ triggerSensors: null as unknown as string, resetSensors: '' });
 
       await device.onInit();
 
@@ -535,9 +526,7 @@ describe('WIABDevice', () => {
      * Test handling invalid JSON
      */
     it('should handle invalid JSON gracefully', async () => {
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('invalid json {')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors: 'invalid json {', resetSensors: '[]' });
 
       await device.onInit();
 
@@ -559,9 +548,7 @@ describe('WIABDevice', () => {
         capability: 'alarm_motion',
       });
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(nonArrayJson)
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors: nonArrayJson, resetSensors: '[]' });
 
       await device.onInit();
 
@@ -578,9 +565,7 @@ describe('WIABDevice', () => {
      * Test handling whitespace-only string
      */
     it('should handle whitespace-only string', async () => {
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('   ')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors: '   ', resetSensors: '[]' });
 
       await device.onInit();
 
@@ -593,9 +578,7 @@ describe('WIABDevice', () => {
      * Test handling empty array
      */
     it('should handle empty array correctly', async () => {
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -631,9 +614,7 @@ describe('WIABDevice', () => {
         { deviceId: 'contact-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -671,9 +652,7 @@ describe('WIABDevice', () => {
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(initialTriggerSensors)
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors: initialTriggerSensors, resetSensors: '[]' });
 
       await device.onInit();
 
@@ -685,9 +664,7 @@ describe('WIABDevice', () => {
         { deviceId: 'motion-2', capability: 'alarm_motion' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(newTriggerSensors)
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors: newTriggerSensors, resetSensors: '[]' });
 
       await device.onSettings({
         oldSettings: { triggerSensors: initialTriggerSensors },
@@ -720,9 +697,7 @@ describe('WIABDevice', () => {
         { deviceId: 'door-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -770,9 +745,7 @@ describe('WIABDevice', () => {
         { deviceId: 'door-bathroom', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -823,9 +796,7 @@ describe('WIABDevice', () => {
         { deviceId: 'door-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -880,9 +851,7 @@ describe('WIABDevice', () => {
         { deviceId: 'door-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -940,9 +909,7 @@ describe('WIABDevice', () => {
         { deviceId: 'contact-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -979,9 +946,7 @@ describe('WIABDevice', () => {
      */
     it('should pause device with UNOCCUPIED state setting alarm_occupancy to false', async () => {
       // Setup device
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
       jest.clearAllMocks();
@@ -1003,9 +968,7 @@ describe('WIABDevice', () => {
      */
     it('should unpause device and reinitialize sensor monitoring', async () => {
       // Setup device
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -1013,9 +976,7 @@ describe('WIABDevice', () => {
       await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
 
       jest.clearAllMocks();
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       // Then unpause
       await (device as unknown as { unpauseDevice: () => Promise<void> }).unpauseDevice();
@@ -1036,9 +997,7 @@ describe('WIABDevice', () => {
      */
     it('should ignore unpause when device is already unpaused', async () => {
       // Setup device (already unpaused by default)
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -1061,9 +1020,7 @@ describe('WIABDevice', () => {
         { deviceId: 'motion-1', capability: 'alarm_motion' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors: '[]' });
 
       await device.onInit();
 
@@ -1092,9 +1049,7 @@ describe('WIABDevice', () => {
      */
     it('should correctly report paused state', async () => {
       // Setup device
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -1110,9 +1065,7 @@ describe('WIABDevice', () => {
       expect(isPaused).toBe(true);
 
       // Unpause device
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await (device as unknown as { unpauseDevice: () => Promise<void> }).unpauseDevice();
 
@@ -1133,9 +1086,7 @@ describe('WIABDevice', () => {
         { deviceId: 'contact-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -1171,9 +1122,7 @@ describe('WIABDevice', () => {
       jest.clearAllMocks();
 
       // Step 4: Unpause device
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await (device as unknown as { unpauseDevice: () => Promise<void> }).unpauseDevice();
 
@@ -1201,9 +1150,7 @@ describe('WIABDevice', () => {
         { deviceId: 'door-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -1239,9 +1186,7 @@ describe('WIABDevice', () => {
         { deviceId: 'door-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -1281,9 +1226,7 @@ describe('WIABDevice', () => {
         { deviceId: 'door-1', capability: 'alarm_contact' },
       ]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors });
 
       await device.onInit();
 
@@ -1305,9 +1248,7 @@ describe('WIABDevice', () => {
      */
     it('should complete unpause even if sensor monitoring setup encounters errors', async () => {
       // Setup device
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('[]')
-        .mockReturnValueOnce('[]');
+      device.getSetting = createGetSettingMock();
 
       await device.onInit();
 
@@ -1321,9 +1262,7 @@ describe('WIABDevice', () => {
       expect(isPaused).toBe(true);
 
       // Mock getSetting to return invalid data to cause sensor monitoring setup to fail gracefully
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce('invalid json')
-        .mockReturnValueOnce('invalid json');
+      device.getSetting = createGetSettingMock({ triggerSensors: 'invalid json', resetSensors: 'invalid json' });
 
       // Attempt to unpause - setupSensorMonitoring catches errors gracefully
       // so unpause should complete successfully
@@ -1362,10 +1301,7 @@ describe('WIABDevice', () => {
       ]);
       const resetSensors = JSON.stringify([]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors)
-        .mockReturnValue(5); // t_enter = 5 seconds
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors, t_enter: 5 });
 
       await device.onInit();
 
@@ -1401,10 +1337,7 @@ describe('WIABDevice', () => {
       ]);
       const resetSensors = JSON.stringify([]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors)
-        .mockReturnValue(5);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors, t_enter: 5 });
 
       await device.onInit();
 
@@ -1437,10 +1370,7 @@ describe('WIABDevice', () => {
       ]);
       const resetSensors = JSON.stringify([]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors)
-        .mockReturnValue(300); // t_clear = 300 seconds
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors, t_clear: 300 });
 
       await device.onInit();
 
@@ -1476,10 +1406,7 @@ describe('WIABDevice', () => {
       ]);
       const resetSensors = JSON.stringify([]);
 
-      (device.getSetting as jest.Mock)
-        .mockReturnValueOnce(triggerSensors)
-        .mockReturnValueOnce(resetSensors)
-        .mockReturnValue(300);
+      device.getSetting = createGetSettingMock({ triggerSensors, resetSensors, t_clear: 300 });
 
       await device.onInit();
 

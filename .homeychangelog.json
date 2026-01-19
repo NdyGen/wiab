@@ -85,5 +85,8 @@
   },
   "1.2.17": {
     "en": "support for devices with only alarm_occupancy"
+  },
+  "1.3.0": {
+    "en": "BREAKING CHANGE: Room State Manager device has been removed. Room state functionality is now built into the WIAB Occupancy device. Existing Room State Manager devices must be deleted and recreated as WIAB devices with room state enabled. New features: integrated room state tracking with timer-based transitions (idle → extended_idle, occupied → extended_occupied), manual override mode, and improved state flow cards."
   }
 }

@@ -12,6 +12,12 @@ import {
 } from '../../lib/OccupancyState';
 import { classifySensors } from '../../lib/SensorClassifier';
 import { DeviceErrorId } from '../../constants/errorIds';
+import {
+  WIABStateEngine,
+  RoomState,
+  StateTransitionResult,
+  RoomStateTimerConfig,
+} from '../../lib/WIABStateEngine';
 
 /**
  * Extended HomeyAPIDevice with runtime methods
@@ -99,6 +105,11 @@ class WIABDevice extends Homey.Device {
   private staleSensorMap: Map<string, SensorStaleInfo> = new Map();
   private staleCheckInterval?: NodeJS.Timeout;
 
+  // Room state management
+  private stateEngine?: WIABStateEngine;
+  private roomStateTimer?: NodeJS.Timeout;
+  private manualOverride: boolean = false;
+
   /**
    * Initializes the WIAB device.
    *
@@ -125,10 +136,13 @@ class WIABDevice extends Homey.Device {
       await Promise.race([
         this.performInitialization(),
         new Promise<void>((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Initialization timeout after 30 seconds')),
-            INIT_TIMEOUT_MS
-          )
+          setTimeout(() => {
+            try {
+              reject(new Error('Initialization timeout after 30 seconds'));
+            } catch (error) {
+              this.error('Init timeout handler failed:', error);
+            }
+          }, INIT_TIMEOUT_MS)
         ),
       ]);
 
@@ -162,8 +176,49 @@ class WIABDevice extends Homey.Device {
   private async performInitialization(): Promise<void> {
     await this.migrateCapabilities();
     this.initializeState();
+    this.initializeRoomStateEngine();
+    this.restoreManualOverrideState();
     await this.setupMonitoring();
     this.registerFlowCardHandlers();
+  }
+
+  /**
+   * Restores the manual override state from device store.
+   *
+   * Called during initialization to restore the manual override flag
+   * if the device was in manual override mode before restart.
+   */
+  private restoreManualOverrideState(): void {
+    const storedOverride = this.getStoreValue('manualOverride') as boolean | null;
+    if (storedOverride === true) {
+      this.manualOverride = true;
+      this.log('Restored manual override state from device store');
+    }
+  }
+
+  /**
+   * Initializes the room state engine with current settings.
+   *
+   * Creates a WIABStateEngine instance with timer configuration from device settings.
+   * The engine manages room state transitions (idle ↔ extended_idle, occupied ↔ extended_occupied).
+   */
+  private initializeRoomStateEngine(): void {
+    const idleTimeoutMinutes = (this.getSetting('idleTimeoutMinutes') as number) ?? TimerDefaults.ROOM_STATE_IDLE_DEFAULT_MINUTES;
+    const occupiedTimeoutMinutes = (this.getSetting('occupiedTimeoutMinutes') as number) ?? TimerDefaults.ROOM_STATE_OCCUPIED_DEFAULT_MINUTES;
+
+    const config: RoomStateTimerConfig = {
+      idleTimeoutMinutes: Math.max(
+        TimerDefaults.ROOM_STATE_IDLE_MIN_MINUTES,
+        Math.min(TimerDefaults.ROOM_STATE_IDLE_MAX_MINUTES, idleTimeoutMinutes)
+      ),
+      occupiedTimeoutMinutes: Math.max(
+        TimerDefaults.ROOM_STATE_OCCUPIED_MIN_MINUTES,
+        Math.min(TimerDefaults.ROOM_STATE_OCCUPIED_MAX_MINUTES, occupiedTimeoutMinutes)
+      ),
+    };
+
+    this.stateEngine = new WIABStateEngine(config, RoomState.IDLE);
+    this.log(`Room state engine initialized: idleTimeout=${config.idleTimeoutMinutes}min, occupiedTimeout=${config.occupiedTimeoutMinutes}min`);
   }
 
   /**
@@ -325,6 +380,11 @@ class WIABDevice extends Homey.Device {
       event.changedKeys.includes('stalePirMinutes') ||
       event.changedKeys.includes('staleDoorMinutes');
 
+    // Check if room state timer settings changed
+    const roomStateTimerChanged =
+      event.changedKeys.includes('idleTimeoutMinutes') ||
+      event.changedKeys.includes('occupiedTimeoutMinutes');
+
     if (sensorSettingsChanged || staleTimeoutChanged) {
       this.log('Sensor configuration or stale timeout settings changed, reinitializing monitoring');
 
@@ -337,6 +397,49 @@ class WIABDevice extends Homey.Device {
       this.log('Timer settings changed, timers will use new values on next activation');
       // Timers read settings dynamically, no action needed
     }
+
+    // Handle room state timer settings
+    if (roomStateTimerChanged) {
+      this.log('Room state timer settings changed, updating engine configuration');
+      this.updateRoomStateEngineConfig();
+    }
+  }
+
+  /**
+   * Updates the room state engine configuration from current settings.
+   *
+   * Called when idleTimeoutMinutes or occupiedTimeoutMinutes settings change.
+   * Updates the engine and reschedules any active timer with new duration.
+   */
+  private updateRoomStateEngineConfig(): void {
+    if (!this.stateEngine) {
+      return;
+    }
+
+    const idleTimeoutMinutes = (this.getSetting('idleTimeoutMinutes') as number) ?? TimerDefaults.ROOM_STATE_IDLE_DEFAULT_MINUTES;
+    const occupiedTimeoutMinutes = (this.getSetting('occupiedTimeoutMinutes') as number) ?? TimerDefaults.ROOM_STATE_OCCUPIED_DEFAULT_MINUTES;
+
+    this.stateEngine.updateConfig({
+      idleTimeoutMinutes: Math.max(
+        TimerDefaults.ROOM_STATE_IDLE_MIN_MINUTES,
+        Math.min(TimerDefaults.ROOM_STATE_IDLE_MAX_MINUTES, idleTimeoutMinutes)
+      ),
+      occupiedTimeoutMinutes: Math.max(
+        TimerDefaults.ROOM_STATE_OCCUPIED_MIN_MINUTES,
+        Math.min(TimerDefaults.ROOM_STATE_OCCUPIED_MAX_MINUTES, occupiedTimeoutMinutes)
+      ),
+    });
+
+    // If not in manual override and in a base state, reschedule timer with new duration
+    if (!this.manualOverride) {
+      const currentState = this.stateEngine.getCurrentState();
+      const timerMinutes = this.stateEngine.getTimerForState(currentState);
+      if (timerMinutes !== null) {
+        this.scheduleRoomStateTimer(timerMinutes);
+      }
+    }
+
+    this.log(`Room state engine config updated: idleTimeout=${idleTimeoutMinutes}min, occupiedTimeout=${occupiedTimeoutMinutes}min`);
   }
 
   /**
@@ -347,12 +450,27 @@ class WIABDevice extends Homey.Device {
   async onDeleted(): Promise<void> {
     this.log('WIAB device deleted, cleaning up resources');
 
-    // Stop both timers
+    // Stop all timers
     this.stopEnterTimer();
     this.stopClearTimer();
+    this.stopRoomStateTimer();
 
     // Cleanup sensor monitoring
     this.teardownSensorMonitoring();
+
+    // Clear state engine
+    this.stateEngine = undefined;
+  }
+
+  /**
+   * Stops the room state timer if active.
+   */
+  private stopRoomStateTimer(): void {
+    if (this.roomStateTimer) {
+      clearTimeout(this.roomStateTimer);
+      this.roomStateTimer = undefined;
+      this.log('Room state timer stopped');
+    }
   }
 
   /**
@@ -941,10 +1059,13 @@ class WIABDevice extends Homey.Device {
    * - occupied = false if last_stable_occupancy == UNOCCUPIED
    * - During UNKNOWN periods, the boolean retains the last stable value
    * - When PAUSED, the boolean reflects the paused state (not the internal PAUSED state)
+   *
+   * Also drives room state transitions when occupancy changes.
    */
   private async updateOccupancyOutput(): Promise<void> {
     try {
       const occupied = occupancyToBoolean(this.lastStableOccupancy);
+      const previousOccupied = this.getCapabilityValue('alarm_occupancy') as boolean | null;
 
       try {
         await this.setCapabilityValue('alarm_occupancy', occupied);
@@ -962,6 +1083,13 @@ class WIABDevice extends Homey.Device {
       }
 
       this.log(`Occupancy output: ${occupied}, internal state: ${this.occupancyState}`);
+
+      // Drive room state machine when occupancy changes
+      // Only trigger if the boolean output actually changed (not during UNKNOWN fluctuations)
+      if (previousOccupied !== null && previousOccupied !== occupied && !this.isPaused) {
+        // Fire-and-forget: room state change doesn't need to block occupancy update
+        void this.handleOccupancyChangeForRoomState(occupied);
+      }
     } catch (error) {
       this.error('Failed to update occupancy output:', error);
       throw error;
@@ -1128,14 +1256,14 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
-   * Registers action handlers for set_state and unpause actions.
+   * Registers action handlers for set_state, unpause, set_room_state, and return_to_automatic actions.
    *
    * Called during device initialization to register the action listeners
    * that will be invoked when the user triggers these actions in flows.
    */
   private registerActionHandlers(): void {
     try {
-      // Register set_state action handler
+      // Register set_state action handler (legacy occupancy control)
       const setStateCard = this.homey.flow.getActionCard('set_state');
       if (!setStateCard) {
         throw new Error('set_state action card not found in flow definition');
@@ -1180,6 +1308,39 @@ class WIABDevice extends Homey.Device {
         }
       });
 
+      // Register set_room_state action handler (new room state control with manual override)
+      const setRoomStateCard = this.homey.flow.getActionCard('set_room_state');
+      if (setRoomStateCard) {
+        setRoomStateCard.registerRunListener(
+          async (args: {
+            device: WIABDevice;
+            state: 'idle' | 'extended_idle' | 'occupied' | 'extended_occupied';
+          }) => {
+            args.device.log(`Set room state action triggered: ${args.state}`);
+            try {
+              await args.device.setManualRoomState(args.state);
+            } catch (error) {
+              args.device.error(`Set room state action failed: ${error}`, error);
+              throw error;
+            }
+          }
+        );
+      }
+
+      // Register return_to_automatic action handler
+      const returnToAutomaticCard = this.homey.flow.getActionCard('return_to_automatic');
+      if (returnToAutomaticCard) {
+        returnToAutomaticCard.registerRunListener(async (args: { device: WIABDevice }) => {
+          args.device.log('Return to automatic action triggered');
+          try {
+            await args.device.returnToAutomaticMode();
+          } catch (error) {
+            args.device.error(`Return to automatic action failed: ${error}`, error);
+            throw error;
+          }
+        });
+      }
+
       this.log('Action handlers registered successfully');
     } catch (error) {
       this.error('Failed to register action handlers:', error);
@@ -1188,10 +1349,11 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
-   * Registers condition handlers for is_paused condition.
+   * Registers condition handlers for is_paused, is_in_room_state, is_exactly_room_state,
+   * and is_manual_override conditions.
    *
-   * Called during device initialization to register the condition listener
-   * that will be evaluated when the user includes this condition in flows.
+   * Called during device initialization to register the condition listeners
+   * that will be evaluated when the user includes these conditions in flows.
    */
   private registerConditionHandlers(): void {
     try {
@@ -1213,6 +1375,63 @@ class WIABDevice extends Homey.Device {
           }
         }
       );
+
+      // Register is_in_room_state condition handler (with hierarchy)
+      const isInRoomStateCard = this.homey.flow.getConditionCard('is_in_room_state');
+      if (isInRoomStateCard) {
+        isInRoomStateCard.registerRunListener(
+          async (args: {
+            device: WIABDevice;
+            state: 'idle' | 'extended_idle' | 'occupied' | 'extended_occupied';
+          }): Promise<boolean> => {
+            try {
+              const result = args.device.isInRoomState(args.state);
+              args.device.log(`Is in room state '${args.state}' (with hierarchy): ${result}`);
+              return result;
+            } catch (error) {
+              args.device.error(`Is in room state condition evaluation failed: ${error}`, error);
+              throw error;
+            }
+          }
+        );
+      }
+
+      // Register is_exactly_room_state condition handler (exact match)
+      const isExactlyRoomStateCard = this.homey.flow.getConditionCard('is_exactly_room_state');
+      if (isExactlyRoomStateCard) {
+        isExactlyRoomStateCard.registerRunListener(
+          async (args: {
+            device: WIABDevice;
+            state: 'idle' | 'extended_idle' | 'occupied' | 'extended_occupied';
+          }): Promise<boolean> => {
+            try {
+              const result = args.device.isExactlyInRoomState(args.state);
+              args.device.log(`Is exactly in room state '${args.state}': ${result}`);
+              return result;
+            } catch (error) {
+              args.device.error(`Is exactly room state condition evaluation failed: ${error}`, error);
+              throw error;
+            }
+          }
+        );
+      }
+
+      // Register is_manual_override condition handler
+      const isManualOverrideCard = this.homey.flow.getConditionCard('is_manual_override');
+      if (isManualOverrideCard) {
+        isManualOverrideCard.registerRunListener(
+          async (args: { device: WIABDevice }): Promise<boolean> => {
+            try {
+              const result = args.device.isManualOverrideActive();
+              args.device.log(`Is manual override active: ${result}`);
+              return result;
+            } catch (error) {
+              args.device.error(`Is manual override condition evaluation failed: ${error}`, error);
+              throw error;
+            }
+          }
+        );
+      }
 
       this.log('Condition handlers registered successfully');
     } catch (error) {
@@ -1482,6 +1701,284 @@ class WIABDevice extends Homey.Device {
       this.error('Failed to evaluate stale fail-safe:', error);
       // Don't throw - fail-safe evaluation is non-critical background operation
     }
+  }
+
+  // ========================================
+  // Room State Management Methods
+  // ========================================
+
+  /**
+   * Schedules a room state timer for transitioning to extended states.
+   *
+   * @param minutes - Duration in minutes before timer expires
+   */
+  private scheduleRoomStateTimer(minutes: number): void {
+    this.stopRoomStateTimer();
+
+    if (minutes <= 0) {
+      this.log('Room state timer disabled (duration is 0)');
+      return;
+    }
+
+    const timeoutMs = minutes * 60 * 1000;
+    this.roomStateTimer = setTimeout(async () => {
+      try {
+        // Validate device still initialized
+        if (!this.stateEngine) {
+          this.log('Room state timer cancelled: device deinitialized');
+          return;
+        }
+
+        // Ignore if in manual override
+        if (this.manualOverride) {
+          this.log('Room state timer expired but manual override active - ignoring');
+          return;
+        }
+
+        this.log(`Room state timer expired after ${minutes} minutes`);
+        await this.handleRoomStateTimerExpiry();
+      } catch (error) {
+        // CRITICAL: Prevent unhandled rejection
+        this.error(`[${DeviceErrorId.ROOM_STATE_TIMER_FAILED}] Room state timer expiry failed (device may be deleted):`, error);
+      }
+    }, timeoutMs);
+
+    this.log(`Room state timer scheduled: ${minutes} minutes`);
+  }
+
+  /**
+   * Handles room state timer expiry.
+   *
+   * Transitions from base state to extended state via the state engine.
+   */
+  private async handleRoomStateTimerExpiry(): Promise<void> {
+    if (!this.stateEngine) {
+      return;
+    }
+
+    const result = this.stateEngine.handleTimerExpiry();
+
+    if (result.newState) {
+      await this.executeRoomStateTransition(result);
+    }
+  }
+
+  /**
+   * Executes a room state transition and triggers flow cards.
+   *
+   * @param result - The state transition result from the engine
+   */
+  private async executeRoomStateTransition(result: StateTransitionResult): Promise<void> {
+    if (!result.newState || !result.previousState) {
+      return;
+    }
+
+    this.log(`Room state transition: ${result.previousState} → ${result.newState} (${result.reason})`);
+
+    // Trigger flow cards
+    await this.triggerRoomStateFlowCards(result.newState, result.previousState);
+
+    // Schedule next timer if applicable
+    if (result.scheduledTimerMinutes !== null && result.scheduledTimerMinutes > 0) {
+      this.scheduleRoomStateTimer(result.scheduledTimerMinutes);
+    } else {
+      this.stopRoomStateTimer();
+    }
+  }
+
+  /**
+   * Triggers room state flow cards for a state transition.
+   *
+   * @param newState - The new room state
+   * @param previousState - The previous room state
+   */
+  private async triggerRoomStateFlowCards(newState: RoomState, previousState: RoomState): Promise<void> {
+    try {
+      // Trigger generic state changed card with tokens
+      const stateChangedCard = this.homey.flow.getDeviceTriggerCard('room_state_changed');
+      if (stateChangedCard) {
+        await stateChangedCard.trigger(this, {
+          state: newState,
+          previous_state: previousState,
+        }).catch((err: Error) => {
+          this.error('Failed to trigger room_state_changed:', err);
+        });
+      }
+
+      // Trigger specific state cards
+      const specificCardId = `room_state_became_${newState}`;
+      const specificCard = this.homey.flow.getDeviceTriggerCard(specificCardId);
+      if (specificCard) {
+        await specificCard.trigger(this).catch((err: Error) => {
+          this.error(`Failed to trigger ${specificCardId}:`, err);
+        });
+      }
+    } catch (error) {
+      this.error('Failed to trigger room state flow cards:', error);
+    }
+  }
+
+  /**
+   * Handles occupancy change and updates room state.
+   *
+   * Called when the boolean occupancy output changes.
+   * Drives the room state machine based on occupancy.
+   *
+   * @param isOccupied - Whether the room is now occupied
+   */
+  private async handleOccupancyChangeForRoomState(isOccupied: boolean): Promise<void> {
+    try {
+      if (!this.stateEngine) {
+        return;
+      }
+
+      // Skip if in manual override mode
+      if (this.manualOverride) {
+        this.log(`Occupancy changed to ${isOccupied ? 'occupied' : 'unoccupied'} but manual override active - ignoring`);
+        return;
+      }
+
+      const result = this.stateEngine.handleOccupancyChange(isOccupied);
+
+      if (result.newState) {
+        await this.executeRoomStateTransition(result);
+      } else if (result.scheduledTimerMinutes !== null) {
+        // No state change but timer may need scheduling
+        this.scheduleRoomStateTimer(result.scheduledTimerMinutes);
+      }
+    } catch (error) {
+      // Log error but don't throw - room state is non-critical background operation
+      this.error(
+        `[${DeviceErrorId.ROOM_STATE_TIMER_FAILED}] Failed to handle occupancy change for room state:`,
+        error
+      );
+    }
+  }
+
+  /**
+   * Sets the room state manually (for manual override mode).
+   *
+   * When called:
+   * - Enables manual override mode
+   * - Sets the room state to the specified value
+   * - Stops room state timers (no automatic transitions)
+   * - Sensor monitoring continues (occupancy is still tracked)
+   *
+   * @param stateString - The room state to set ('idle', 'extended_idle', 'occupied', 'extended_occupied')
+   */
+  private async setManualRoomState(stateString: string): Promise<void> {
+    if (!this.stateEngine) {
+      return;
+    }
+
+    // Validate state
+    if (!WIABStateEngine.isValidState(stateString)) {
+      this.error(`Invalid room state: ${stateString}`);
+      throw new Error(`Invalid room state: ${stateString}`);
+    }
+
+    const state = stateString as RoomState;
+    const previousState = this.stateEngine.getCurrentState();
+
+    // Enable manual override and persist to device store
+    this.manualOverride = true;
+    await this.setStoreValue('manualOverride', true).catch((err) => {
+      this.error('Failed to persist manualOverride state:', err);
+    });
+
+    // Set the state manually
+    const result = this.stateEngine.setManualState(state);
+
+    // Stop automatic timers
+    this.stopRoomStateTimer();
+
+    if (result.newState) {
+      await this.triggerRoomStateFlowCards(result.newState, previousState);
+    }
+
+    this.log(`Manual room state set: ${state} (override enabled)`);
+  }
+
+  /**
+   * Returns to automatic room state management.
+   *
+   * When called:
+   * - Disables manual override mode
+   * - Re-evaluates room state based on current occupancy
+   * - Restarts automatic timers
+   */
+  private async returnToAutomaticMode(): Promise<void> {
+    if (!this.stateEngine) {
+      return;
+    }
+
+    // Disable manual override and persist to device store
+    this.manualOverride = false;
+    await this.setStoreValue('manualOverride', false).catch((err) => {
+      this.error('Failed to persist manualOverride state:', err);
+    });
+
+    // Re-evaluate based on current occupancy
+    const isOccupied = this.lastStableOccupancy === StableOccupancyState.OCCUPIED;
+    const result = this.stateEngine.handleOccupancyChange(isOccupied);
+
+    if (result.newState) {
+      await this.executeRoomStateTransition(result);
+    } else if (result.scheduledTimerMinutes !== null) {
+      this.scheduleRoomStateTimer(result.scheduledTimerMinutes);
+    }
+
+    this.log('Returned to automatic room state mode');
+  }
+
+  /**
+   * Checks if the current room state matches the target (with hierarchy).
+   *
+   * Returns true if:
+   * - Current state equals target state
+   * - Current state is a child of target state (e.g., extended_occupied matches occupied)
+   *
+   * @param targetStateString - The target state to check
+   * @returns True if current state matches target (with inheritance)
+   */
+  private isInRoomState(targetStateString: string): boolean {
+    if (!this.stateEngine || !WIABStateEngine.isValidState(targetStateString)) {
+      return false;
+    }
+
+    return this.stateEngine.isInState(targetStateString as RoomState);
+  }
+
+  /**
+   * Checks if the current room state exactly matches the target (no hierarchy).
+   *
+   * @param targetStateString - The target state to check
+   * @returns True only if current state exactly equals target
+   */
+  private isExactlyInRoomState(targetStateString: string): boolean {
+    if (!this.stateEngine || !WIABStateEngine.isValidState(targetStateString)) {
+      return false;
+    }
+
+    return this.stateEngine.isExactlyInState(targetStateString as RoomState);
+  }
+
+  /**
+   * Checks if manual override is currently active.
+   *
+   * @returns True if manual override is active
+   */
+  private isManualOverrideActive(): boolean {
+    return this.manualOverride;
+  }
+
+  /**
+   * Gets the current room state.
+   *
+   * @returns The current room state, or 'idle' if engine not initialized
+   */
+  private getCurrentRoomState(): RoomState {
+    return this.stateEngine?.getCurrentState() ?? RoomState.IDLE;
   }
 }
 

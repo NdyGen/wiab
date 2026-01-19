@@ -8,7 +8,10 @@
  */
 
 /**
- * Internal quad-state occupancy states.
+ * Internal occupancy states for the quad-state occupancy model.
+ *
+ * Note: Extended room states (extended_idle, extended_occupied) are managed
+ * separately by the WIABStateEngine via the RoomState enum.
  *
  * @enum {string}
  * @property {string} UNKNOWN - Transitional state after door events, resolved by timers or PIR
@@ -74,6 +77,22 @@ export const TimerDefaults = {
   T_CLEAR_SECONDS: 600,
   T_CLEAR_MIN_SECONDS: 60,
   T_CLEAR_MAX_SECONDS: 3600,
+
+  /**
+   * Room state timer: Minutes before idle → extended_idle.
+   * Default: 30 minutes, Max: 8 hours (480 minutes).
+   */
+  ROOM_STATE_IDLE_DEFAULT_MINUTES: 30,
+  ROOM_STATE_IDLE_MIN_MINUTES: 0,
+  ROOM_STATE_IDLE_MAX_MINUTES: 480,
+
+  /**
+   * Room state timer: Minutes before occupied → extended_occupied.
+   * Default: 60 minutes, Max: 8 hours (480 minutes).
+   */
+  ROOM_STATE_OCCUPIED_DEFAULT_MINUTES: 60,
+  ROOM_STATE_OCCUPIED_MIN_MINUTES: 0,
+  ROOM_STATE_OCCUPIED_MAX_MINUTES: 480,
 } as const;
 
 /**
@@ -171,4 +190,24 @@ export function isAnyDoorOpen(doorStates: Map<string, DoorState>): boolean {
   }
 
   return false;
+}
+
+/**
+ * Checks if a state is occupied.
+ *
+ * @param state - The occupancy state to check
+ * @returns {boolean} True if state is OCCUPIED
+ */
+export function isOccupiedState(state: OccupancyState): boolean {
+  return state === OccupancyState.OCCUPIED;
+}
+
+/**
+ * Checks if a state is unoccupied (idle).
+ *
+ * @param state - The occupancy state to check
+ * @returns {boolean} True if state is UNOCCUPIED
+ */
+export function isIdleState(state: OccupancyState): boolean {
+  return state === OccupancyState.UNOCCUPIED;
 }
