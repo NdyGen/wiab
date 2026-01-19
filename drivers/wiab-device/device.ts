@@ -1755,12 +1755,21 @@ class WIABDevice extends Homey.Device {
         await this.executeRoomStateTransition(result);
       } else if (result.scheduledTimerMinutes !== null && result.scheduledTimerMinutes > 0) {
         // No state change but timer should be scheduled (already in correct base state)
-        this.log(`Room state already correct (${this.stateEngine.getCurrentState()}), scheduling timer: ${result.scheduledTimerMinutes} minutes`);
+        const currentState = this.stateEngine.getCurrentState();
+        this.log(`Room state already correct (${currentState}), scheduling timer: ${result.scheduledTimerMinutes} minutes`);
+        // Ensure capability matches state engine
+        await this.setCapabilityValue('room_state', currentState).catch((err) => {
+          this.error(`Failed to set room_state capability to ${currentState}:`, err);
+        });
         this.scheduleRoomStateTimer(result.scheduledTimerMinutes);
       } else {
         // Already in correct state, check if we need to schedule timer based on current state
         const currentState = this.stateEngine.getCurrentState();
         const timerMinutes = this.stateEngine.getTimerForState(currentState);
+        // Ensure capability matches state engine
+        await this.setCapabilityValue('room_state', currentState).catch((err) => {
+          this.error(`Failed to set room_state capability to ${currentState}:`, err);
+        });
         if (timerMinutes !== null && timerMinutes > 0) {
           this.log(`Room state already correct (${currentState}), scheduling timer: ${timerMinutes} minutes`);
           this.scheduleRoomStateTimer(timerMinutes);
@@ -1844,6 +1853,13 @@ class WIABDevice extends Homey.Device {
     }
 
     this.log(`Room state transition: ${result.previousState} → ${result.newState} (${result.reason})`);
+
+    // Update the room_state capability to reflect the new state in the UI
+    try {
+      await this.setCapabilityValue('room_state', result.newState);
+    } catch (error) {
+      this.error(`Failed to update room_state capability to ${result.newState}:`, error);
+    }
 
     // Trigger flow cards
     await this.triggerRoomStateFlowCards(result.newState, result.previousState);
