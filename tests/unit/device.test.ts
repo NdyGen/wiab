@@ -86,6 +86,8 @@ describe('WIABDevice', () => {
     device.registerCapabilityListener = jest.fn();
     device.setWarning = jest.fn().mockResolvedValue(undefined);
     device.getData = jest.fn().mockReturnValue({ id: 'test-device-id' });
+    device.getStoreValue = jest.fn().mockReturnValue(null);
+    device.setStoreValue = jest.fn().mockResolvedValue(undefined);
   });
 
   describe('onInit', () => {

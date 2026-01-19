@@ -245,32 +245,26 @@ git push origin v1.0.4
 
 ## Project Overview
 
-WIAB (Wasp in a Box) creates virtual sensors by aggregating physical sensors across four device types.
+WIAB (Wasp in a Box) creates virtual sensors by aggregating physical sensors across three device types.
 
 ### Multi-Device Architecture
 
-The app contains **4 distinct device types**, each with unique monitoring patterns:
+The app contains **3 distinct device types**, each with unique monitoring patterns:
 
 #### 1. WIAB Device (`drivers/wiab-device/`)
-**Purpose:** Virtual occupancy sensor
-**Pattern:** Polling-based (2s interval)
+**Purpose:** Virtual occupancy sensor with integrated room state tracking
+**Pattern:** Event-driven sensor monitoring
 **Core Logic:**
 - **Trigger sensors** (motion) → activate occupancy on FALSE→TRUE
 - **Reset sensors** (door contacts) → deactivate occupancy on FALSE→TRUE
 - Edge detection - only state changes trigger actions
 - Priority - reset sensors checked before trigger sensors
+- **Room state tracking** - timer-based transitions (idle → extended_idle, occupied → extended_occupied)
+- Manual override mode for room state control
 
 **Metaphor:** Like a wasp in a box - active until it finds the exit.
 
-#### 2. Room State Device (`drivers/wiab-room-state/`)
-**Purpose:** Virtual room state tracking
-**Pattern:** Event-driven via listeners
-**Core Logic:**
-- Aggregates multiple sensor types (motion, contact, etc.)
-- State machine with multiple states
-- Real-time updates via device capability listeners
-
-#### 3. Zone Seal Device (`drivers/wiab-zone-seal/`)
+#### 2. Zone Seal Device (`drivers/wiab-zone-seal/`)
 **Purpose:** Virtual zone integrity monitoring
 **Pattern:** WebSocket-based real-time updates
 **Core Logic:**
@@ -279,7 +273,7 @@ The app contains **4 distinct device types**, each with unique monitoring patter
 - Configurable delay timers for state transitions
 - Fail-safe: stale sensors treated as leaky
 
-#### 4. Circuit Breaker Device (`drivers/wiab-circuit-breaker/`)
+#### 3. Circuit Breaker Device (`drivers/wiab-circuit-breaker/`)
 **Purpose:** Hierarchical device monitoring with battery tracking
 **Pattern:** Polling + event hybrid
 **Core Logic:**
@@ -291,8 +285,7 @@ The app contains **4 distinct device types**, each with unique monitoring patter
 ```
 app.ts                           # Minimal coordinator
 drivers/
-  wiab-device/                   # Occupancy sensor
-  wiab-room-state/               # Room state tracker
+  wiab-device/                   # Occupancy sensor with room state
   wiab-zone-seal/                # Zone integrity monitor
   wiab-circuit-breaker/          # Device hierarchy monitor
 lib/
@@ -300,6 +293,7 @@ lib/
   SensorMonitor.ts               # Polling engine (2s interval)
   SensorStateAggregator.ts       # State aggregation
   DeviceRegistry.ts              # Device lookup
+  WIABStateEngine.ts             # Room state machine (pure TypeScript)
   ErrorReporter.ts               # Centralized error reporting
   WarningManager.ts              # User-facing warnings
   RetryManager.ts                # Exponential backoff retry
@@ -317,9 +311,10 @@ Several libraries power multiple device types:
 | `SensorMonitor` | Polling engine with stale detection | WIAB, Circuit Breaker |
 | `SensorStateAggregator` | Aggregates sensor states | All device types |
 | `DeviceRegistry` | Device lookup across app | All device types |
+| `WIABStateEngine` | Pure room state machine | WIAB |
 | `ErrorReporter` | Sentry integration, error tracking | All device types |
 | `WarningManager` | User-facing warnings | All device types |
-| `RetryManager` | Exponential backoff retry | Zone Seal, Room State |
+| `RetryManager` | Exponential backoff retry | Zone Seal |
 | `FlowCardErrorHandler` | Flow card error handling | All device types |
 
 ---

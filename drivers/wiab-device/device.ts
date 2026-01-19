@@ -136,10 +136,13 @@ class WIABDevice extends Homey.Device {
       await Promise.race([
         this.performInitialization(),
         new Promise<void>((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Initialization timeout after 30 seconds')),
-            INIT_TIMEOUT_MS
-          )
+          setTimeout(() => {
+            try {
+              reject(new Error('Initialization timeout after 30 seconds'));
+            } catch (error) {
+              this.error('Init timeout handler failed:', error);
+            }
+          }, INIT_TIMEOUT_MS)
         ),
       ]);
 
@@ -174,8 +177,23 @@ class WIABDevice extends Homey.Device {
     await this.migrateCapabilities();
     this.initializeState();
     this.initializeRoomStateEngine();
+    this.restoreManualOverrideState();
     await this.setupMonitoring();
     this.registerFlowCardHandlers();
+  }
+
+  /**
+   * Restores the manual override state from device store.
+   *
+   * Called during initialization to restore the manual override flag
+   * if the device was in manual override mode before restart.
+   */
+  private restoreManualOverrideState(): void {
+    const storedOverride = this.getStoreValue('manualOverride') as boolean | null;
+    if (storedOverride === true) {
+      this.manualOverride = true;
+      this.log('Restored manual override state from device store');
+    }
   }
 
   /**
@@ -185,12 +203,18 @@ class WIABDevice extends Homey.Device {
    * The engine manages room state transitions (idle ↔ extended_idle, occupied ↔ extended_occupied).
    */
   private initializeRoomStateEngine(): void {
-    const idleTimeoutMinutes = (this.getSetting('idleTimeoutMinutes') as number) ?? 30;
-    const occupiedTimeoutMinutes = (this.getSetting('occupiedTimeoutMinutes') as number) ?? 60;
+    const idleTimeoutMinutes = (this.getSetting('idleTimeoutMinutes') as number) ?? TimerDefaults.ROOM_STATE_IDLE_DEFAULT_MINUTES;
+    const occupiedTimeoutMinutes = (this.getSetting('occupiedTimeoutMinutes') as number) ?? TimerDefaults.ROOM_STATE_OCCUPIED_DEFAULT_MINUTES;
 
     const config: RoomStateTimerConfig = {
-      idleTimeoutMinutes: Math.max(0, Math.min(480, idleTimeoutMinutes)),
-      occupiedTimeoutMinutes: Math.max(0, Math.min(480, occupiedTimeoutMinutes)),
+      idleTimeoutMinutes: Math.max(
+        TimerDefaults.ROOM_STATE_IDLE_MIN_MINUTES,
+        Math.min(TimerDefaults.ROOM_STATE_IDLE_MAX_MINUTES, idleTimeoutMinutes)
+      ),
+      occupiedTimeoutMinutes: Math.max(
+        TimerDefaults.ROOM_STATE_OCCUPIED_MIN_MINUTES,
+        Math.min(TimerDefaults.ROOM_STATE_OCCUPIED_MAX_MINUTES, occupiedTimeoutMinutes)
+      ),
     };
 
     this.stateEngine = new WIABStateEngine(config, RoomState.IDLE);
@@ -392,12 +416,18 @@ class WIABDevice extends Homey.Device {
       return;
     }
 
-    const idleTimeoutMinutes = (this.getSetting('idleTimeoutMinutes') as number) ?? 30;
-    const occupiedTimeoutMinutes = (this.getSetting('occupiedTimeoutMinutes') as number) ?? 60;
+    const idleTimeoutMinutes = (this.getSetting('idleTimeoutMinutes') as number) ?? TimerDefaults.ROOM_STATE_IDLE_DEFAULT_MINUTES;
+    const occupiedTimeoutMinutes = (this.getSetting('occupiedTimeoutMinutes') as number) ?? TimerDefaults.ROOM_STATE_OCCUPIED_DEFAULT_MINUTES;
 
     this.stateEngine.updateConfig({
-      idleTimeoutMinutes: Math.max(0, Math.min(480, idleTimeoutMinutes)),
-      occupiedTimeoutMinutes: Math.max(0, Math.min(480, occupiedTimeoutMinutes)),
+      idleTimeoutMinutes: Math.max(
+        TimerDefaults.ROOM_STATE_IDLE_MIN_MINUTES,
+        Math.min(TimerDefaults.ROOM_STATE_IDLE_MAX_MINUTES, idleTimeoutMinutes)
+      ),
+      occupiedTimeoutMinutes: Math.max(
+        TimerDefaults.ROOM_STATE_OCCUPIED_MIN_MINUTES,
+        Math.min(TimerDefaults.ROOM_STATE_OCCUPIED_MAX_MINUTES, occupiedTimeoutMinutes)
+      ),
     });
 
     // If not in manual override and in a base state, reschedule timer with new duration
@@ -1797,23 +1827,31 @@ class WIABDevice extends Homey.Device {
    * @param isOccupied - Whether the room is now occupied
    */
   private async handleOccupancyChangeForRoomState(isOccupied: boolean): Promise<void> {
-    if (!this.stateEngine) {
-      return;
-    }
+    try {
+      if (!this.stateEngine) {
+        return;
+      }
 
-    // Skip if in manual override mode
-    if (this.manualOverride) {
-      this.log(`Occupancy changed to ${isOccupied ? 'occupied' : 'unoccupied'} but manual override active - ignoring`);
-      return;
-    }
+      // Skip if in manual override mode
+      if (this.manualOverride) {
+        this.log(`Occupancy changed to ${isOccupied ? 'occupied' : 'unoccupied'} but manual override active - ignoring`);
+        return;
+      }
 
-    const result = this.stateEngine.handleOccupancyChange(isOccupied);
+      const result = this.stateEngine.handleOccupancyChange(isOccupied);
 
-    if (result.newState) {
-      await this.executeRoomStateTransition(result);
-    } else if (result.scheduledTimerMinutes !== null) {
-      // No state change but timer may need scheduling
-      this.scheduleRoomStateTimer(result.scheduledTimerMinutes);
+      if (result.newState) {
+        await this.executeRoomStateTransition(result);
+      } else if (result.scheduledTimerMinutes !== null) {
+        // No state change but timer may need scheduling
+        this.scheduleRoomStateTimer(result.scheduledTimerMinutes);
+      }
+    } catch (error) {
+      // Log error but don't throw - room state is non-critical background operation
+      this.error(
+        `[${DeviceErrorId.ROOM_STATE_TIMER_FAILED}] Failed to handle occupancy change for room state:`,
+        error
+      );
     }
   }
 
@@ -1842,8 +1880,11 @@ class WIABDevice extends Homey.Device {
     const state = stateString as RoomState;
     const previousState = this.stateEngine.getCurrentState();
 
-    // Enable manual override
+    // Enable manual override and persist to device store
     this.manualOverride = true;
+    await this.setStoreValue('manualOverride', true).catch((err) => {
+      this.error('Failed to persist manualOverride state:', err);
+    });
 
     // Set the state manually
     const result = this.stateEngine.setManualState(state);
@@ -1871,8 +1912,11 @@ class WIABDevice extends Homey.Device {
       return;
     }
 
-    // Disable manual override
+    // Disable manual override and persist to device store
     this.manualOverride = false;
+    await this.setStoreValue('manualOverride', false).catch((err) => {
+      this.error('Failed to persist manualOverride state:', err);
+    });
 
     // Re-evaluate based on current occupancy
     const isOccupied = this.lastStableOccupancy === StableOccupancyState.OCCUPIED;

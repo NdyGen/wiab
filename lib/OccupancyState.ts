@@ -8,24 +8,21 @@
  */
 
 /**
- * Internal occupancy states with support for extended room states.
+ * Internal occupancy states for the quad-state occupancy model.
+ *
+ * Note: Extended room states (extended_idle, extended_occupied) are managed
+ * separately by the WIABStateEngine via the RoomState enum.
  *
  * @enum {string}
  * @property {string} UNKNOWN - Transitional state after door events, resolved by timers or PIR
  * @property {string} OCCUPIED - Room is occupied (motion detected)
- * @property {string} EXTENDED_OCCUPIED - Room has been occupied for extended period
  * @property {string} UNOCCUPIED - Room is empty (no motion, or timeout expired)
- * @property {string} IDLE - Room is idle (alias for unoccupied in room state context)
- * @property {string} EXTENDED_IDLE - Room has been idle for extended period
  * @property {string} PAUSED - Device is paused and not monitoring sensors
  */
 export enum OccupancyState {
   UNKNOWN = 'UNKNOWN',
   OCCUPIED = 'OCCUPIED',
-  EXTENDED_OCCUPIED = 'EXTENDED_OCCUPIED',
   UNOCCUPIED = 'UNOCCUPIED',
-  IDLE = 'IDLE',
-  EXTENDED_IDLE = 'EXTENDED_IDLE',
   PAUSED = 'PAUSED',
 }
 
@@ -80,6 +77,22 @@ export const TimerDefaults = {
   T_CLEAR_SECONDS: 600,
   T_CLEAR_MIN_SECONDS: 60,
   T_CLEAR_MAX_SECONDS: 3600,
+
+  /**
+   * Room state timer: Minutes before idle → extended_idle.
+   * Default: 30 minutes, Max: 8 hours (480 minutes).
+   */
+  ROOM_STATE_IDLE_DEFAULT_MINUTES: 30,
+  ROOM_STATE_IDLE_MIN_MINUTES: 0,
+  ROOM_STATE_IDLE_MAX_MINUTES: 480,
+
+  /**
+   * Room state timer: Minutes before occupied → extended_occupied.
+   * Default: 60 minutes, Max: 8 hours (480 minutes).
+   */
+  ROOM_STATE_OCCUPIED_DEFAULT_MINUTES: 60,
+  ROOM_STATE_OCCUPIED_MIN_MINUTES: 0,
+  ROOM_STATE_OCCUPIED_MAX_MINUTES: 480,
 } as const;
 
 /**
@@ -180,29 +193,21 @@ export function isAnyDoorOpen(doorStates: Map<string, DoorState>): boolean {
 }
 
 /**
- * Checks if a state is in the occupied family.
- *
- * Returns true for OCCUPIED and EXTENDED_OCCUPIED.
+ * Checks if a state is occupied.
  *
  * @param state - The occupancy state to check
- * @returns {boolean} True if state is occupied or extended_occupied
+ * @returns {boolean} True if state is OCCUPIED
  */
 export function isOccupiedState(state: OccupancyState): boolean {
-  return state === OccupancyState.OCCUPIED || state === OccupancyState.EXTENDED_OCCUPIED;
+  return state === OccupancyState.OCCUPIED;
 }
 
 /**
- * Checks if a state is in the idle/unoccupied family.
- *
- * Returns true for UNOCCUPIED, IDLE, and EXTENDED_IDLE.
+ * Checks if a state is unoccupied (idle).
  *
  * @param state - The occupancy state to check
- * @returns {boolean} True if state is unoccupied, idle, or extended_idle
+ * @returns {boolean} True if state is UNOCCUPIED
  */
 export function isIdleState(state: OccupancyState): boolean {
-  return (
-    state === OccupancyState.UNOCCUPIED ||
-    state === OccupancyState.IDLE ||
-    state === OccupancyState.EXTENDED_IDLE
-  );
+  return state === OccupancyState.UNOCCUPIED;
 }
