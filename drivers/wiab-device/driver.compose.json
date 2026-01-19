@@ -10,6 +10,7 @@
   "capabilities": [
     "alarm_occupancy",
     "occupancy_state",
+    "room_state",
     "alarm_paused",
     "alarm_data_stale"
   ],

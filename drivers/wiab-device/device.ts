@@ -253,6 +253,16 @@ class WIABDevice extends Homey.Device {
         this.error('Failed to initialize alarm_data_stale capability during migration:', err);
       });
     }
+
+    // Ensure room_state capability exists (for migration of existing devices)
+    if (!this.hasCapability('room_state')) {
+      this.log('Adding room_state capability to existing device');
+      await this.addCapability('room_state');
+      // Initialize to idle (will be updated by initializeRoomStateFromOccupancy)
+      await this.setCapabilityValue('room_state', 'idle').catch((err) => {
+        this.error('Failed to initialize room_state capability during migration:', err);
+      });
+    }
   }
 
   /**
