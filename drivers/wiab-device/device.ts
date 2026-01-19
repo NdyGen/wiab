@@ -282,6 +282,11 @@ class WIABDevice extends Homey.Device {
     // Set initial boolean output from stable state
     await this.updateOccupancyOutput();
 
+    // Initialize room state timer based on current occupancy
+    // This is critical because updateOccupancyOutput() won't trigger handleOccupancyChangeForRoomState()
+    // on initialization (previousOccupied is null), so we must explicitly start the timer
+    await this.initializeRoomStateFromOccupancy();
+
     /**
      * Registers the alarm_paused capability listener to handle UI toggle events.
      *
@@ -1239,6 +1244,11 @@ class WIABDevice extends Homey.Device {
       // Update output
       await this.updateOccupancyOutput();
 
+      // Initialize room state timer based on current occupancy
+      // This is critical because updateOccupancyOutput() won't trigger handleOccupancyChangeForRoomState()
+      // when previousOccupied is null (capability just initialized), so we must explicitly start the timer
+      await this.initializeRoomStateFromOccupancy();
+
       this.log('Device resumed, sensor monitoring reinitialized');
     } catch (error) {
       this.error('Failed to unpause device:', error);
@@ -1706,6 +1716,66 @@ class WIABDevice extends Homey.Device {
   // ========================================
   // Room State Management Methods
   // ========================================
+
+  /**
+   * Initializes the room state timer based on current occupancy.
+   *
+   * This method is called during device initialization and after unpausing
+   * to synchronize the room state engine with the current occupancy state
+   * and start the appropriate timer for extended state transitions.
+   *
+   * Without this explicit initialization, the room state timer would never
+   * start because updateOccupancyOutput() only triggers handleOccupancyChangeForRoomState()
+   * when the boolean occupancy value CHANGES (and previousOccupied !== null).
+   *
+   * @private
+   * @returns {Promise<void>}
+   */
+  private async initializeRoomStateFromOccupancy(): Promise<void> {
+    try {
+      if (!this.stateEngine) {
+        return;
+      }
+
+      // Skip if in manual override mode
+      if (this.manualOverride) {
+        this.log('Skipping room state timer initialization: manual override active');
+        return;
+      }
+
+      // Get current occupancy state
+      const isOccupied = this.lastStableOccupancy === StableOccupancyState.OCCUPIED;
+
+      // Synchronize state engine with current occupancy
+      const result = this.stateEngine.handleOccupancyChange(isOccupied);
+
+      if (result.newState) {
+        // State changed, execute transition and schedule timer
+        this.log(`Room state initialized: ${result.previousState} → ${result.newState}`);
+        await this.executeRoomStateTransition(result);
+      } else if (result.scheduledTimerMinutes !== null && result.scheduledTimerMinutes > 0) {
+        // No state change but timer should be scheduled (already in correct base state)
+        this.log(`Room state already correct (${this.stateEngine.getCurrentState()}), scheduling timer: ${result.scheduledTimerMinutes} minutes`);
+        this.scheduleRoomStateTimer(result.scheduledTimerMinutes);
+      } else {
+        // Already in correct state, check if we need to schedule timer based on current state
+        const currentState = this.stateEngine.getCurrentState();
+        const timerMinutes = this.stateEngine.getTimerForState(currentState);
+        if (timerMinutes !== null && timerMinutes > 0) {
+          this.log(`Room state already correct (${currentState}), scheduling timer: ${timerMinutes} minutes`);
+          this.scheduleRoomStateTimer(timerMinutes);
+        } else {
+          this.log(`Room state initialized: ${currentState} (no timer needed)`);
+        }
+      }
+    } catch (error) {
+      // Log error but don't throw - room state initialization is non-critical
+      this.error(
+        `[${DeviceErrorId.ROOM_STATE_TIMER_FAILED}] Failed to initialize room state from occupancy:`,
+        error
+      );
+    }
+  }
 
   /**
    * Schedules a room state timer for transitioning to extended states.

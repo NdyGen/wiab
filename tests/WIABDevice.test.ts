@@ -826,4 +826,172 @@ describe('WIABDevice - Data Quality Monitoring', () => {
       );
     });
   });
+
+  describe('Room State Timer Initialization (Issue #176)', () => {
+    /**
+     * Tests for the fix to issue #176:
+     * Room state timer was never scheduled on device initialization because
+     * handleOccupancyChangeForRoomState() was only called when occupancy CHANGED,
+     * not on initialization when previousOccupied was null.
+     */
+
+    beforeEach(() => {
+      // Setup device with room state engine
+      (device as any).stateEngine = {
+        getCurrentState: jest.fn().mockReturnValue('idle'),
+        handleOccupancyChange: jest.fn().mockReturnValue({
+          newState: null,
+          previousState: 'idle',
+          reason: 'Already in idle family',
+          scheduledTimerMinutes: 30,
+        }),
+        getTimerForState: jest.fn().mockReturnValue(30),
+      };
+      (device as any).manualOverride = false;
+      (device as any).lastStableOccupancy = 'UNOCCUPIED';
+      (device as any).scheduleRoomStateTimer = jest.fn();
+      (device as any).executeRoomStateTransition = jest.fn().mockResolvedValue(undefined);
+    });
+
+    it('should schedule room state timer on initialization when occupancy is unoccupied', async () => {
+      // Arrange
+      (device as any).lastStableOccupancy = 'UNOCCUPIED';
+      (device as any).stateEngine.handleOccupancyChange.mockReturnValue({
+        newState: null,
+        previousState: 'idle',
+        reason: 'Already in idle family',
+        scheduledTimerMinutes: 30,
+      });
+
+      // Act
+      await (device as any).initializeRoomStateFromOccupancy();
+
+      // Assert
+      expect((device as any).stateEngine.handleOccupancyChange).toHaveBeenCalledWith(false);
+      expect((device as any).scheduleRoomStateTimer).toHaveBeenCalledWith(30);
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('Room state already correct (idle), scheduling timer: 30 minutes')
+      );
+    });
+
+    it('should schedule room state timer on initialization when occupancy is occupied', async () => {
+      // Arrange
+      (device as any).lastStableOccupancy = 'OCCUPIED';
+      (device as any).stateEngine.getCurrentState.mockReturnValue('occupied');
+      (device as any).stateEngine.handleOccupancyChange.mockReturnValue({
+        newState: null,
+        previousState: 'occupied',
+        reason: 'Already in occupied family',
+        scheduledTimerMinutes: 60,
+      });
+      (device as any).stateEngine.getTimerForState.mockReturnValue(60);
+
+      // Act
+      await (device as any).initializeRoomStateFromOccupancy();
+
+      // Assert
+      expect((device as any).stateEngine.handleOccupancyChange).toHaveBeenCalledWith(true);
+      expect((device as any).scheduleRoomStateTimer).toHaveBeenCalledWith(60);
+    });
+
+    it('should execute state transition when state change is needed', async () => {
+      // Arrange - State engine says we need to transition
+      (device as any).lastStableOccupancy = 'OCCUPIED';
+      const result = {
+        newState: 'occupied',
+        previousState: 'idle',
+        reason: 'Occupancy changed to true',
+        scheduledTimerMinutes: 60,
+      };
+      (device as any).stateEngine.handleOccupancyChange.mockReturnValue(result);
+
+      // Act
+      await (device as any).initializeRoomStateFromOccupancy();
+
+      // Assert
+      expect((device as any).executeRoomStateTransition).toHaveBeenCalledWith(result);
+      expect(device.log).toHaveBeenCalledWith('Room state initialized: idle → occupied');
+    });
+
+    it('should skip timer initialization when manual override is active', async () => {
+      // Arrange
+      (device as any).manualOverride = true;
+
+      // Act
+      await (device as any).initializeRoomStateFromOccupancy();
+
+      // Assert
+      expect((device as any).stateEngine.handleOccupancyChange).not.toHaveBeenCalled();
+      expect((device as any).scheduleRoomStateTimer).not.toHaveBeenCalled();
+      expect(device.log).toHaveBeenCalledWith(
+        'Skipping room state timer initialization: manual override active'
+      );
+    });
+
+    it('should skip timer initialization when state engine is not initialized', async () => {
+      // Arrange
+      (device as any).stateEngine = undefined;
+
+      // Act
+      await (device as any).initializeRoomStateFromOccupancy();
+
+      // Assert
+      expect((device as any).scheduleRoomStateTimer).not.toHaveBeenCalled();
+    });
+
+    it('should not schedule timer when timer is disabled (returns null)', async () => {
+      // Arrange
+      (device as any).stateEngine.handleOccupancyChange.mockReturnValue({
+        newState: null,
+        previousState: 'idle',
+        reason: 'Already in idle family',
+        scheduledTimerMinutes: null,
+      });
+      (device as any).stateEngine.getTimerForState.mockReturnValue(null);
+
+      // Act
+      await (device as any).initializeRoomStateFromOccupancy();
+
+      // Assert
+      expect((device as any).scheduleRoomStateTimer).not.toHaveBeenCalled();
+      expect(device.log).toHaveBeenCalledWith(
+        expect.stringContaining('no timer needed')
+      );
+    });
+
+    it('should handle errors gracefully without throwing', async () => {
+      // Arrange
+      (device as any).stateEngine.handleOccupancyChange.mockImplementation(() => {
+        throw new Error('State engine error');
+      });
+
+      // Act - Should not throw
+      await (device as any).initializeRoomStateFromOccupancy();
+
+      // Assert
+      expect(device.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to initialize room state from occupancy'),
+        expect.any(Error)
+      );
+    });
+
+    it('should use getTimerForState as fallback when scheduledTimerMinutes is null', async () => {
+      // Arrange - handleOccupancyChange returns null for timer but getTimerForState has value
+      (device as any).stateEngine.handleOccupancyChange.mockReturnValue({
+        newState: null,
+        previousState: 'occupied',
+        reason: 'Already in occupied family',
+        scheduledTimerMinutes: null,
+      });
+      (device as any).stateEngine.getCurrentState.mockReturnValue('occupied');
+      (device as any).stateEngine.getTimerForState.mockReturnValue(60);
+
+      // Act
+      await (device as any).initializeRoomStateFromOccupancy();
+
+      // Assert - Should use fallback via getTimerForState
+      expect((device as any).stateEngine.getTimerForState).toHaveBeenCalledWith('occupied');
+      expect((device as any).scheduleRoomStateTimer).toHaveBeenCalledWith(60);
+    });
+  });
 });
