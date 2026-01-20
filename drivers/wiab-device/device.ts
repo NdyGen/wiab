@@ -1865,11 +1865,7 @@ class WIABDevice extends Homey.Device {
     this.log(`Room state transition: ${result.previousState} → ${result.newState} (${result.reason})`);
 
     // Update the room_state capability to reflect the new state in the UI
-    try {
-      await this.setCapabilityValue('room_state', result.newState);
-    } catch (error) {
-      this.error(`Failed to update room_state capability to ${result.newState}:`, error);
-    }
+    await this.updateRoomStateCapability(result.newState);
 
     // Trigger flow cards
     await this.triggerRoomStateFlowCards(result.newState, result.previousState);
@@ -1879,6 +1875,23 @@ class WIABDevice extends Homey.Device {
       this.scheduleRoomStateTimer(result.scheduledTimerMinutes);
     } else {
       this.stopRoomStateTimer();
+    }
+  }
+
+  /**
+   * Updates the room_state capability to reflect the current state in the UI.
+   *
+   * This helper centralizes capability updates with consistent error handling.
+   * Errors are logged but do not propagate, ensuring room state operations
+   * continue even if the UI update fails.
+   *
+   * @param state - The room state to set
+   */
+  private async updateRoomStateCapability(state: RoomState): Promise<void> {
+    try {
+      await this.setCapabilityValue('room_state', state);
+    } catch (error) {
+      this.error(`Failed to update room_state capability to ${state}:`, error);
     }
   }
 
@@ -1987,6 +2000,9 @@ class WIABDevice extends Homey.Device {
 
     // Stop automatic timers
     this.stopRoomStateTimer();
+
+    // Update the room_state capability to reflect the new state in the UI
+    await this.updateRoomStateCapability(state);
 
     if (result.newState) {
       await this.triggerRoomStateFlowCards(result.newState, previousState);
