@@ -1105,5 +1105,29 @@ describe('WIABDevice - Data Quality Monitoring', () => {
       // Manual override should still be set
       expect((device as any).manualOverride).toBe(true);
     });
+
+    it('should allow reading room_state capability after manual state change', async () => {
+      // Arrange - Make getCapabilityValue return whatever was set
+      let storedRoomState = 'idle';
+      (device.setCapabilityValue as jest.Mock).mockImplementation(
+        async (capability: string, value: string) => {
+          if (capability === 'room_state') {
+            storedRoomState = value;
+          }
+        }
+      );
+      (device.getCapabilityValue as jest.Mock).mockImplementation((capability: string) => {
+        if (capability === 'room_state') {
+          return storedRoomState;
+        }
+        return null;
+      });
+
+      // Act
+      await (device as any).setManualRoomState('extended_idle');
+
+      // Assert - Capability value should be readable and match the set value
+      expect(device.getCapabilityValue('room_state')).toBe('extended_idle');
+    });
   });
 });
