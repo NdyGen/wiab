@@ -4,6 +4,7 @@
  */
 
 import WIABDevice from '../drivers/wiab-device/device';
+import { WIABStateEngine } from '../lib/WIABStateEngine';
 import { createMockHomey } from './setup';
 
 describe('WIABDevice - Data Quality Monitoring', () => {
@@ -30,6 +31,8 @@ describe('WIABDevice - Data Quality Monitoring', () => {
       getCapabilityValue: jest.fn().mockReturnValue(false),
       hasCapability: jest.fn().mockReturnValue(true),
       addCapability: jest.fn().mockResolvedValue(undefined),
+      setStoreValue: jest.fn().mockResolvedValue(undefined),
+      getStoreValue: jest.fn().mockReturnValue(null),
     });
 
     // Initialize staleSensorMap for testing
@@ -992,6 +995,115 @@ describe('WIABDevice - Data Quality Monitoring', () => {
       // Assert - Should use fallback via getTimerForState
       expect((device as any).stateEngine.getTimerForState).toHaveBeenCalledWith('occupied');
       expect((device as any).scheduleRoomStateTimer).toHaveBeenCalledWith(60);
+    });
+  });
+
+  describe('setManualRoomState (Issue #184)', () => {
+    beforeEach(() => {
+      // Setup state engine mock
+      (device as any).stateEngine = {
+        getCurrentState: jest.fn().mockReturnValue('idle'),
+        setManualState: jest.fn().mockReturnValue({
+          newState: 'extended_idle',
+          previousState: 'idle',
+          reason: 'Manual state change to extended_idle',
+          scheduledTimerMinutes: null,
+        }),
+      };
+      (device as any).manualOverride = false;
+      (device as any).stopRoomStateTimer = jest.fn();
+      (device as any).triggerRoomStateFlowCards = jest.fn().mockResolvedValue(undefined);
+    });
+
+    it('should update room_state capability when setting manual state', async () => {
+      // Act
+      await (device as any).setManualRoomState('extended_idle');
+
+      // Assert - This is the fix for Issue #184
+      expect(device.setCapabilityValue).toHaveBeenCalledWith('room_state', 'extended_idle');
+    });
+
+    it('should enable manual override when setting manual state', async () => {
+      // Act
+      await (device as any).setManualRoomState('extended_idle');
+
+      // Assert
+      expect((device as any).manualOverride).toBe(true);
+      expect(device.setStoreValue).toHaveBeenCalledWith('manualOverride', true);
+    });
+
+    it('should stop automatic timers when setting manual state', async () => {
+      // Act
+      await (device as any).setManualRoomState('extended_idle');
+
+      // Assert
+      expect((device as any).stopRoomStateTimer).toHaveBeenCalled();
+    });
+
+    it('should trigger flow cards when state changes', async () => {
+      // Act
+      await (device as any).setManualRoomState('extended_idle');
+
+      // Assert
+      expect((device as any).triggerRoomStateFlowCards).toHaveBeenCalledWith('extended_idle', 'idle');
+    });
+
+    it('should not trigger flow cards when already in target state', async () => {
+      // Arrange - state engine returns null newState (already in state)
+      (device as any).stateEngine.setManualState.mockReturnValue({
+        newState: null,
+        previousState: 'idle',
+        reason: 'Already in state idle',
+        scheduledTimerMinutes: null,
+      });
+
+      // Act
+      await (device as any).setManualRoomState('idle');
+
+      // Assert - Capability should still be updated even if no state change
+      expect(device.setCapabilityValue).toHaveBeenCalledWith('room_state', 'idle');
+      expect((device as any).triggerRoomStateFlowCards).not.toHaveBeenCalled();
+    });
+
+    it('should throw error for invalid room state', async () => {
+      // Arrange - Setup WIABStateEngine.isValidState to return false
+      const isValidStateSpy = jest.spyOn(WIABStateEngine, 'isValidState').mockReturnValue(false);
+
+      // Act & Assert
+      await expect((device as any).setManualRoomState('invalid_state')).rejects.toThrow(
+        'Invalid room state: invalid_state'
+      );
+
+      // Cleanup
+      isValidStateSpy.mockRestore();
+    });
+
+    it('should not update state when state engine is not initialized', async () => {
+      // Arrange
+      (device as any).stateEngine = undefined;
+
+      // Act
+      await (device as any).setManualRoomState('extended_idle');
+
+      // Assert
+      expect(device.setCapabilityValue).not.toHaveBeenCalled();
+      expect(device.setStoreValue).not.toHaveBeenCalled();
+    });
+
+    it('should handle capability update errors gracefully', async () => {
+      // Arrange
+      (device.setCapabilityValue as jest.Mock).mockRejectedValueOnce(new Error('Capability error'));
+
+      // Act - Should not throw
+      await (device as any).setManualRoomState('extended_idle');
+
+      // Assert - Error logged but method completes
+      expect(device.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to update room_state capability'),
+        expect.any(Error)
+      );
+      // Manual override should still be set
+      expect((device as any).manualOverride).toBe(true);
     });
   });
 });

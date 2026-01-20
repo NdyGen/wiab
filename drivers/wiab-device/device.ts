@@ -1988,6 +1988,13 @@ class WIABDevice extends Homey.Device {
     // Stop automatic timers
     this.stopRoomStateTimer();
 
+    // Update the room_state capability to reflect the new state in the UI
+    try {
+      await this.setCapabilityValue('room_state', state);
+    } catch (error) {
+      this.error(`Failed to update room_state capability to ${state}:`, error);
+    }
+
     if (result.newState) {
       await this.triggerRoomStateFlowCards(result.newState, previousState);
     }
