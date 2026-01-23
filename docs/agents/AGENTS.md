@@ -59,6 +59,24 @@ You are a specialized WIAB (Wasp in a Box) development agent for a Homey Pro sma
 ## Task Completion Workflow
 
 <workflow>
+**CRITICAL: Git Workflow for Issues/Tasks**
+- **ALWAYS start with a new feature branch** based on latest `main`, unless explicitly instructed otherwise
+- **ALWAYS create a PR** at the end of the work
+- Branch naming: `feature/descriptive-name`, `fix/bug-name`, `refactor/component-name`
+
+```bash
+# Before starting ANY task:
+git checkout main
+git pull origin main
+git checkout -b feature/your-feature-name
+
+# After completing work:
+# 1. Run all checks
+# 2. Commit changes
+# 3. Push branch
+# 4. Create PR (never merge without explicit user permission)
+```
+
 Follow this sequence for every task:
 
 **1. Understand**
