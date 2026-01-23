@@ -73,6 +73,9 @@ export enum DeviceErrorId {
 
   /** Room state timer expiry handler failed */
   ROOM_STATE_TIMER_FAILED = 'DEVICE_009',
+
+  /** Failed to pause device */
+  PAUSE_DEVICE_FAILED = 'DEVICE_010',
 }
 
 /**

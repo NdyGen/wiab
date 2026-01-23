@@ -98,7 +98,7 @@ class WIABDevice extends Homey.Device {
 
   // Pause/unpause state management
   private isPaused: boolean = false;
-  private pausedWithState: StableOccupancyState = StableOccupancyState.UNOCCUPIED;
+  private pausedRoomState: RoomState = RoomState.IDLE;
   private isInitializing: boolean = false;
 
   // Stale sensor detection
@@ -108,7 +108,6 @@ class WIABDevice extends Homey.Device {
   // Room state management
   private stateEngine?: WIABStateEngine;
   private roomStateTimer?: NodeJS.Timeout;
-  private manualOverride: boolean = false;
 
   /**
    * Initializes the WIAB device.
@@ -177,23 +176,8 @@ class WIABDevice extends Homey.Device {
     await this.migrateCapabilities();
     this.initializeState();
     this.initializeRoomStateEngine();
-    this.restoreManualOverrideState();
     await this.setupMonitoring();
     this.registerFlowCardHandlers();
-  }
-
-  /**
-   * Restores the manual override state from device store.
-   *
-   * Called during initialization to restore the manual override flag
-   * if the device was in manual override mode before restart.
-   */
-  private restoreManualOverrideState(): void {
-    const storedOverride = this.getStoreValue('manualOverride') as boolean | null;
-    if (storedOverride === true) {
-      this.manualOverride = true;
-      this.log('Restored manual override state from device store');
-    }
   }
 
   /**
@@ -334,9 +318,14 @@ class WIABDevice extends Homey.Device {
       // Check if state change is needed (prevent loops from programmatic sets)
       // INVERTED: FALSE = paused (dimmed), TRUE = active (highlighted)
       if (!value && !this.isPaused) {
-        // User toggled to FALSE (dimmed) - pause with current stable state
+        // User toggled to FALSE (dimmed) - pause with current room state
         this.log('User requested pause via UI toggle');
-        await this.pauseDevice(this.lastStableOccupancy);
+        // Map current occupancy to base room state
+        const roomState =
+          this.lastStableOccupancy === StableOccupancyState.OCCUPIED
+            ? RoomState.OCCUPIED
+            : RoomState.IDLE;
+        await this.pauseDevice(roomState);
       } else if (value && this.isPaused) {
         // User toggled to TRUE (highlighted) - unpause
         this.log('User requested unpause via UI toggle');
@@ -445,13 +434,11 @@ class WIABDevice extends Homey.Device {
       ),
     });
 
-    // If not in manual override and in a base state, reschedule timer with new duration
-    if (!this.manualOverride) {
-      const currentState = this.stateEngine.getCurrentState();
-      const timerMinutes = this.stateEngine.getTimerForState(currentState);
-      if (timerMinutes !== null) {
-        this.scheduleRoomStateTimer(timerMinutes);
-      }
+    // If in a base state, reschedule timer with new duration
+    const currentState = this.stateEngine.getCurrentState();
+    const timerMinutes = this.stateEngine.getTimerForState(currentState);
+    if (timerMinutes !== null) {
+      this.scheduleRoomStateTimer(timerMinutes);
     }
 
     this.log(`Room state engine config updated: idleTimeout=${idleTimeoutMinutes}min, occupiedTimeout=${occupiedTimeoutMinutes}min`);
@@ -475,6 +462,10 @@ class WIABDevice extends Homey.Device {
 
     // Clear state engine
     this.stateEngine = undefined;
+
+    // Clear pause state
+    this.isPaused = false;
+    this.pausedRoomState = RoomState.IDLE;
   }
 
   /**
@@ -1163,42 +1154,72 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
-   * Pauses the device and sets it to a specific occupancy state.
+   * Pauses the device with a specific room state.
    *
    * When paused:
    * - Device stops monitoring sensors (callbacks are ignored)
    * - All timers are stopped
    * - occupancy_state capability is set to PAUSED
-   * - alarm_occupancy is set to the specified state
+   * - room_state and alarm_occupancy are set based on the specified room state
    *
-   * @param state - The occupancy state to set (OCCUPIED or UNOCCUPIED)
+   * @param roomState - The room state to set (idle, extended_idle, occupied, extended_occupied)
    */
-  private async pauseDevice(state: StableOccupancyState): Promise<void> {
+  private async pauseDevice(roomState: RoomState): Promise<void> {
     try {
-      this.log(`Pausing device with state: ${state}`);
+      // Validate room state
+      if (!WIABStateEngine.isValidState(roomState)) {
+        this.error(`Invalid room state: ${roomState}`);
+        throw new Error(`Invalid room state: ${roomState}`);
+      }
+
+      this.log(`Pausing device with room state: ${roomState}`);
 
       // Mark as paused
       this.isPaused = true;
-      this.pausedWithState = state;
+      this.pausedRoomState = roomState;
 
       // Stop all monitoring and timers
       this.teardownSensorMonitoring();
 
       // Set occupancy state to PAUSED
       this.occupancyState = OccupancyState.PAUSED;
-      this.lastStableOccupancy = state;
 
-      // Update capabilities
+      // Derive occupancy from room state:
+      // occupied/extended_occupied → TRUE
+      // idle/extended_idle → FALSE
+      const isOccupied =
+        roomState === RoomState.OCCUPIED || roomState === RoomState.EXTENDED_OCCUPIED;
+      this.lastStableOccupancy = isOccupied
+        ? StableOccupancyState.OCCUPIED
+        : StableOccupancyState.UNOCCUPIED;
+
+      // Update occupancy capability (alarm_occupancy)
       await this.updateOccupancyOutput();
+
+      // Update room_state capability
+      await this.setCapabilityValue('room_state', roomState).catch((err) => {
+        this.error('Failed to set room_state capability:', err);
+      });
 
       // Set pause indicator (inverted: false = paused/dimmed)
       await this.setCapabilityValue('alarm_paused', false).catch((err) => {
         this.error('Failed to set alarm_paused capability:', err);
       });
 
-      this.log(`Device paused with state: ${state}`);
+      this.log(`Device paused with room state: ${roomState}, occupancy: ${isOccupied}`);
     } catch (error) {
-      this.error('Failed to pause device:', error);
+      this.error(
+        `[${DeviceErrorId.PAUSE_DEVICE_FAILED}] Failed to pause device with room state ${roomState}:`,
+        error
+      );
+
+      // Set user-facing warning
+      try {
+        await this.setWarning('Failed to pause device. Device may not respond correctly.');
+      } catch (warningError) {
+        this.error('Failed to set warning for pause failure:', warningError);
+      }
+
       throw error;
     }
   }
@@ -1276,59 +1297,14 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
-   * Registers action handlers for set_state, unpause, set_room_state, and return_to_automatic actions.
+   * Registers action handlers for set_room_state action.
    *
    * Called during device initialization to register the action listeners
    * that will be invoked when the user triggers these actions in flows.
    */
   private registerActionHandlers(): void {
     try {
-      // Register set_state action handler (legacy occupancy control)
-      const setStateCard = this.homey.flow.getActionCard('set_state');
-      if (!setStateCard) {
-        throw new Error('set_state action card not found in flow definition');
-      }
-
-      setStateCard.registerRunListener(
-        async (args: {
-          device: WIABDevice;
-          state: 'occupied' | 'unoccupied';
-        }) => {
-          args.device.log(`Set state action triggered: ${args.state}`);
-
-          // Convert action argument to StableOccupancyState
-          const state =
-            args.state === 'occupied'
-              ? StableOccupancyState.OCCUPIED
-              : StableOccupancyState.UNOCCUPIED;
-
-          // Pause device with specified state and propagate errors to flow engine
-          try {
-            await args.device.pauseDevice(state);
-          } catch (error) {
-            args.device.error(`Set state action failed: ${error}`, error);
-            throw error;
-          }
-        }
-      );
-
-      // Register unpause action handler
-      const unpauseCard = this.homey.flow.getActionCard('unpause');
-      if (!unpauseCard) {
-        throw new Error('unpause action card not found in flow definition');
-      }
-
-      unpauseCard.registerRunListener(async (args: { device: WIABDevice }) => {
-        args.device.log('Unpause action triggered');
-        try {
-          await args.device.unpauseDevice();
-        } catch (error) {
-          args.device.error(`Unpause action failed: ${error}`, error);
-          throw error;
-        }
-      });
-
-      // Register set_room_state action handler (new room state control with manual override)
+      // Register set_room_state action handler (pauses device with specified room state)
       const setRoomStateCard = this.homey.flow.getActionCard('set_room_state');
       if (setRoomStateCard) {
         setRoomStateCard.registerRunListener(
@@ -1338,27 +1314,14 @@ class WIABDevice extends Homey.Device {
           }) => {
             args.device.log(`Set room state action triggered: ${args.state}`);
             try {
-              await args.device.setManualRoomState(args.state);
+              const roomState = args.state as RoomState;
+              await args.device.pauseDevice(roomState);
             } catch (error) {
               args.device.error(`Set room state action failed: ${error}`, error);
               throw error;
             }
           }
         );
-      }
-
-      // Register return_to_automatic action handler
-      const returnToAutomaticCard = this.homey.flow.getActionCard('return_to_automatic');
-      if (returnToAutomaticCard) {
-        returnToAutomaticCard.registerRunListener(async (args: { device: WIABDevice }) => {
-          args.device.log('Return to automatic action triggered');
-          try {
-            await args.device.returnToAutomaticMode();
-          } catch (error) {
-            args.device.error(`Return to automatic action failed: ${error}`, error);
-            throw error;
-          }
-        });
       }
 
       this.log('Action handlers registered successfully');
@@ -1369,8 +1332,7 @@ class WIABDevice extends Homey.Device {
   }
 
   /**
-   * Registers condition handlers for is_paused, is_in_room_state, is_exactly_room_state,
-   * and is_manual_override conditions.
+   * Registers condition handlers for is_paused, is_in_room_state, and is_exactly_room_state conditions.
    *
    * Called during device initialization to register the condition listeners
    * that will be evaluated when the user includes these conditions in flows.
@@ -1430,23 +1392,6 @@ class WIABDevice extends Homey.Device {
               return result;
             } catch (error) {
               args.device.error(`Is exactly room state condition evaluation failed: ${error}`, error);
-              throw error;
-            }
-          }
-        );
-      }
-
-      // Register is_manual_override condition handler
-      const isManualOverrideCard = this.homey.flow.getConditionCard('is_manual_override');
-      if (isManualOverrideCard) {
-        isManualOverrideCard.registerRunListener(
-          async (args: { device: WIABDevice }): Promise<boolean> => {
-            try {
-              const result = args.device.isManualOverrideActive();
-              args.device.log(`Is manual override active: ${result}`);
-              return result;
-            } catch (error) {
-              args.device.error(`Is manual override condition evaluation failed: ${error}`, error);
               throw error;
             }
           }
@@ -1747,12 +1692,6 @@ class WIABDevice extends Homey.Device {
         return;
       }
 
-      // Skip if in manual override mode
-      if (this.manualOverride) {
-        this.log('Skipping room state timer initialization: manual override active');
-        return;
-      }
-
       // Get current occupancy state
       const isOccupied = this.lastStableOccupancy === StableOccupancyState.OCCUPIED;
 
@@ -1815,12 +1754,6 @@ class WIABDevice extends Homey.Device {
         // Validate device still initialized
         if (!this.stateEngine) {
           this.log('Room state timer cancelled: device deinitialized');
-          return;
-        }
-
-        // Ignore if in manual override
-        if (this.manualOverride) {
-          this.log('Room state timer expired but manual override active - ignoring');
           return;
         }
 
@@ -1941,12 +1874,6 @@ class WIABDevice extends Homey.Device {
         return;
       }
 
-      // Skip if in manual override mode
-      if (this.manualOverride) {
-        this.log(`Occupancy changed to ${isOccupied ? 'occupied' : 'unoccupied'} but manual override active - ignoring`);
-        return;
-      }
-
       const result = this.stateEngine.handleOccupancyChange(isOccupied);
 
       if (result.newState) {
@@ -1962,85 +1889,6 @@ class WIABDevice extends Homey.Device {
         error
       );
     }
-  }
-
-  /**
-   * Sets the room state manually (for manual override mode).
-   *
-   * When called:
-   * - Enables manual override mode
-   * - Sets the room state to the specified value
-   * - Stops room state timers (no automatic transitions)
-   * - Sensor monitoring continues (occupancy is still tracked)
-   *
-   * @param stateString - The room state to set ('idle', 'extended_idle', 'occupied', 'extended_occupied')
-   */
-  private async setManualRoomState(stateString: string): Promise<void> {
-    if (!this.stateEngine) {
-      return;
-    }
-
-    // Validate state
-    if (!WIABStateEngine.isValidState(stateString)) {
-      this.error(`Invalid room state: ${stateString}`);
-      throw new Error(`Invalid room state: ${stateString}`);
-    }
-
-    const state = stateString as RoomState;
-    const previousState = this.stateEngine.getCurrentState();
-
-    // Enable manual override and persist to device store
-    this.manualOverride = true;
-    await this.setStoreValue('manualOverride', true).catch((err) => {
-      this.error('Failed to persist manualOverride state:', err);
-    });
-
-    // Set the state manually
-    const result = this.stateEngine.setManualState(state);
-
-    // Stop automatic timers
-    this.stopRoomStateTimer();
-
-    // Update the room_state capability to reflect the new state in the UI
-    await this.updateRoomStateCapability(state);
-
-    if (result.newState) {
-      await this.triggerRoomStateFlowCards(result.newState, previousState);
-    }
-
-    this.log(`Manual room state set: ${state} (override enabled)`);
-  }
-
-  /**
-   * Returns to automatic room state management.
-   *
-   * When called:
-   * - Disables manual override mode
-   * - Re-evaluates room state based on current occupancy
-   * - Restarts automatic timers
-   */
-  private async returnToAutomaticMode(): Promise<void> {
-    if (!this.stateEngine) {
-      return;
-    }
-
-    // Disable manual override and persist to device store
-    this.manualOverride = false;
-    await this.setStoreValue('manualOverride', false).catch((err) => {
-      this.error('Failed to persist manualOverride state:', err);
-    });
-
-    // Re-evaluate based on current occupancy
-    const isOccupied = this.lastStableOccupancy === StableOccupancyState.OCCUPIED;
-    const result = this.stateEngine.handleOccupancyChange(isOccupied);
-
-    if (result.newState) {
-      await this.executeRoomStateTransition(result);
-    } else if (result.scheduledTimerMinutes !== null) {
-      this.scheduleRoomStateTimer(result.scheduledTimerMinutes);
-    }
-
-    this.log('Returned to automatic room state mode');
   }
 
   /**
@@ -2073,15 +1921,6 @@ class WIABDevice extends Homey.Device {
     }
 
     return this.stateEngine.isExactlyInState(targetStateString as RoomState);
-  }
-
-  /**
-   * Checks if manual override is currently active.
-   *
-   * @returns True if manual override is active
-   */
-  private isManualOverrideActive(): boolean {
-    return this.manualOverride;
   }
 
   /**

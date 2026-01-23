@@ -83,82 +83,20 @@
   ],
   "actions": [
     {
-      "id": "set_state",
-      "title": {
-        "en": "Set occupancy state",
-        "nl": "Stel aanwezigheidstatus in",
-        "de": "Belegungsstatus einstellen",
-        "no": "Sett tilstedeværelsesstatus",
-        "sv": "Ställ in närvarostatus"
-      },
-      "description": {
-        "en": "Sets the device to a specific occupancy state and pauses it",
-        "nl": "Stelt het apparaat in op een specifieke aanwezigheidsstatus en pauzeert het",
-        "de": "Setzt das Gerät auf einen bestimmten Belegungsstatus und pausiert es",
-        "no": "Setter enheten til en spesifikk tilstedeværelsesstatus og pauser den",
-        "sv": "Ställer in enheten till en specifik närvarostatus och pausar den"
-      },
-      "titleFormatted": {
-        "en": "Set occupancy [[state]]",
-        "nl": "Zet aanwezigheid [[state]]",
-        "de": "Belegung [[state]] einstellen",
-        "no": "Sett tilstedeværelse [[state]]",
-        "sv": "Ställ in närvaro [[state]]"
-      },
-      "args": [
-        {
-          "name": "state",
-          "type": "dropdown",
-          "values": [
-            {
-              "id": "occupied",
-              "title": {
-                "en": "Occupied",
-                "nl": "Bezet",
-                "de": "Belegt",
-                "no": "Opptatt",
-                "sv": "Upptagen"
-              }
-            },
-            {
-              "id": "unoccupied",
-              "title": {
-                "en": "Unoccupied",
-                "nl": "Onbezet",
-                "de": "Leer",
-                "no": "Tom",
-                "sv": "Tom"
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "id": "unpause",
-      "title": {
-        "en": "Resume monitoring",
-        "nl": "Monitoring hervatten",
-        "de": "Überwachung fortsetzen",
-        "no": "Gjenoppta overvåking",
-        "sv": "Återuppta övervakning"
-      },
-      "description": {
-        "en": "Resumes normal sensor monitoring and reinitializes the occupancy state",
-        "nl": "Hervat de normale sensormonitoring en initialiseert de aanwezigheidsstatus opnieuw",
-        "de": "Setzt die normale Sensorüberwachung fort und initialisiert den Belegungsstatus neu",
-        "no": "Gjenopptar normal sensorovervåking og reinitialiserer tilstedeværelsesstatus",
-        "sv": "Återupptar normal sensorövervakning och återinitierar närvarostatus"
-      }
-    },
-    {
       "id": "set_room_state",
       "title": {
-        "en": "Set room state (manual override)",
-        "nl": "Stel kamerstatus in (handmatige overschrijving)",
-        "de": "Raumzustand einstellen (manuell)",
-        "no": "Sett romtilstand (manuell overstyring)",
-        "sv": "Ställ in rumstillstånd (manuell)"
+        "en": "Set room state (pause device)",
+        "nl": "Stel kamerstatus in (pauzeer apparaat)",
+        "de": "Raumzustand einstellen (Gerät pausieren)",
+        "no": "Sett romtilstand (pause enhet)",
+        "sv": "Ställ in rumstillstånd (pausa enhet)"
+      },
+      "description": {
+        "en": "Pauses the device with a specific room state until resumed",
+        "nl": "Pauzeert het apparaat met een specifieke kamerstatus totdat hervat",
+        "de": "Pausiert das Gerät mit einem bestimmten Raumzustand bis zur Wiederaufnahme",
+        "no": "Pauser enheten med en spesifikk romtilstand til gjenopptatt",
+        "sv": "Pausar enheten med ett specifikt rumstillstånd tills återupptagen"
       },
       "titleFormatted": {
         "en": "Set room state to [[state]]",
@@ -215,23 +153,6 @@
           ]
         }
       ]
-    },
-    {
-      "id": "return_to_automatic",
-      "title": {
-        "en": "Return to automatic mode",
-        "nl": "Terug naar automatische modus",
-        "de": "Zurück zum automatischen Modus",
-        "no": "Gå tilbake til automatisk modus",
-        "sv": "Återgå till automatiskt läge"
-      },
-      "description": {
-        "en": "Clears manual override and returns to automatic state management based on sensors",
-        "nl": "Wist handmatige overschrijving en keert terug naar automatisch statusbeheer gebaseerd op sensoren",
-        "de": "Löscht die manuelle Überschreibung und kehrt zur automatischen Zustandsverwaltung basierend auf Sensoren zurück",
-        "no": "Fjerner manuell overstyring og går tilbake til automatisk tilstandsstyring basert på sensorer",
-        "sv": "Rensar manuell åsidosättning och återgår till automatisk tillståndshantering baserad på sensorer"
-      }
     }
   ],
   "conditions": [
@@ -381,16 +302,6 @@
           ]
         }
       ]
-    },
-    {
-      "id": "is_manual_override",
-      "title": {
-        "en": "Manual override is !{{active|inactive}}",
-        "nl": "Handmatige overschrijving is !{{actief|inactief}}",
-        "de": "Manuelle Überschreibung ist !{{aktiv|inaktiv}}",
-        "no": "Manuell overstyring er !{{aktiv|inaktiv}}",
-        "sv": "Manuell åsidosättning är !{{aktiv|inaktiv}}"
-      }
     }
   ]
 }

@@ -918,48 +918,56 @@ describe('WIABDevice', () => {
       // Note: registerRunListener is called in onInit, which registers the action handlers
       // We test by directly calling the pause method (which would be triggered by the action)
 
-      // Manually pause device with OCCUPIED state
-      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+      // Manually pause device with occupied room state
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('occupied');
 
       // Verify device is paused
       expect(device.log).toHaveBeenCalledWith(
-        'Pausing device with state: OCCUPIED'
+        'Pausing device with room state: occupied'
       );
       expect(device.log).toHaveBeenCalledWith(
-        'Device paused with state: OCCUPIED'
+        expect.stringContaining('Device paused with room state: occupied')
       );
-      // Should have set capabilities to PAUSED state with OCCUPIED boolean
+      // Should have set capabilities to PAUSED state with occupied boolean
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'occupancy_state',
         'PAUSED'
       );
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'alarm_occupancy',
-        true // OCCUPIED = true
+        true // occupied = true
+      );
+      expect(device.setCapabilityValue).toHaveBeenCalledWith(
+        'room_state',
+        'occupied'
       );
       // Should have stopped sensor monitoring
       expect(mockSensorMonitor.stop).toHaveBeenCalled();
     });
 
     /**
-     * Test that pauseDevice with UNOCCUPIED sets alarm_occupancy to false
+     * Test that pauseDevice with idle sets alarm_occupancy to false
      */
-    it('should pause device with UNOCCUPIED state setting alarm_occupancy to false', async () => {
+    it('should pause device with idle state setting alarm_occupancy to false', async () => {
       // Setup device
       device.getSetting = createGetSettingMock();
 
       await device.onInit();
       jest.clearAllMocks();
 
-      // Pause with UNOCCUPIED
-      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('UNOCCUPIED');
+      // Pause with idle
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('idle');
 
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'alarm_occupancy',
-        false // UNOCCUPIED = false
+        false // idle = false
+      );
+      expect(device.setCapabilityValue).toHaveBeenCalledWith(
+        'room_state',
+        'idle'
       );
       expect(device.log).toHaveBeenCalledWith(
-        'Device paused with state: UNOCCUPIED'
+        expect.stringContaining('Device paused with room state: idle')
       );
     });
 
@@ -973,7 +981,7 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       // First, pause the device
-      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('occupied');
 
       jest.clearAllMocks();
       device.getSetting = createGetSettingMock();
@@ -1025,7 +1033,7 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       // Pause the device
-      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('UNOCCUPIED');
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('idle');
 
       // Get the callbacks
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
@@ -1058,7 +1066,7 @@ describe('WIABDevice', () => {
       expect(isPaused).toBe(false);
 
       // Pause device
-      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('occupied');
 
       // Now paused
       isPaused = await (device as unknown as { getIsPaused: () => boolean }).getIsPaused();
@@ -1104,7 +1112,7 @@ describe('WIABDevice', () => {
       jest.clearAllMocks();
 
       // Step 2: Pause device to UNOCCUPIED
-      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('UNOCCUPIED');
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('idle');
 
       expect(device.setCapabilityValue).toHaveBeenCalledWith(
         'alarm_occupancy',
@@ -1155,7 +1163,7 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       // Pause the device
-      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('occupied');
 
       // Get the callbacks
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
@@ -1191,7 +1199,7 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       // Pause the device
-      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('UNOCCUPIED');
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('idle');
 
       // Get the callbacks
       const sensorMonitorCall = (SensorMonitor as jest.MockedClass<typeof SensorMonitor>).mock.calls[0];
@@ -1233,7 +1241,7 @@ describe('WIABDevice', () => {
       jest.clearAllMocks();
 
       // Pause the device
-      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('occupied');
 
       // Verify sensor monitoring was stopped
       expect(mockSensorMonitor.stop).toHaveBeenCalled();
@@ -1253,7 +1261,7 @@ describe('WIABDevice', () => {
       await device.onInit();
 
       // First pause the device
-      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('OCCUPIED');
+      await (device as unknown as { pauseDevice: (state: string) => Promise<void> }).pauseDevice('occupied');
 
       jest.clearAllMocks();
 
