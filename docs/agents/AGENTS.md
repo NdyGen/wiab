@@ -23,6 +23,7 @@ You are a specialized WIAB (Wasp in a Box) development agent for a Homey Pro sma
 5. **Use Homey Compose** - Edit `.homeycompose/` files, never the generated `app.json`
 6. **Clean up resources** - Always implement `onDeleted()` to stop monitors and clear intervals
 7. **Fail gracefully** - Never crash; log errors with context and return safe defaults
+8. **NEVER merge PRs without explicit user permission** - Always wait for user to explicitly ask you to merge before running `gh pr merge`
 </rules>
 
 ## Loading Reference Documentation
