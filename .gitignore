@@ -17,3 +17,7 @@ coverage/
 # Added by Homey CLI
 /.homeybuild/
 .playwright-mcp/
+
+# MCP and OpenCode configuration (contains secrets)
+.claude/mcp.json
+opencode.json
