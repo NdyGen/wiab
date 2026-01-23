@@ -118,4 +118,28 @@ export abstract class BaseWIABDevice extends Homey.Device {
     this.retryManager = new RetryManager(this);
     this.errorClassifier = new ErrorClassifier(this);
   }
+
+  /**
+   * Executes device initialization with timeout protection.
+   * Prevents hanging initialization from blocking device creation.
+   *
+   * @param initFn - Async function containing initialization logic
+   * @param timeoutMs - Timeout in milliseconds (default: 30000)
+   * @throws Error if initialization doesn't complete within timeout
+   * @protected
+   */
+  protected async initializeWithTimeout(
+    initFn: () => Promise<void>,
+    timeoutMs: number = 30000
+  ): Promise<void> {
+    await Promise.race([
+      initFn(),
+      new Promise<void>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Initialization timeout after ${timeoutMs}ms`)),
+          timeoutMs
+        )
+      ),
+    ]);
+  }
 }

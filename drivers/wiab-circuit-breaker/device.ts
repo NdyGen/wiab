@@ -64,19 +64,9 @@ class CircuitBreakerDevice extends BaseWIABDevice {
     // Initialize error handling utilities from base class
     this.initializeErrorHandling();
 
-    const INIT_TIMEOUT_MS = 30000; // 30 seconds
-
     try {
       // Wrap initialization in timeout to prevent indefinite hanging
-      await Promise.race([
-        this.performInitialization(),
-        new Promise<void>((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Initialization timeout after 30 seconds')),
-            INIT_TIMEOUT_MS
-          )
-        ),
-      ]);
+      await this.initializeWithTimeout(() => this.performInitialization());
 
       const currentState = this.getCapabilityValue('onoff') ?? true;
       const parentId = this.getSetting('parentId');
