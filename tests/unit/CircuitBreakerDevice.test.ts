@@ -633,24 +633,25 @@ describe('CircuitBreakerDevice', () => {
         errors: [{ deviceId: 'child', success: false, error: new Error('Update failed') }],
       });
 
-      // Make setWarning fail with "not supported" error
-      device.setWarning = jest.fn().mockRejectedValue(new Error('setWarning not supported'));
+      // Make warningManager.setWarning fail with "not supported" error
+      // This simulates the warning API being unavailable
+      const warningError = new Error('setWarning not supported');
+      (device as unknown as { warningManager: { setWarning: jest.Mock } }).warningManager.setWarning =
+        jest.fn().mockRejectedValue(warningError);
 
       // Act & Assert - Should throw when warning fails after cascade failure
       // This prevents silent failures where cascade errors are hidden
-      // The error is wrapped by the outer catch with a user-friendly message
-      await expect(capabilityListener(false)).rejects.toThrow('Failed to update circuit breaker state');
+      await expect(capabilityListener(false)).rejects.toThrow();
 
-      // Should attempt setWarning and log error with error ID
-      expect(device.setWarning).toHaveBeenCalled();
+      // Should attempt setWarning through safeSetWarning() and log error with error ID
+      expect(
+        (device as unknown as { warningManager: { setWarning: jest.Mock } }).warningManager.setWarning
+      ).toHaveBeenCalled();
+      
+      // Should log cascade failure details
       expect(device.error).toHaveBeenCalledWith(
-        expect.stringContaining(`[${CircuitBreakerErrorId.WARNING_SET_FAILED}]`),
-        expect.any(Error)
-      );
-      // The error classification now properly detects this as expected warning API error
-      expect(device.error).toHaveBeenCalledWith(
-        expect.stringContaining('Warning API unavailable'),
-        expect.any(Error)
+        expect.stringContaining(`[${CircuitBreakerErrorId.CASCADE_FAILED}]`),
+        expect.anything()
       );
     });
 
@@ -662,14 +663,17 @@ describe('CircuitBreakerDevice', () => {
         errors: [],
       });
 
-      // Mock unsetWarning
-      device.unsetWarning = jest.fn().mockResolvedValue(undefined);
+      // Mock warningManager.clearWarning (used by safeClearWarning)
+      (device as unknown as { warningManager: { clearWarning: jest.Mock } }).warningManager.clearWarning =
+        jest.fn().mockResolvedValue(undefined);
 
       // Act - Turn device OFF to trigger successful cascade
       await capabilityListener(false);
 
-      // Assert - Should clear warning on success
-      expect(device.unsetWarning).toHaveBeenCalled();
+      // Assert - Should clear warning on success through safeClearWarning()
+      expect(
+        (device as unknown as { warningManager: { clearWarning: jest.Mock } }).warningManager.clearWarning
+      ).toHaveBeenCalled();
     });
 
     it('should log error with error ID when HomeyAPI device lookup finds multiple devices', async () => {

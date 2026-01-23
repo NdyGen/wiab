@@ -181,155 +181,8 @@ class CircuitBreakerDevice extends BaseWIABDevice {
     this.log(`Circuit breaker ${deviceId} state changing to ${value ? 'ON' : 'OFF'}`);
 
     try {
-      // Trigger flow cards for state change
       await this.triggerFlowCards(value);
-
-      // Cascade state to all descendants (both ON and OFF)
-      if (this.cascadeEngine && this.homeyDeviceId) {
-        this.log(`Cascading ${value ? 'ON' : 'OFF'} state to descendants of ${deviceId} (Homey ID: ${this.homeyDeviceId})`);
-        try {
-          const result = await this.cascadeEngine.cascadeStateChange(this.homeyDeviceId, value);
-          this.log(
-            `Cascade complete: ${result.success} succeeded, ${result.failed} failed`
-          );
-
-        if (result.failed > 0) {
-          const notFoundCount = result.errors.filter(e => e.notFound).length;
-          const updateFailedCount = result.failed - notFoundCount;
-
-          let errorDetail = '';
-          if (notFoundCount > 0) {
-            errorDetail += `${notFoundCount} devices no longer exist. `;
-          }
-          if (updateFailedCount > 0) {
-            errorDetail += `${updateFailedCount} devices failed to update.`;
-          }
-
-          this.error(
-            `[${CircuitBreakerErrorId.CASCADE_FAILED}] Cascade failures: ${errorDetail}`,
-            result.errors
-          );
-
-          // CRITICAL: User MUST be informed even if warning API fails
-          // Warn user when any child circuit breaker fails to update
-          const totalDevices = result.success + result.failed;
-          let userNotified = false;
-          try {
-            await this.setWarning(
-              `${result.failed} of ${totalDevices} child circuit breaker(s) failed to update. Some flows may still execute.`
-            );
-            userNotified = true;
-          } catch (warningError) {
-            // Distinguish between expected warning API failures vs programming errors
-            // Use ErrorHandler for robust error classification instead of string matching
-            if (ErrorHandler.isWarningApiError(warningError)) {
-              // Expected warning API failure - log but don't escalate
-              this.error(
-                `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Warning API unavailable:`,
-                warningError
-              );
-            } else {
-              // Unexpected error (programming bug) - log with more visibility
-              this.error(
-                `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Unexpected error in warning operation:`,
-                warningError
-              );
-            }
-          }
-
-          // If we couldn't warn the user via device warning, throw an error they'll see in flow execution
-          // This ensures critical failures are visible even when warning system is unavailable
-          if (!userNotified) {
-            const failedDeviceIds = result.errors.map(e => e.deviceId).slice(0, 3).join(', ');
-            const moreDevices = result.errors.length > 3 ? ` and ${result.errors.length - 3} more` : '';
-            throw new Error(
-              `CRITICAL: Circuit breaker cascade failed for ${result.failed} of ${totalDevices} child devices. ` +
-              `Warning system unavailable - this error shown as fallback notification. ` +
-              `Failed devices: ${failedDeviceIds}${moreDevices}. ` +
-              `Wait a moment and try again. If problem persists, restart the app to restore warning system.`
-            );
-          }
-        } else {
-          // Clear warning if cascade succeeds
-          try {
-            await this.unsetWarning();
-          } catch (warningError) {
-            // Distinguish between expected warning API failures vs programming errors
-            // Use ErrorHandler for robust error classification instead of string matching
-            if (ErrorHandler.isWarningApiError(warningError)) {
-              // Expected warning API failure - log but don't escalate
-              // User will see stale warning but cascade actually succeeded
-              this.error(
-                `[${CircuitBreakerErrorId.WARNING_CLEAR_FAILED}] Warning API unavailable - cannot clear stale warning:`,
-                warningError
-              );
-            } else {
-              // Unexpected error (programming bug) - log with CRITICAL severity but don't throw
-              // Cascade succeeded, so throwing would make successful operation appear to fail
-              this.error(
-                `[${CircuitBreakerErrorId.WARNING_CLEAR_FAILED}] CRITICAL: Unexpected error in warning clear operation:`,
-                warningError
-              );
-
-              // Try to set a warning about the warning system being broken
-              // This provides user notification without failing the successful cascade
-              try {
-                await this.setWarning(
-                  'Warning system malfunction detected. Device is working correctly but warnings may be stale. Restart the app to fix.'
-                );
-              } catch (secondaryError) {
-                this.error(
-                  `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Cannot set warning about warning system failure:`,
-                  secondaryError
-                );
-                // Don't throw - cascade succeeded, warning system failure is secondary
-              }
-            }
-          }
-        }
-        } catch (cascadeError) {
-          // Extract error ID from HierarchyError if available to avoid double-logging
-          const errorId = (cascadeError as { errorId?: string })?.errorId ||
-            CircuitBreakerErrorId.CASCADE_ENGINE_FAILED;
-
-          // Log once with full context
-          this.error(
-            `[${errorId}] Cascade failed:`,
-            cascadeError instanceof Error ? cascadeError.message : String(cascadeError)
-          );
-
-          // Only log stack trace if error has useful stack and hasn't been logged already
-          if (cascadeError instanceof Error && cascadeError.stack) {
-            this.error(`[${errorId}] Stack trace:`, cascadeError.stack);
-          }
-
-          // Alert user about cascade failure via device warning
-          try {
-            await this.setWarning(
-              'Circuit breaker cascade failed. Child circuit breakers may not be updated. Wait a moment and try again. If the problem persists, restart the app.'
-            );
-          } catch (warningError) {
-            // Warning set failed - log but don't throw to avoid masking cascade error
-            // Use ErrorHandler for robust error classification instead of string matching
-            if (ErrorHandler.isWarningApiError(warningError)) {
-              this.error(
-                `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Warning API unavailable after cascade failure:`,
-                warningError
-              );
-            } else {
-              this.error(
-                `[${CircuitBreakerErrorId.WARNING_SET_FAILED}] Unexpected error setting warning after cascade failure:`,
-                warningError
-              );
-            }
-          }
-
-          // CRITICAL: Re-throw cascade error so user sees it in UI/flow execution
-          // This prevents silent failures where cascade completely fails but execution continues
-          throw cascadeError;
-        }
-      }
-
+      await this.cascadeStateToDescendants(value);
       this.log(`Circuit breaker ${deviceId} state changed successfully`);
     } catch (error) {
       const errorReporter = new ErrorReporter({
@@ -344,6 +197,143 @@ class CircuitBreakerDevice extends BaseWIABDevice {
       });
       throw new Error(message);
     }
+  }
+
+  /**
+   * Cascades state change to all descendant circuit breakers.
+   *
+   * Handles cascade execution, logging, and error reporting.
+   * Uses safeSetWarning/safeClearWarning from BaseWIABDevice.
+   *
+   * @param value - New onoff state to cascade
+   * @private
+   */
+  private async cascadeStateToDescendants(value: boolean): Promise<void> {
+    if (!this.cascadeEngine || !this.homeyDeviceId) {
+      return;
+    }
+
+    const deviceId = this.getData().id;
+    this.log(`Cascading ${value ? 'ON' : 'OFF'} state to descendants of ${deviceId} (Homey ID: ${this.homeyDeviceId})`);
+
+    try {
+      const result = await this.cascadeEngine.cascadeStateChange(this.homeyDeviceId, value);
+      this.log(`Cascade complete: ${result.success} succeeded, ${result.failed} failed`);
+
+      if (result.failed > 0) {
+        await this.handleCascadeFailures(result);
+      } else {
+        await this.handleCascadeSuccess();
+      }
+    } catch (cascadeError) {
+      await this.handleCascadeError(cascadeError);
+      throw cascadeError;
+    }
+  }
+
+  /**
+   * Handles cascade failures by logging errors and warning the user.
+   *
+   * Attempts to warn user via device warning. If warning fails, throws error
+   * to ensure user sees cascade failure in flow execution.
+   *
+   * @param result - Cascade result containing errors
+   * @private
+   */
+  private async handleCascadeFailures(result: { success: number; failed: number; errors: Array<{ deviceId: string; notFound?: boolean }> }): Promise<void> {
+    this.logCascadeFailureDetails(result);
+
+    const totalDevices = result.success + result.failed;
+    const warningMessage = `${result.failed} of ${totalDevices} child circuit breaker(s) failed to update. Some flows may still execute.`;
+
+    const userNotified = await this.safeSetWarning(
+      CircuitBreakerErrorId.CASCADE_FAILED,
+      warningMessage
+    );
+
+    if (!userNotified) {
+      throw this.createCascadeFailureError(result, totalDevices);
+    }
+  }
+
+  /**
+   * Logs detailed information about cascade failures.
+   *
+   * @param result - Cascade result containing error details
+   * @private
+   */
+  private logCascadeFailureDetails(result: { failed: number; errors: Array<{ notFound?: boolean }> }): void {
+    const notFoundCount = result.errors.filter(e => e.notFound).length;
+    const updateFailedCount = result.failed - notFoundCount;
+
+    let errorDetail = '';
+    if (notFoundCount > 0) {
+      errorDetail += `${notFoundCount} devices no longer exist. `;
+    }
+    if (updateFailedCount > 0) {
+      errorDetail += `${updateFailedCount} devices failed to update.`;
+    }
+
+    this.error(
+      `[${CircuitBreakerErrorId.CASCADE_FAILED}] Cascade failures: ${errorDetail}`,
+      result.errors
+    );
+  }
+
+  /**
+   * Creates an error to throw when cascade fails and warning system is unavailable.
+   *
+   * @param result - Cascade result containing failed devices
+   * @param totalDevices - Total number of devices in cascade
+   * @returns Error with detailed failure information
+   * @private
+   */
+  private createCascadeFailureError(result: { failed: number; errors: Array<{ deviceId: string }> }, totalDevices: number): Error {
+    const failedDeviceIds = result.errors.map(e => e.deviceId).slice(0, 3).join(', ');
+    const moreDevices = result.errors.length > 3 ? ` and ${result.errors.length - 3} more` : '';
+
+    return new Error(
+      `CRITICAL: Circuit breaker cascade failed for ${result.failed} of ${totalDevices} child devices. ` +
+      `Warning system unavailable - this error shown as fallback notification. ` +
+      `Failed devices: ${failedDeviceIds}${moreDevices}. ` +
+      `Wait a moment and try again. If problem persists, restart the app to restore warning system.`
+    );
+  }
+
+  /**
+   * Handles successful cascade by clearing any existing warnings.
+   *
+   * Uses safeClearWarning from BaseWIABDevice to handle warning API failures gracefully.
+   *
+   * @private
+   */
+  private async handleCascadeSuccess(): Promise<void> {
+    await this.safeClearWarning(CircuitBreakerErrorId.CASCADE_FAILED);
+  }
+
+  /**
+   * Handles cascade engine errors by logging and attempting to warn the user.
+   *
+   * @param cascadeError - Error thrown by cascade engine
+   * @private
+   */
+  private async handleCascadeError(cascadeError: unknown): Promise<void> {
+    const errorId = (cascadeError as { errorId?: string })?.errorId ||
+      CircuitBreakerErrorId.CASCADE_ENGINE_FAILED;
+
+    this.error(
+      `[${errorId}] Cascade failed:`,
+      cascadeError instanceof Error ? cascadeError.message : String(cascadeError)
+    );
+
+    if (cascadeError instanceof Error && cascadeError.stack) {
+      this.error(`[${errorId}] Stack trace:`, cascadeError.stack);
+    }
+
+    await this.safeSetWarning(
+      CircuitBreakerErrorId.CASCADE_ENGINE_FAILED,
+      'Circuit breaker cascade failed. Child circuit breakers may not be updated. Wait a moment and try again. If the problem persists, restart the app.'
+    );
   }
 
   /**

@@ -146,15 +146,19 @@ export abstract class BaseWIABDevice extends Homey.Device {
 
   /**
    * Safely sets a warning with error handling for API failures.
-   * Prevents warning API errors from crashing the application.
    *
-   * @param errorId - Error identifier for the warning
+   * Attempts to set a warning using the WarningManager. If the warning API fails,
+   * logs the error but doesn't throw, preventing cascading failures.
+   *
+   * @param errorId - Error identifier for logging and warning management
    * @param message - User-facing warning message
+   * @returns Promise resolving to true if warning was set successfully, false otherwise
    * @protected
    */
-  protected async safeSetWarning(errorId: string, message: string): Promise<void> {
+  protected async safeSetWarning(errorId: string, message: string): Promise<boolean> {
     try {
       await this.warningManager!.setWarning(errorId, message);
+      return true;
     } catch (warningError) {
       if (ErrorHandler.isWarningApiError(warningError)) {
         this.error(`[${errorId}] Warning: Failed to set warning (API error, non-critical)`);
@@ -164,6 +168,7 @@ export abstract class BaseWIABDevice extends Homey.Device {
           warningError
         );
       }
+      return false;
     }
   }
 
