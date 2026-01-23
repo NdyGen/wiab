@@ -27,6 +27,24 @@ npm run validate
 homey app run
 ```
 
+### Code Quality Commands
+
+```bash
+# Find usage of a method/class
+grep -r "methodName" lib/ drivers/ tests/
+
+# Find duplicated patterns
+grep -r "pattern" lib/ drivers/
+
+# Find technical debt
+git grep "TODO\|FIXME"
+
+# Find unused exports (manually check results)
+# Export declared but no imports found = potential dead code
+git grep "export.*MethodName" lib/
+git grep "import.*MethodName" drivers/ tests/
+```
+
 ### Pre-Commit Checklist
 
 **MUST run and pass before committing:**

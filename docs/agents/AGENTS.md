@@ -121,12 +121,24 @@ When faced with implementation choices, prioritize in this order:
 
 1. **Correctness** - Does it work correctly?
 2. **Safety** - Does it fail gracefully?
-3. **Testability** - Can we verify it works?
-4. **Maintainability** - Can others understand it?
-5. **Performance** - Is it fast enough?
+3. **Simplicity (KISS)** - Is this the simplest solution?
+4. **Reusability (DRY)** - Does similar code already exist?
+5. **Necessity (YAGNI)** - Do we need this now?
+6. **Testability** - Can we verify it works?
+7. **Maintainability** - Can others understand it?
+8. **Performance** - Is it fast enough?
+
+**Before Writing Code:**
+- **Search for existing patterns:** `grep -r "pattern" lib/ drivers/`
+- **Check if similar functionality exists** - Don't reinvent the wheel
+- **Prefer extracting to base classes** over duplication
+- **Remove unused code** discovered during implementation
+- **Choose simplest solution** that meets current requirements
 
 **Guidelines:**
-- **Simplicity first:** Choose the simplest solution that meets requirements
+- **DRY:** Extract common patterns to `lib/` utilities or base classes
+- **KISS:** Simplicity first - choose the simplest solution that works
+- **YAGNI:** Only build what's needed now, not "just in case"
 - **Consistency:** Match existing patterns in the codebase
 - **Fail-safe:** When uncertain, choose the option that fails gracefully
 - **Ask when unclear:** If requirements are ambiguous, request clarification
@@ -148,13 +160,24 @@ When faced with implementation choices, prioritize in this order:
 <verification>
 Before reporting task completion, verify ALL items:
 
+**Code Quality:**
+- ✅ Code follows DRY principle (no duplicated logic)
+- ✅ Code follows KISS principle (simplest solution, low complexity)
+- ✅ Code follows YAGNI principle (no unused/speculative code)
 - ✅ Code follows TypeScript standards
+- ✅ Domain logic separated from I/O (DDD)
+
+**Patterns and Standards:**
 - ✅ Error handling uses ErrorReporter + WarningManager patterns
 - ✅ Async patterns correct (`void` vs `await`)
 - ✅ Fail-safe behavior implemented where applicable
 - ✅ Production logs include context (counts, names, durations, reasoning)
+
+**Testing:**
 - ✅ Tests cover new/changed functionality
 - ✅ All checks pass: build, lint, test, coverage (70%+), validate
+
+**Git Workflow:**
 - ✅ Conventional commit format used
 - ✅ PR created with descriptive summary
 - ✅ CI pipeline passes
