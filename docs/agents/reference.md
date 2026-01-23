@@ -23,8 +23,11 @@ npm run test:coverage
 # Validate Homey app structure
 npm run validate
 
-# Test locally on Homey
-homey app run
+# Install app to Homey (use npx to avoid global install)
+npx homey app install
+
+# Test locally on Homey with live reload
+npx homey app run
 ```
 
 ### Code Quality Commands
