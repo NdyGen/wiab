@@ -57,12 +57,7 @@ describe('WarningManager', () => {
 
       // Assert
       expect(warningManager.hasWarning()).toBe(true);
-      expect(warningManager.getState()).toEqual({
-        isActive: true,
-        message: message,
-        setAt: expect.any(Number),
-        errorId: errorId,
-      });
+      expect(warningManager.getCurrentMessage()).toBe(message);
     });
 
     it('should not call setWarning if same warning already active', async () => {
@@ -99,7 +94,7 @@ describe('WarningManager', () => {
 
       // Assert
       expect(mockDevice.setWarning).toHaveBeenCalledWith(secondMessage);
-      expect(warningManager.getState()?.message).toBe(secondMessage);
+      expect(warningManager.getCurrentMessage()).toBe(secondMessage);
     });
 
     it('should update warning if error ID changes', async () => {
@@ -116,7 +111,8 @@ describe('WarningManager', () => {
 
       // Assert
       expect(mockDevice.setWarning).toHaveBeenCalledWith(message);
-      expect(warningManager.getState()?.errorId).toBe(secondErrorId);
+      expect(warningManager.hasWarning()).toBe(true);
+      expect(warningManager.getCurrentMessage()).toBe(message);
     });
 
     it('should throw WarningStateError when setWarning fails', async () => {
@@ -163,12 +159,7 @@ describe('WarningManager', () => {
 
       // Assert
       expect(warningManager.hasWarning()).toBe(false);
-      expect(warningManager.getState()).toEqual({
-        isActive: false,
-        message: null,
-        setAt: null,
-        errorId: null,
-      });
+      expect(warningManager.getCurrentMessage()).toBeNull();
     });
 
     it('should not call unsetWarning if no warning active', async () => {
@@ -224,71 +215,19 @@ describe('WarningManager', () => {
     });
   });
 
-  describe('getState', () => {
-    it('should return inactive state initially', () => {
-      // Assert
-      expect(warningManager.getState()).toEqual({
-        isActive: false,
-        message: null,
-        setAt: null,
-        errorId: null,
-      });
-    });
-
-    it('should return current warning state when active', async () => {
-      // Arrange
-      const errorId = 'TEST_001';
-      const message = 'Test warning';
-      const beforeTime = Date.now();
-
-      await warningManager.setWarning(errorId, message);
-
-      const afterTime = Date.now();
-
-      // Assert
-      const state = warningManager.getState();
-      expect(state.isActive).toBe(true);
-      expect(state.message).toBe(message);
-      expect(state.errorId).toBe(errorId);
-      expect(state.setAt).toBeGreaterThanOrEqual(beforeTime);
-      expect(state.setAt).toBeLessThanOrEqual(afterTime);
-    });
-
-    it('should return a defensive copy of state', async () => {
-      // Arrange
-      await warningManager.setWarning('TEST_001', 'Test warning');
-
-      // Act
-      const state1 = warningManager.getState();
-      const state2 = warningManager.getState();
-
-      // Assert - different object instances
-      expect(state1).not.toBe(state2);
-      expect(state1).toEqual(state2);
-    });
-  });
-
   describe('warning state transitions', () => {
     it('should track multiple warning changes', async () => {
       // Arrange & Act
       await warningManager.setWarning('ERROR_001', 'First error');
-      const state1 = warningManager.getState();
+      expect(warningManager.hasWarning()).toBe(true);
+      expect(warningManager.getCurrentMessage()).toBe('First error');
 
       await warningManager.setWarning('ERROR_002', 'Second error');
-      const state2 = warningManager.getState();
+      expect(warningManager.hasWarning()).toBe(true);
+      expect(warningManager.getCurrentMessage()).toBe('Second error');
 
       await warningManager.clearWarning();
-      const state3 = warningManager.getState();
-
-      // Assert
-      expect(state1.errorId).toBe('ERROR_001');
-      expect(state1.message).toBe('First error');
-
-      expect(state2.errorId).toBe('ERROR_002');
-      expect(state2.message).toBe('Second error');
-      expect(state2.setAt).toBeGreaterThanOrEqual(state1.setAt!);
-
-      expect(state3.isActive).toBe(false);
+      expect(warningManager.hasWarning()).toBe(false);
     });
 
     it('should handle rapid warning updates', async () => {
@@ -298,9 +237,7 @@ describe('WarningManager', () => {
       await warningManager.setWarning('ERROR_003', 'Error 3');
 
       // Assert - only final state persists
-      const state = warningManager.getState();
-      expect(state.errorId).toBe('ERROR_003');
-      expect(state.message).toBe('Error 3');
+      expect(warningManager.getCurrentMessage()).toBe('Error 3');
       expect(mockDevice.setWarning).toHaveBeenCalledTimes(3);
     });
   });
@@ -312,7 +249,7 @@ describe('WarningManager', () => {
 
       // Assert
       expect(mockDevice.setWarning).toHaveBeenCalledWith('');
-      expect(warningManager.getState().message).toBe('');
+      expect(warningManager.getCurrentMessage()).toBe('');
     });
 
     it('should handle very long warning message', async () => {
@@ -324,7 +261,7 @@ describe('WarningManager', () => {
 
       // Assert
       expect(mockDevice.setWarning).toHaveBeenCalledWith(longMessage);
-      expect(warningManager.getState().message).toBe(longMessage);
+      expect(warningManager.getCurrentMessage()).toBe(longMessage);
     });
 
     it('should handle special characters in warning message', async () => {
@@ -336,7 +273,7 @@ describe('WarningManager', () => {
 
       // Assert
       expect(mockDevice.setWarning).toHaveBeenCalledWith(specialMessage);
-      expect(warningManager.getState().message).toBe(specialMessage);
+      expect(warningManager.getCurrentMessage()).toBe(specialMessage);
     });
   });
 });

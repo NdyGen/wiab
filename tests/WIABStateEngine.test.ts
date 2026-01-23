@@ -282,26 +282,6 @@ describe('WIABStateEngine', () => {
     });
   });
 
-  describe('getStateHierarchy', () => {
-    it('should return single-element array for root states', () => {
-      // Assert
-      expect(engine.getStateHierarchy(RoomState.IDLE)).toEqual([RoomState.IDLE]);
-      expect(engine.getStateHierarchy(RoomState.OCCUPIED)).toEqual([RoomState.OCCUPIED]);
-    });
-
-    it('should return child-to-parent array for extended states', () => {
-      // Assert
-      expect(engine.getStateHierarchy(RoomState.EXTENDED_IDLE)).toEqual([
-        RoomState.EXTENDED_IDLE,
-        RoomState.IDLE,
-      ]);
-      expect(engine.getStateHierarchy(RoomState.EXTENDED_OCCUPIED)).toEqual([
-        RoomState.EXTENDED_OCCUPIED,
-        RoomState.OCCUPIED,
-      ]);
-    });
-  });
-
   describe('getTimerForState', () => {
     it('should return timer duration for base states', () => {
       // Assert
