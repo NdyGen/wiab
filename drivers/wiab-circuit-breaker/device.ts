@@ -42,8 +42,8 @@ interface WIABApp extends Homey.App {
  * - State changes propagate recursively through entire descendant tree
  */
 class CircuitBreakerDevice extends BaseWIABDevice {
-  private hierarchyManager?: CircuitBreakerHierarchyManager;
-  private cascadeEngine?: CircuitBreakerCascadeEngine;
+  private hierarchyManager?: CircuitBreakerHierarchyManager | null;
+  private cascadeEngine?: CircuitBreakerCascadeEngine | null;
   private homeyDeviceId?: string;
 
   /**
@@ -560,6 +560,15 @@ class CircuitBreakerDevice extends BaseWIABDevice {
 
         // Only proceed with cleanup if orphaning succeeded
         this.log('All children orphaned successfully');
+      }
+
+      // Cleanup resources to prevent memory leaks
+      if (this.hierarchyManager) {
+        this.hierarchyManager = null;
+      }
+
+      if (this.cascadeEngine) {
+        this.cascadeEngine = null;
       }
 
       this.log('Circuit breaker device deleted');
