@@ -213,39 +213,4 @@ export class WarningManager {
   public getCurrentMessage(): string | null {
     return this.state.message;
   }
-
-  /**
-   * Gets the current error ID.
-   *
-   * @returns Current error ID, or null if no warning active
-   *
-   * @example
-   * ```typescript
-   * const errorId = warningManager.getCurrentErrorId();
-   * if (errorId) {
-   *   console.log('Warning error ID:', errorId);
-   * }
-   * ```
-   */
-  public getCurrentErrorId(): string | null {
-    return this.state.errorId;
-  }
-
-  /**
-   * Gets the complete warning state.
-   *
-   * Useful for debugging or persisting warning state.
-   *
-   * @returns Copy of current warning state
-   *
-   * @example
-   * ```typescript
-   * const state = warningManager.getState();
-   * console.log('Warning active:', state.isActive);
-   * console.log('Set at:', new Date(state.setAt));
-   * ```
-   */
-  public getState(): WarningState {
-    return { ...this.state };
-  }
 }

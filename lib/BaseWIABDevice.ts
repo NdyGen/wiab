@@ -4,6 +4,7 @@ import { ErrorReporter } from './ErrorReporter';
 import { FlowCardErrorHandler } from './FlowCardErrorHandler';
 import { RetryManager } from './RetryManager';
 import { ErrorClassifier } from './ErrorClassifier';
+import { ErrorHandler } from './ErrorHandler';
 
 /**
  * Base class for WIAB device types with shared error handling initialization.
@@ -117,5 +118,71 @@ export abstract class BaseWIABDevice extends Homey.Device {
     this.flowCardHandler = new FlowCardErrorHandler(this.homey, this);
     this.retryManager = new RetryManager(this);
     this.errorClassifier = new ErrorClassifier(this);
+  }
+
+  /**
+   * Executes device initialization with timeout protection.
+   * Prevents hanging initialization from blocking device creation.
+   *
+   * @param initFn - Async function containing initialization logic
+   * @param timeoutMs - Timeout in milliseconds (default: 30000)
+   * @throws Error if initialization doesn't complete within timeout
+   * @protected
+   */
+  protected async initializeWithTimeout(
+    initFn: () => Promise<void>,
+    timeoutMs: number = 30000
+  ): Promise<void> {
+    await Promise.race([
+      initFn(),
+      new Promise<void>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`Initialization timeout after ${timeoutMs}ms`)),
+          timeoutMs
+        )
+      ),
+    ]);
+  }
+
+  /**
+   * Safely sets a warning with error handling for API failures.
+   *
+   * Attempts to set a warning using the WarningManager. If the warning API fails,
+   * logs the error but doesn't throw, preventing cascading failures.
+   *
+   * @param errorId - Error identifier for logging and warning management
+   * @param message - User-facing warning message
+   * @returns Promise resolving to true if warning was set successfully, false otherwise
+   * @protected
+   */
+  protected async safeSetWarning(errorId: string, message: string): Promise<boolean> {
+    try {
+      await this.warningManager!.setWarning(errorId, message);
+      return true;
+    } catch (warningError) {
+      if (ErrorHandler.isWarningApiError(warningError)) {
+        this.error(`[${errorId}] Warning: Failed to set warning (API error, non-critical)`);
+      } else {
+        this.error(
+          `[${errorId}] CRITICAL: Unexpected error setting warning`,
+          warningError
+        );
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Safely clears a warning with error handling for API failures.
+   *
+   * @param errorId - Error identifier for logging purposes
+   * @protected
+   */
+  protected async safeClearWarning(errorId: string): Promise<void> {
+    try {
+      await this.warningManager!.clearWarning();
+    } catch (warningError) {
+      this.error(`[${errorId}] Failed to clear warning (non-critical):`, warningError);
+    }
   }
 }

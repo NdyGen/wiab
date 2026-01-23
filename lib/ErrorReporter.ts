@@ -22,7 +22,7 @@
  * ```
  */
 
-import { Logger, ErrorContext, ErrorSeverity } from './ErrorTypes';
+import { Logger, ErrorContext } from './ErrorTypes';
 import { ErrorClassifier, ErrorCategory } from './ErrorClassifier';
 
 export class ErrorReporter {
@@ -148,46 +148,5 @@ export class ErrorReporter {
     }
 
     return userMessage;
-  }
-
-  /**
-   * Creates an error context object.
-   *
-   * Helper method for building ErrorContext objects with consistent structure.
-   *
-   * @param errorId - Error ID
-   * @param severity - Error severity level
-   * @param userMessage - User-friendly message
-   * @param technicalMessage - Optional technical details
-   * @param context - Optional additional context data
-   * @returns Complete error context
-   *
-   * @example
-   * ```typescript
-   * const errorContext = ErrorReporter.createContext(
-   *   'SENSOR_001',
-   *   ErrorSeverity.CRITICAL,
-   *   'Cannot connect to sensors',
-   *   'makeCapabilityInstance not supported',
-   *   { deviceId: 'abc123', capability: 'alarm_contact' }
-   * );
-   *
-   * errorReporter.reportError(errorContext);
-   * ```
-   */
-  public static createContext(
-    errorId: string,
-    severity: ErrorSeverity,
-    userMessage: string,
-    technicalMessage?: string,
-    context?: Record<string, unknown>
-  ): ErrorContext {
-    return {
-      errorId,
-      severity,
-      userMessage,
-      technicalMessage,
-      context,
-    };
   }
 }

@@ -118,19 +118,9 @@ class WIABZoneSealDevice extends BaseWIABDevice {
     // Orchestrate initialization steps
     this.initializeErrorHandling();
 
-    const INIT_TIMEOUT_MS = 30000; // 30 seconds
-
     try {
       // Wrap initialization in timeout to prevent indefinite hanging
-      await Promise.race([
-        this.performInitialization(),
-        new Promise<void>((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Initialization timeout after 30 seconds')),
-            INIT_TIMEOUT_MS
-          )
-        ),
-      ]);
+      await this.initializeWithTimeout(() => this.performInitialization());
 
       this.log('WIAB Zone Seal device initialization complete');
     } catch (error) {

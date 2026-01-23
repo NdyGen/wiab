@@ -346,69 +346,16 @@ describe('ErrorReporter', () => {
     });
   });
 
-  describe('createContext', () => {
-    it('should create complete error context', () => {
-      // Act
-      const context = ErrorReporter.createContext(
-        'TEST_100',
-        ErrorSeverity.CRITICAL,
-        'User message',
-        'Technical message',
-        { key: 'value' }
-      );
-
-      // Assert
-      expect(context).toEqual({
-        errorId: 'TEST_100',
-        severity: ErrorSeverity.CRITICAL,
-        userMessage: 'User message',
-        technicalMessage: 'Technical message',
-        context: { key: 'value' },
-      });
-    });
-
-    it('should create context without optional fields', () => {
-      // Act
-      const context = ErrorReporter.createContext(
-        'TEST_101',
-        ErrorSeverity.LOW,
-        'User message'
-      );
-
-      // Assert
-      expect(context).toEqual({
-        errorId: 'TEST_101',
-        severity: ErrorSeverity.LOW,
-        userMessage: 'User message',
-        technicalMessage: undefined,
-        context: undefined,
-      });
-    });
-
-    it('should be a static method', () => {
-      // Assert - can call without instance
-      expect(typeof ErrorReporter.createContext).toBe('function');
-
-      const context = ErrorReporter.createContext(
-        'TEST_102',
-        ErrorSeverity.INFO,
-        'Static test'
-      );
-
-      expect(context.errorId).toBe('TEST_102');
-    });
-  });
-
   describe('integration scenarios', () => {
     it('should handle complete error reporting workflow', () => {
       // Arrange
-      const context = ErrorReporter.createContext(
-        'WORKFLOW_001',
-        ErrorSeverity.HIGH,
-        'User-facing error message',
-        'Detailed technical information',
-        { operation: 'fetchData', attempt: 3 }
-      );
+      const context = {
+        errorId: 'WORKFLOW_001',
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'User-facing error message',
+        technicalMessage: 'Detailed technical information',
+        context: { operation: 'fetchData', attempt: 3 }
+      };
 
       // Act
       const userMessage = errorReporter.reportAndGetMessage(context);
@@ -431,13 +378,13 @@ describe('ErrorReporter', () => {
       // Act
       const userMessage = errorReporter.getUserMessage(error, errorId);
 
-      const context = ErrorReporter.createContext(
+      const context = {
         errorId,
-        ErrorSeverity.MEDIUM,
+        severity: ErrorSeverity.MEDIUM,
         userMessage,
-        error.message,
-        { url: 'https://api.example.com', timeout: 30000 }
-      );
+        technicalMessage: error.message,
+        context: { url: 'https://api.example.com', timeout: 30000 }
+      };
 
       errorReporter.reportError(context);
 

@@ -338,6 +338,302 @@ Include in your logs:
 
 This makes production debugging possible without code access.
 
+## Code Quality Principles
+
+### DRY (Don't Repeat Yourself)
+
+**Before implementing new code:**
+
+1. **Search for similar patterns** in the codebase
+2. **Extract common logic** to shared utilities in `lib/`
+3. **Create base classes** for repeated device patterns
+4. **Use composition** over duplication
+
+**Warning signs of DRY violations:**
+- Same try-catch pattern in 3+ places
+- Similar method signatures across device types
+- Duplicated validation or initialization logic
+- Copy-pasted code blocks
+
+**Example - Duplicated initialization timeout (BAD):**
+
+```typescript
+// drivers/wiab-zone-seal/device.ts
+private async initializeWithTimeout(): Promise<void> {
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Initialization timeout')), 30000)
+  );
+  await Promise.race([this.initialize(), timeoutPromise]);
+}
+
+// drivers/wiab-circuit-breaker/device.ts  
+private async initializeWithTimeout(): Promise<void> {
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Initialization timeout')), 30000)
+  );
+  await Promise.race([this.initialize(), timeoutPromise]);
+}
+```
+
+**Refactored - Shared utility (GOOD):**
+
+```typescript
+// lib/BaseWIABDevice.ts
+protected async initializeWithTimeout(
+  initFn: () => Promise<void>,
+  timeoutMs: number = 30000
+): Promise<void> {
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Initialization timeout')), timeoutMs)
+  );
+  await Promise.race([initFn(), timeoutPromise]);
+}
+
+// drivers/wiab-zone-seal/device.ts
+async onInit(): Promise<void> {
+  await this.initializeWithTimeout(async () => {
+    await this.loadConfiguration();
+    await this.setupMonitoring();
+  });
+}
+```
+
+**Action steps when you find duplication:**
+
+1. Search codebase: `grep -r "pattern" drivers/ lib/`
+2. Identify commonality (shared logic, parameters, error handling)
+3. Extract to:
+   - `lib/` for standalone utilities
+   - Base class methods for device-specific patterns
+   - Helper functions for pure logic
+4. Update all call sites to use the shared implementation
+5. Add tests for the extracted utility
+
+### YAGNI (You Aren't Gonna Need It)
+
+**Principle:** Only build what's needed NOW. Don't add features "just in case."
+
+**Code review checklist before committing:**
+
+- [ ] Is this method/class actually used in production code?
+- [ ] Are we building features for hypothetical future requirements?
+- [ ] Can we solve this simpler without abstractions?
+- [ ] Is this unused test-only code that provides no value?
+
+**Finding unused code:**
+
+```bash
+# Search for method usage across codebase
+grep -r "methodName" drivers/ lib/ tests/
+
+# Find potential dead code (exports with no imports)
+# If only used in tests, consider removal
+# If unused entirely, remove immediately
+```
+
+**Example - Unused methods (BAD):**
+
+```typescript
+// lib/ErrorReporter.ts
+export class ErrorReporter {
+  // Used in production - KEEP
+  reportError(error: ErrorReport): void { ... }
+
+  // Only used in tests, provides no abstraction value - REMOVE
+  createContext(deviceId: string): ErrorContext {
+    return { deviceId, timestamp: Date.now() };
+  }
+
+  // Not used anywhere - REMOVE
+  getErrorHistory(): ErrorReport[] { ... }
+}
+```
+
+**Refactored (GOOD):**
+
+```typescript
+// lib/ErrorReporter.ts
+export class ErrorReporter {
+  // Only keep what's actually used
+  reportError(error: ErrorReport): void { ... }
+}
+
+// Tests create context inline (clearer what's being tested)
+it('should report error with context', () => {
+  errorReporter.reportError({
+    errorId: ErrorId.TEST,
+    context: { deviceId: 'test-123', timestamp: Date.now() }
+  });
+});
+```
+
+**Red flags for YAGNI violations:**
+
+- Methods with zero references outside of their definition
+- "Future-proofing" abstractions not used anywhere
+- Configuration options with no use case
+- Complex state tracking that's never queried
+- Premature optimization (caching, pooling) without measured need
+
+**Action: Remove it.**
+
+### KISS (Keep It Simple, Stupid)
+
+**Principle:** Choose the simplest solution that works. Complexity is a bug.
+
+**Complexity indicators:**
+
+- **Nesting depth > 3 levels** - Extract to helper methods
+- **Methods > 50 lines** - Break into smaller, focused methods
+- **Multiple responsibilities** - One method, one job
+- **Complex conditionals** - Use early returns, extract to named helpers
+
+**Example - Overly complex nested logic (BAD):**
+
+```typescript
+private async onCapabilityOnoff(value: boolean): Promise<void> {
+  try {
+    if (this.circuitBreaker && this.hierarchyManager) {
+      const devices = await this.hierarchyManager.getDevices();
+      if (devices && devices.length > 0) {
+        for (const device of devices) {
+          if (device.capabilitiesObj && device.capabilitiesObj.onoff) {
+            try {
+              await device.setCapabilityValue('onoff', value);
+            } catch (error) {
+              this.error(`Failed for ${device.name}:`, error);
+            }
+          }
+        }
+      } else {
+        this.log('No devices to control');
+      }
+    }
+  } catch (error) {
+    this.errorReporter!.reportError({...});
+  }
+}
+```
+
+**Refactored - Simple, flat, testable (GOOD):**
+
+```typescript
+private async onCapabilityOnoff(value: boolean): Promise<void> {
+  try {
+    const devices = await this.getControllableDevices();
+    
+    if (devices.length === 0) {
+      this.log('No devices to control');
+      return;
+    }
+
+    await this.setDevicesOnOff(devices, value);
+  } catch (error) {
+    this.errorReporter!.reportError({...});
+  }
+}
+
+private async getControllableDevices(): Promise<HomeyAPIDevice[]> {
+  if (!this.hierarchyManager) return [];
+  
+  const allDevices = await this.hierarchyManager.getDevices();
+  return allDevices.filter(d => d.capabilitiesObj?.onoff);
+}
+
+private async setDevicesOnOff(devices: HomeyAPIDevice[], value: boolean): Promise<void> {
+  for (const device of devices) {
+    try {
+      await device.setCapabilityValue('onoff', value);
+    } catch (error) {
+      this.error(`Failed to control ${device.name}:`, error);
+    }
+  }
+}
+```
+
+**Benefits of KISS refactoring:**
+
+- Each method has ONE clear responsibility
+- Early returns reduce nesting
+- Testable in isolation
+- Self-documenting through clear naming
+- Easy to modify one piece without affecting others
+
+**Refactoring approach:**
+
+1. Extract nested blocks to private methods with descriptive names
+2. Use early returns to reduce nesting (`if (!condition) return;`)
+3. One level of abstraction per method
+4. Name methods by WHAT they do, not HOW
+
+### DDD (Domain-Driven Design)
+
+**WIAB uses domain-centric architecture:**
+
+**Domain Aggregates (Device Types):**
+- **WIAB Device** - Occupancy detection with room state tracking
+- **Zone Seal** - Zone integrity monitoring with delayed transitions
+- **Circuit Breaker** - Hierarchical device management
+
+**Domain Value Objects:**
+- `SensorConfig` - Immutable sensor configuration
+- `StateTransition` - State change events
+- `ErrorReport` - Error reporting data
+
+**Domain Entities:**
+- Devices with unique IDs and lifecycle (init, update, delete)
+
+**Domain Services (Pure Logic in `lib/`):**
+- `WIABStateEngine` - Pure state machine (no I/O)
+- `SensorMonitor` - Polling coordination
+- `SensorStateAggregator` - State aggregation logic
+
+**Infrastructure Layer (`drivers/`):**
+- Device implementations handle I/O
+- Homey SDK integration
+- WebSocket listeners
+- API calls
+
+**Key Principle - Keep Domain Logic Pure:**
+
+```typescript
+// ✅ GOOD - Pure domain logic
+// lib/WIABStateEngine.ts
+export class WIABStateEngine {
+  transitionTo(newState: RoomState): StateTransition {
+    // No I/O, no side effects, just pure logic
+    const oldState = this.currentState;
+    this.currentState = newState;
+    return { from: oldState, to: newState };
+  }
+}
+
+// ✅ GOOD - Infrastructure layer handles I/O
+// drivers/wiab-device/device.ts
+async processStateTransition(transition: StateTransition): Promise<void> {
+  // I/O happens here
+  await this.setCapabilityValue('room_state', transition.to);
+  await this.triggerStateChangedFlow(transition);
+}
+
+// ❌ BAD - Domain logic mixed with I/O
+// lib/WIABStateEngine.ts
+export class WIABStateEngine {
+  async transitionTo(newState: RoomState): Promise<void> {
+    // Don't do this - domain logic shouldn't do I/O
+    await this.device.setCapabilityValue('room_state', newState);
+    this.currentState = newState;
+  }
+}
+```
+
+**Benefits of DDD separation:**
+
+- Domain models are framework-agnostic (testable without Homey SDK)
+- State machines can be tested independently
+- I/O can be mocked easily
+- Business logic is centralized and clear
+
 ## TypeScript Standards
 
 ### Coding Style
