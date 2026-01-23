@@ -462,6 +462,10 @@ class WIABDevice extends Homey.Device {
 
     // Clear state engine
     this.stateEngine = undefined;
+
+    // Clear pause state
+    this.isPaused = false;
+    this.pausedRoomState = RoomState.IDLE;
   }
 
   /**
@@ -1204,7 +1208,18 @@ class WIABDevice extends Homey.Device {
 
       this.log(`Device paused with room state: ${roomState}, occupancy: ${isOccupied}`);
     } catch (error) {
-      this.error('Failed to pause device:', error);
+      this.error(
+        `[${DeviceErrorId.PAUSE_DEVICE_FAILED}] Failed to pause device with room state ${roomState}:`,
+        error
+      );
+
+      // Set user-facing warning
+      try {
+        await this.setWarning('Failed to pause device. Device may not respond correctly.');
+      } catch (warningError) {
+        this.error('Failed to set warning for pause failure:', warningError);
+      }
+
       throw error;
     }
   }
