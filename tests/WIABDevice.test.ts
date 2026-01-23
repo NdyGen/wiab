@@ -33,7 +33,18 @@ describe('WIABDevice - Data Quality Monitoring', () => {
       addCapability: jest.fn().mockResolvedValue(undefined),
       setStoreValue: jest.fn().mockResolvedValue(undefined),
       getStoreValue: jest.fn().mockReturnValue(null),
+      setWarning: jest.fn().mockResolvedValue(undefined),
+      unsetWarning: jest.fn().mockResolvedValue(undefined),
     });
+
+    // Initialize error handling utilities for tests
+    (device as any).errorReporter = {
+      reportError: jest.fn(),
+    };
+    (device as any).warningManager = {
+      setWarning: jest.fn().mockResolvedValue(undefined),
+      clearWarning: jest.fn().mockResolvedValue(undefined),
+    };
 
     // Initialize staleSensorMap for testing
     (device as any).staleSensorMap = new Map();
