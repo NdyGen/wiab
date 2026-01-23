@@ -18,6 +18,8 @@ import {
   StateTransitionResult,
   RoomStateTimerConfig,
 } from '../../lib/WIABStateEngine';
+import { BaseWIABDevice } from '../../lib/BaseWIABDevice';
+import { ErrorSeverity } from '../../lib/ErrorTypes';
 
 /**
  * Extended HomeyAPIDevice with runtime methods
@@ -73,7 +75,7 @@ interface SensorStaleInfo {
  * - UNPAUSE action: Resumes sensor monitoring and reinitializes state
  * - IS PAUSED condition: Check if device is currently paused in flows
  */
-class WIABDevice extends Homey.Device {
+class WIABDevice extends BaseWIABDevice {
   private sensorMonitor?: SensorMonitor;
 
   // Tri-state occupancy variables (spec section 5)
@@ -128,36 +130,32 @@ class WIABDevice extends Homey.Device {
     // Mark device as initializing to prevent listener loops
     this.isInitializing = true;
 
-    const INIT_TIMEOUT_MS = 30000; // 30 seconds
-
     try {
-      // Wrap initialization in timeout to prevent indefinite hanging
-      await Promise.race([
-        this.performInitialization(),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => {
-            try {
-              reject(new Error('Initialization timeout after 30 seconds'));
-            } catch (error) {
-              this.error('Init timeout handler failed:', error);
-            }
-          }, INIT_TIMEOUT_MS)
-        ),
-      ]);
+      // Use BaseWIABDevice initialization with timeout protection
+      await this.initializeWithTimeout(
+        async () => await this.performInitialization(),
+        30000
+      );
 
       this.log('WIAB device initialization complete');
     } catch (error) {
-      this.error(
-        `[${DeviceErrorId.DEVICE_INIT_FAILED}] Device initialization failed:`,
-        error
-      );
+      // Report error to Sentry with context
+      this.errorReporter!.reportError({
+        errorId: DeviceErrorId.DEVICE_INIT_FAILED,
+        severity: ErrorSeverity.CRITICAL,
+        userMessage: 'Device initialization failed. Check sensor configuration.',
+        technicalMessage: `Device initialization failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: {
+          deviceId: this.getData().id,
+          errorType: error instanceof Error ? error.constructor.name : typeof error,
+        },
+      });
 
-      // Set device warning instead of crashing
-      try {
-        await this.setWarning('Device initialization failed. Check sensor configuration.');
-      } catch (warningError) {
-        this.error('Failed to set warning on device:', warningError);
-      }
+      // Set user-facing warning using safe wrapper
+      await this.safeSetWarning(
+        DeviceErrorId.DEVICE_INIT_FAILED,
+        'Device initialization failed. Check sensor configuration.'
+      );
     } finally {
       // Clear initialization flag even on failure
       this.isInitializing = false;
@@ -173,6 +171,9 @@ class WIABDevice extends Homey.Device {
    * @returns {Promise<void>}
    */
   private async performInitialization(): Promise<void> {
+    // Initialize error handling utilities first
+    this.initializeErrorHandling();
+
     await this.migrateCapabilities();
     this.initializeState();
     this.initializeRoomStateEngine();
@@ -490,14 +491,18 @@ class WIABDevice extends Homey.Device {
    * 5. Starts monitoring (which will read initial PIR values per spec 5.1)
    */
   private async setupSensorMonitoring(): Promise<void> {
+    // Declare variables outside try block for error context
+    let triggerSensors: SensorConfig[] = [];
+    let resetSensors: SensorConfig[] = [];
+
     try {
       // Get sensor configurations from device settings
       const triggerSensorsJson = this.getSetting('triggerSensors') as string;
       const resetSensorsJson = this.getSetting('resetSensors') as string;
 
       // Validate and parse sensor configurations
-      const triggerSensors = this.validateSensorSettings(triggerSensorsJson);
-      const resetSensors = this.validateSensorSettings(resetSensorsJson);
+      triggerSensors = this.validateSensorSettings(triggerSensorsJson);
+      resetSensors = this.validateSensorSettings(resetSensorsJson);
 
       // Store trigger sensors for later reference (checking if any PIR is inactive)
       this.triggerSensors = triggerSensors;
@@ -585,6 +590,19 @@ class WIABDevice extends Homey.Device {
 
       this.log('Sensor monitoring initialized successfully');
     } catch (error) {
+      // Report error to Sentry with context
+      this.errorReporter!.reportError({
+        errorId: DeviceErrorId.SENSOR_MONITORING_SETUP_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to setup sensor monitoring. Device may not respond to sensor changes.',
+        technicalMessage: `Sensor monitoring setup failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: {
+          deviceId: this.getData().id,
+          triggerSensorCount: this.triggerSensors?.length ?? 0,
+          resetSensorCount: resetSensors?.length ?? 0,
+        },
+      });
+
       this.error(
         `[${DeviceErrorId.SENSOR_MONITORING_SETUP_FAILED}] Failed to setup sensor monitoring:`,
         error
@@ -651,6 +669,19 @@ class WIABDevice extends Homey.Device {
       await this.updateOccupancyOutput();
       this.logDoorEventState();
     } catch (error) {
+      // Report error to Sentry with context
+      this.errorReporter!.reportError({
+        errorId: DeviceErrorId.DOOR_EVENT_HANDLER_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to process door sensor event. Occupancy state may not update.',
+        technicalMessage: `Door event handler failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: {
+          deviceId: this.getData().id,
+          doorId,
+          doorValue,
+        },
+      });
+
       this.error(
         `[${DeviceErrorId.DOOR_EVENT_HANDLER_FAILED}] Failed to handle door event:`,
         error
@@ -753,6 +784,18 @@ class WIABDevice extends Homey.Device {
       await this.updateOccupancyOutput();
       this.log(`State after PIR: ${this.occupancyState}, stable: ${this.lastStableOccupancy}`);
     } catch (error) {
+      // Report error to Sentry with context
+      this.errorReporter!.reportError({
+        errorId: DeviceErrorId.PIR_MOTION_HANDLER_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to process motion sensor event. Occupancy state may not update.',
+        technicalMessage: `PIR motion handler failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: {
+          deviceId: this.getData().id,
+          pirId,
+        },
+      });
+
       this.error(
         `[${DeviceErrorId.PIR_MOTION_HANDLER_FAILED}] Failed to handle PIR motion:`,
         error
@@ -847,6 +890,18 @@ class WIABDevice extends Homey.Device {
         `PIR cleared after door event - T_ENTER timer started to detect return`
       );
     } catch (error) {
+      // Report error to Sentry with context
+      this.errorReporter!.reportError({
+        errorId: DeviceErrorId.PIR_CLEARED_HANDLER_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to process motion cleared event. Occupancy state may not update.',
+        technicalMessage: `PIR cleared handler failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: {
+          deviceId: this.getData().id,
+          pirId,
+        },
+      });
+
       this.error(
         `[${DeviceErrorId.PIR_CLEARED_HANDLER_FAILED}] Failed to handle PIR cleared:`,
         error
@@ -1208,17 +1263,28 @@ class WIABDevice extends Homey.Device {
 
       this.log(`Device paused with room state: ${roomState}, occupancy: ${isOccupied}`);
     } catch (error) {
+      // Report error to Sentry with context
+      this.errorReporter!.reportError({
+        errorId: DeviceErrorId.PAUSE_DEVICE_FAILED,
+        severity: ErrorSeverity.HIGH,
+        userMessage: 'Failed to pause device. Device may not respond correctly.',
+        technicalMessage: `Pause device failed for room state ${roomState}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        context: {
+          deviceId: this.getData().id,
+          requestedRoomState: roomState,
+        },
+      });
+
       this.error(
         `[${DeviceErrorId.PAUSE_DEVICE_FAILED}] Failed to pause device with room state ${roomState}:`,
         error
       );
 
-      // Set user-facing warning
-      try {
-        await this.setWarning('Failed to pause device. Device may not respond correctly.');
-      } catch (warningError) {
-        this.error('Failed to set warning for pause failure:', warningError);
-      }
+      // Set user-facing warning using safe wrapper
+      await this.safeSetWarning(
+        DeviceErrorId.PAUSE_DEVICE_FAILED,
+        'Failed to pause device. Device may not respond correctly.'
+      );
 
       throw error;
     }
