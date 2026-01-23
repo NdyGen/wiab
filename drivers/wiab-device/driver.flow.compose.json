@@ -153,6 +153,23 @@
           ]
         }
       ]
+    },
+    {
+      "id": "resume_monitoring",
+      "title": {
+        "en": "Resume normal monitoring",
+        "nl": "Hervat normale monitoring",
+        "de": "Normale Überwachung fortsetzen",
+        "no": "Gjenoppta normal overvåking",
+        "sv": "Återuppta normal övervakning"
+      },
+      "description": {
+        "en": "Resumes normal sensor monitoring and reinitializes the room state",
+        "nl": "Hervat de normale sensormonitoring en initialiseert de kamerstatus opnieuw",
+        "de": "Setzt die normale Sensorüberwachung fort und initialisiert den Raumzustand neu",
+        "no": "Gjenopptar normal sensorovervåking og reinitialiserer romtilstand",
+        "sv": "Återupptar normal sensorövervakning och återinitierar rumstillstånd"
+      }
     }
   ],
   "conditions": [

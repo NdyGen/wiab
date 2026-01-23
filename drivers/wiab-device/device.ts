@@ -1363,7 +1363,7 @@ class WIABDevice extends BaseWIABDevice {
   }
 
   /**
-   * Registers action handlers for set_room_state action.
+   * Registers action handlers for set_room_state and resume_monitoring actions.
    *
    * Called during device initialization to register the action listeners
    * that will be invoked when the user triggers these actions in flows.
@@ -1384,6 +1384,22 @@ class WIABDevice extends BaseWIABDevice {
               await args.device.pauseDevice(roomState);
             } catch (error) {
               args.device.error(`Set room state action failed: ${error}`, error);
+              throw error;
+            }
+          }
+        );
+      }
+
+      // Register resume_monitoring action handler (unpauses device)
+      const resumeMonitoringCard = this.homey.flow.getActionCard('resume_monitoring');
+      if (resumeMonitoringCard) {
+        resumeMonitoringCard.registerRunListener(
+          async (args: { device: WIABDevice }) => {
+            args.device.log('Resume monitoring action triggered');
+            try {
+              await args.device.unpauseDevice();
+            } catch (error) {
+              args.device.error(`Resume monitoring action failed: ${error}`, error);
               throw error;
             }
           }
