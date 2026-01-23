@@ -4,6 +4,7 @@ import { ErrorReporter } from './ErrorReporter';
 import { FlowCardErrorHandler } from './FlowCardErrorHandler';
 import { RetryManager } from './RetryManager';
 import { ErrorClassifier } from './ErrorClassifier';
+import { ErrorHandler } from './ErrorHandler';
 
 /**
  * Base class for WIAB device types with shared error handling initialization.
@@ -141,5 +142,42 @@ export abstract class BaseWIABDevice extends Homey.Device {
         )
       ),
     ]);
+  }
+
+  /**
+   * Safely sets a warning with error handling for API failures.
+   * Prevents warning API errors from crashing the application.
+   *
+   * @param errorId - Error identifier for the warning
+   * @param message - User-facing warning message
+   * @protected
+   */
+  protected async safeSetWarning(errorId: string, message: string): Promise<void> {
+    try {
+      await this.warningManager!.setWarning(errorId, message);
+    } catch (warningError) {
+      if (ErrorHandler.isWarningApiError(warningError)) {
+        this.error(`[${errorId}] Warning: Failed to set warning (API error, non-critical)`);
+      } else {
+        this.error(
+          `[${errorId}] CRITICAL: Unexpected error setting warning`,
+          warningError
+        );
+      }
+    }
+  }
+
+  /**
+   * Safely clears a warning with error handling for API failures.
+   *
+   * @param errorId - Error identifier for logging purposes
+   * @protected
+   */
+  protected async safeClearWarning(errorId: string): Promise<void> {
+    try {
+      await this.warningManager!.clearWarning();
+    } catch (warningError) {
+      this.error(`[${errorId}] Failed to clear warning (non-critical):`, warningError);
+    }
   }
 }
