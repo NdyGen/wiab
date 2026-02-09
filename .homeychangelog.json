@@ -97,5 +97,8 @@
   },
   "1.4.0": {
     "en": "BREAKING CHANGE: Flow card consolidation for simplified device control. Removed flow cards: 'Set State' (action), 'Unpause Device' (action), 'Return to Automatic Mode' (action), and 'Is Manual Override Active' (condition). The 'Set Room State' action now automatically pauses the device. Migration: Replace 'Set State' with 'Set Room State', remove 'Unpause' calls (use 'Resume Sensor Monitoring' instead), remove 'Return to Automatic Mode' calls (use 'Resume Sensor Monitoring' instead), and replace 'Is Manual Override Active' condition with 'Is Device Paused' condition. Improved error handling for pause operations."
+  },
+  "2.0.0": {
+    "en": "dependency updates, major overhaul of code"
   }
 }

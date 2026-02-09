@@ -1,6 +1,6 @@
 {
   "name": "com.ndygen.wiab",
-  "version": "1.3.2",
+  "version": "2.0.0",
   "description": "Wasp in a Box - Virtual occupancy sensor for Homey",
   "main": "app.js",
   "scripts": {
