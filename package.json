@@ -22,7 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "homey": "^3.12.2",
-    "homey-api": "^3.16.1"
+    "homey-api": "^3.17.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
